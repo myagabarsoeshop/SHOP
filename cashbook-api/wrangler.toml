@@ -1,0 +1,35 @@
+# ==============================================================================
+# GOLDEN ERP SYSTEM - CLOUDFLARE WORKER CONFIGURATION
+# File: wrangler.toml  
+# 💡 Features: Strict Production CORS Whitelist, D1 Database Binding, 
+#              Automated Cron Triggers for Database Maintenance
+# ==============================================================================
+
+name = "cashbook-app-api"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 💡 1. CLOUDFLARE D1 DATABASE BINDING
+[[d1_databases]]
+binding = "DB"
+database_name = "school-db"
+database_id = "945c2d8b-f2ac-496a-a7bd-018c18be84bf"
+
+# 💡 2. ENVIRONMENT VARIABLES (Strict Production CORS Protection)
+[vars]
+# Localhost များကို ဖြုတ်ထားပြီး Production Domain ကိုသာ ခွင့်ပြုထားပါသည် (Enterprise Security Standard)
+ALLOWED_ORIGIN = "https://cash-book-c4o.pages.dev"
+
+# 💡 3. AUTOMATED CRON TRIGGERS (Database Maintenance)
+# ညစဉ် သန်းခေါင်ယံ (0 0 * * *) အချိန်တိုင်း ၆ လကျော်သော Audit Logs များကို အလိုအလျောက် ရှင်းလင်းပေးမည်
+[triggers]
+crons = ["0 0 * * *"]
+
+# ==============================================================================
+# 💡 4. REQUIRED WORKER SECRETS (Set via Cloudflare Dashboard or CLI)
+# ------------------------------------------------------------------------------
+# 1. AUTH_SECRET      -> JWT Cryptographic Secret (e.g., npx wrangler secret put AUTH_SECRET)
+# 2. RESEND_API_KEY   -> Resend Email API Key (e.g., npx wrangler secret put RESEND_API_KEY)
+# 3. CF_API_TOKEN     -> Cloudflare API Token for D1 Quota Telemetry
+# ==============================================================================

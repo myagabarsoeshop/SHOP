@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#0c1322"/>
+  <!-- Graduation Cap -->
+  <path d="M50 20 L90 38 L50 56 L10 38 Z" fill="#818cf8"/>
+  <path d="M25 46.5 V65 C25 75 75 75 75 65 V46.5" fill="none" stroke="#818cf8" stroke-width="6" stroke-linecap="round"/>
+  <!-- Golden Tassel -->
+  <circle cx="82" cy="55" r="4" fill="#fbbf24"/>
+  <path d="M82 55 V75" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+</svg>
+

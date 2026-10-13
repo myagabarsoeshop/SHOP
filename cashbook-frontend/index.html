@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="my" class="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230c1322'/><path d='M50 20 L90 38 L50 56 L10 38 Z' fill='%23818cf8'/><path d='M25 46.5 V65 C25 75 75 75 75 65 V46.5' fill='none' stroke='%23818cf8' stroke-width='6' stroke-linecap='round'/><circle cx='82' cy='55' r='4' fill='%23fbbf24'/><path d='M82 55 V75' stroke='%23fbbf24' stroke-width='3' stroke-linecap='round'/></svg>">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#090d16">
+  <title>Mya Gabar Soe Shop-ERP SYSTEM</title>
+
+  <!-- 💡 Immediate Auth Check to prevent UI Flash (FOUC) -->
+  <script>
+    (function () {
+      var token = localStorage.getItem('golden_auth_token');
+      if (token) {
+        document.documentElement.className = 'dark is-authed';
+      } else {
+        document.documentElement.className = 'dark not-authed';
+      }
+    })();
+  </script>
+
+  <style>
+    html.is-authed #login-overlay {
+      display: none;
+    }
+
+    html.is-authed #erp-workspace {
+      display: flex;
+    }
+
+    html.not-authed #login-overlay {
+      display: flex;
+    }
+
+    html.not-authed #erp-workspace {
+      display: none;
+    }
+
+    /* 💡 Print Areas မလိုလားအပ်ဘဲ မျက်နှာပြင်ပေါ် မပေါ်စေရန် ကာကွယ်ခြင်း */
+    #invoice-print-area,
+    #payslip-print-area {
+      display: none;
+    }
+  </style>
+
+  <!-- 🎯 Cache-Busting Version အသစ်သို့ ပြောင်းထားသည် (ဖိုင်အဟောင်း ငြိနေခြင်းမှ ကာကွယ်ရန်) -->
+  <link rel="stylesheet" href="css/tailwind.min.css?v=20261008">
+  <link rel="stylesheet" href="css/fontawesome.min.css?v=20261008">
+  <link rel="stylesheet" href="css/style.css?v=20261008">
+
+  <!-- 💡 SheetJS Library for Multi-Tab Excel (.xlsx) Export with Security Crossorigin -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
+</head>
+
+<body class="bg-[#090d16] font-sans flex h-screen overflow-hidden text-slate-300">
+
+  <!-- ==================== 1. LOGIN OVERLAY ==================== -->
+  <div id="login-overlay" class="fixed inset-0 bg-[#090d16] z-[100] flex items-center justify-center p-4">
+    <div
+      class="relative w-full max-w-md bg-[#0e131f]/90 border border-amber-500/20 backdrop-blur-xl rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center overflow-hidden space-y-6 text-slate-300">
+
+      <div
+        class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none">
+      </div>
+
+      <div class="text-center">
+        <div
+          class="inline-flex items-center justify-center p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-amber-600/5 border border-amber-500/30 shadow-inner group transition-all duration-300 hover:scale-105 mb-3">
+          <i
+            class="fa-solid fa-graduation-cap text-4xl text-amber-400 filter drop-shadow-[0_2px_8px_rgba(245,158,11,0.5)]"></i>
+        </div>
+
+        <h2
+          class="text-xl font-black tracking-tight mb-1 text-gold-gradient filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+          Golden Education Private High School
+        </h2>
+
+        <p
+          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/70 pb-3 border-b border-amber-500/10">
+          Financial Management System
+        </p>
+      </div>
+
+      <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4 text-xs text-left">
+        <div>
+          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Select Username /
+            Role</label>
+          <select id="login-username" required
+            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/60 rounded-xl text-xs text-slate-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300 font-bold">
+            <option value="">-- Select Username --</option>
+            <option value="Owner">Admin</option>
+            <option value="Admin">Shop1</option>
+            <option value="Finance">Shop2</option>
+            <option value="HR">Shop3</option>
+            <option value="Accountant">Shop4</option>
+            <option value="Cashier">Shop5</option>
+            <option value="Staff">Staff</option>
+            <option value="Viewer">Viewer</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Password</label>
+          <input type="password" id="login-password" required placeholder="Type password..."
+            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/60 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300">
+        </div>
+
+        <div id="login-error"
+          class="hidden text-rose-400 font-semibold text-[11px] bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-center">
+        </div>
+
+        <button type="submit"
+          class="w-full py-3.5 mt-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 flex items-center justify-center gap-2 text-xs tracking-wider active:scale-[0.99] cursor-pointer">
+          <span>Enter System</span>
+          <i class="fa-solid fa-arrow-right-to-bracket text-sm"></i>
+        </button>
+      </form>
+
+      <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="font-medium text-slate-400">System Ready</span>
+        </div>
+        <span class="font-mono text-slate-500">v2.4 Secured</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== 2. MAIN WORKSPACE ==================== -->
+  <div id="erp-workspace" class="hidden h-full w-full">
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-[#0c1322] border-r border-slate-800 flex flex-col h-full shadow-2xl shrink-0">
+      <div
+        class="h-[64px] px-4 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
+        <div class="flex items-center gap-2.5 font-extrabold text-sm tracking-wide">
+          <i class="fa-solid fa-graduation-cap text-indigo-400 text-lg"></i>
+          <span class="text-slate-100">GOLDEN CASH BOOK</span>
+        </div>
+        <button onclick="handleLogout()" class="text-slate-500 hover:text-rose-400 transition p-1.5 rounded-lg"
+          title="Logout">
+          <i class="fa-solid fa-power-off text-xs"></i>
+        </button>
+      </div>
+
+      <nav class="flex-1 px-2.5 py-2.5 space-y-0.5 overflow-y-auto" id="sidebar-nav">
+        <button onclick="switchTab('dashboard')" id="btn-dashboard"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-gauge-high w-4 text-center text-indigo-400"></i> Home Dashboard
+        </button>
+
+        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Main Books</p>
+        <button onclick="switchTab('bank')" id="btn-bank"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-building-columns text-amber-400 w-4 text-center"></i>Main Home Shop
+        </button>
+        <button onclick="switchTab('cash')" id="btn-cash"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-money-bill-wave text-emerald-400 w-4 text-center"></i> ဆိုင်ခွဲ (၁)
+        </button>
+        <button onclick="switchTab('income')" id="btn-income"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၂)
+        </button>
+        <button onclick="switchTab('income')" id="btn-income"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၃)
+        </button>
+        <button onclick="switchTab('income')" id="btn-income"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၄)
+        </button>
+        <button onclick="switchTab('income')" id="btn-income"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၅)
+        </button>
+
+
+
+
+        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Reporting & System</p>
+        <button onclick="switchTab('report-financial')" id="btn-report-financial"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-chart-pie text-emerald-400 w-4 text-center"></i> Financial Reports
+        </button>
+
+        <button onclick="switchTab('settings')" id="btn-settings"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-gears text-indigo-400 w-4 text-center"></i> System Settings
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Workspace View Container -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <header
+        class="bg-[#0c1322] border-b border-slate-800 h-[64px] px-6 flex justify-between items-center z-10 shrink-0">
+        <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
+        <div id="live-metadata"
+          class="text-xs font-bold text-emerald-400 bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-lg">
+          FY 2026-2027 | Sat | --:-- | User: Admin
+        </div>
+      </header>
+
+      <!-- style="padding-top: 22px;" ကို တိုက်ရိုက် ထည့်သွင်းထားသည် -->
+      <main id="main-content" style="padding-top: 10px;" class="px-6 pb-6 overflow-y-auto flex-1 bg-[#090d16] relative">
+        <div id="view-container"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ==================== 3. GLOBAL UTILITIES & NOTIFICATIONS ==================== -->
+  <!-- Loading Spinner Overlay -->
+  <div id="loading-overlay"
+    class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[150] flex flex-col items-center justify-center hidden">
+    <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-3"></div>
+    <p class="text-xs font-bold text-slate-200 tracking-wide">Processing, please wait...</p>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==================== 4. GLOBAL SALARY GRADE MATRIX MODAL ==================== -->
+  <div id="grade-modal"
+    class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div
+      class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
+        <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
+          <i class="fa-solid fa-sliders"></i> Edit Salary Grade Matrix Settings (Cloudflare D1 Database)
+        </h3>
+        <button onclick="closeGradeModal()" class="text-slate-500 hover:text-white transition"><i
+            class="fa-solid fa-xmark text-sm"></i></button>
+      </div>
+
+
+    </div>
+  </div>
+
+
+
+  <!-- ==================== 6. CORE APPLICATION SCRIPTS ==================== -->
+  <!-- 🎯 Version Query String အား အသစ်သို့ ပြောင်းထားသဖြင့် ဖိုင်အဟောင်း Cache ငြိခြင်း မဖြစ်စေပါ -->
+  <script src="js/config.js?v=20261008" defer></script>
+  <script src="js/offline-sync.js?v=20261008" defer></script>
+  <script src="js/api.js?v=20261008" defer></script>
+  <script src="js/auth.js?v=20261008" defer></script>
+
+  <script src="js/settings.js?v=20261008" defer></script>
+  <script src="js/dashboard.js?v=20261008" defer></script>
+  <script src="js/app.js?v=20261008" defer></script>
+
+
+
+  <!-- 💡 Service Worker Registration with Auto-Update Check -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js')
+          .then(function (reg) {
+            console.log('✅ ServiceWorker Registered Successfully:', reg.scope);
+            // 🎯 ကုတ်အသစ် တင်ထားခြင်း ရှိမရှိ အလိုအလျောက် စစ်ဆေးခိုင်းခြင်း
+            if (reg && typeof reg.update === 'function') {
+              reg.update();
+            }
+          })
+          .catch(function (err) {
+            console.warn('ServiceWorker Registration Error:', err);
+          });
+      });
+    }
+  </script>
+</body>
+
+</html>

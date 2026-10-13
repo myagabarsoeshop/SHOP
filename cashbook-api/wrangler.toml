@@ -5,21 +5,21 @@
 #              Automated Cron Triggers for Database Maintenance
 # ==============================================================================
 
-name = "cashbook-app-api"
+name = "shop-api"
 main = "worker.js"
-compatibility_date = "2026-08-01"
+compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
 # 💡 1. CLOUDFLARE D1 DATABASE BINDING
 [[d1_databases]]
 binding = "DB"
-database_name = "school-db"
-database_id = "945c2d8b-f2ac-496a-a7bd-018c18be84bf"
+database_name = "shop-db"
+database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
 
 # 💡 2. ENVIRONMENT VARIABLES (Strict Production CORS Protection)
 [vars]
 # Localhost များကို ဖြုတ်ထားပြီး Production Domain ကိုသာ ခွင့်ပြုထားပါသည် (Enterprise Security Standard)
-ALLOWED_ORIGIN = "https://cash-book-c4o.pages.dev"
+ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
 
 # 💡 3. AUTOMATED CRON TRIGGERS (Database Maintenance)
 # ညစဉ် သန်းခေါင်ယံ (0 0 * * *) အချိန်တိုင်း ၆ လကျော်သော Audit Logs များကို အလိုအလျောက် ရှင်းလင်းပေးမည်

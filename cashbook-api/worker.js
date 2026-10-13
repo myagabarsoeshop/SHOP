@@ -1,5 +1,5 @@
 /**
- * MYA GABAR SOE SHOP - API WORKER (D1 DATABASE)
+ * Github/SHOP/cashbook-api/worker.js - API WORKER (D1 DATABASE)
  */
 
 function base64ToBytes(base64) {

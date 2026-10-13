@@ -1,5 +1,11 @@
 name = "shop"
+main = "cashbook-api/worker.js"
 compatibility_date = "2026-10-01"
 
 [assets]
-directory = "."
+directory = "cashbook-frontend"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shop-db"
+database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"

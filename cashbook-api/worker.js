@@ -1,74 +1,4 @@
-/**
- * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER (ASSETS + D1 DATABASE API)
- */
-
-function base64ToBytes(base64) {
-  const binString = atob(base64.replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(binString, (m) => m.codePointAt(0));
-}
-
-function bytesToBase64(bytes) {
-  const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join("");
-  return btoa(binString);
-}
-
-function base64UrlEncode(str) {
-  return btoa(unescape(encodeURIComponent(str))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-async function verifyPbkdf2Password(password, storedHash, storedSalt) {
-  try {
-    if (!storedHash) return false;
-
-    // Database ထဲတွင် Base64 Salt ရှိသော ပုံစံ
-    if (storedSalt) {
-      const saltBytes = base64ToBytes(storedSalt);
-      const keyMaterial = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
-      );
-      const derivedBits = await crypto.subtle.deriveBits(
-        { name: "PBKDF2", salt: saltBytes, iterations: 100000, hash: "SHA-256" },
-        keyMaterial, 256
-      );
-      const computedBase64 = bytesToBase64(new Uint8Array(derivedBits));
-      return computedBase64 === storedHash;
-    }
-
-    // pbkdf2$100000$salt$hash ပုံစံ
-    if (storedHash.startsWith("pbkdf2$")) {
-      const parts = storedHash.split("$");
-      const iterations = parseInt(parts[1], 10) || 100000;
-      const salt = new Uint8Array(parts[2].match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-      const keyMaterial = await crypto.subtle.importKey(
-        "raw", new TextEncoder().encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
-      );
-      const derivedBits = await crypto.subtle.deriveBits(
-        { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
-        keyMaterial, 256
-      );
-      const computedHex = Array.from(new Uint8Array(derivedBits)).map(b => b.toString(16).padStart(2, "0")).join("");
-      return computedHex === parts[3];
-    }
-
-    return password === storedHash;
-  } catch (err) {
-    return false;
-  }
-}
-
-async function createJwtToken(payload, secret) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const exp = Math.floor(Date.now() / 1000) + (24 * 3600);
-  const encodedPayload = base64UrlEncode(JSON.stringify({ ...payload, exp }));
-
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`));
-  return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))}`;
-}
-
-export default {
-  async fetch(request, env) {
+async fetch(request, env) {
     const requestOrigin = request.headers.get("Origin") || "*";
     const corsHeaders = {
       "Access-Control-Allow-Origin": requestOrigin,
@@ -81,8 +11,10 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // 💡 ၁။ POST Request (Login စစ်ဆေးမှု) ဖြစ်ပါက Database ဖြင့် စစ်ဆေးမည်
-    if (request.method === "POST") {
+    const url = new URL(request.url);
+
+    // 💡 ၁။ /api လမ်းကြောင်း သို့မဟုတ် POST Request လာပါက Database ဖြင့် စစ်ဆေးမည်
+    if (url.pathname.startsWith("/api") || request.method === "POST") {
       try {
         const db = env.DB;
         if (!db) {
@@ -97,7 +29,7 @@ export default {
           body = {};
         }
 
-        const action = body.action || "";
+        const action = body.action || url.searchParams.get("action") || "";
 
         if (action === "checkLogin") {
           const username = String(body.username || "").trim();
@@ -131,7 +63,7 @@ export default {
       }
     }
 
-    // 💡 GET Request ဖြစ်ပါက Website မျက်နှာပြင် (index.html) ကို တိုက်ရိုက် ဆွဲတင်ပြသပေးမည်
+    // 💡 ၂။ GET Request (Website မျက်နှာပြင်များ) ဖြစ်ပါက Static Assets ကို ပြသပေးမည်
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

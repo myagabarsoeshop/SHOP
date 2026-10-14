@@ -1,13 +1,6 @@
 /**
- * ==============================================================================
  * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER
  * File: cashbook-api/worker.js
- * Features:
- *   1. D1 Database Authentication (PBKDF2 + Auto-Sync for Admin123)
- *   2. WebCrypto JWT Token Issuance
- *   3. Dynamic API Router (/api & POST)
- *   4. Cloudflare Static Assets Serving (env.ASSETS)
- * ==============================================================================
  */
 
 // ==============================================================================
@@ -34,7 +27,6 @@ async function verifyPbkdf2Password(password, storedHash, storedSalt) {
   try {
     if (!storedHash) return false;
 
-    // Database ထဲတွင် Base64 Salt သီးသန့်ရှိနေသော ပုံစံ
     if (storedSalt) {
       const saltBytes = base64ToBytes(storedSalt);
       const keyMaterial = await crypto.subtle.importKey(
@@ -53,7 +45,6 @@ async function verifyPbkdf2Password(password, storedHash, storedSalt) {
       return computedBase64 === storedHash;
     }
 
-    // pbkdf2$iterations$salt$hash ပုံစံ
     if (storedHash.startsWith("pbkdf2$")) {
       const parts = storedHash.split("$");
       const iterations = parseInt(parts[1], 10) || 100000;
@@ -76,7 +67,6 @@ async function verifyPbkdf2Password(password, storedHash, storedSalt) {
       return computedHex === parts[3];
     }
 
-    // Plain text စစ်ဆေးခြင်း
     return password === storedHash;
   } catch (err) {
     console.error("Password verification error:", err);
@@ -87,7 +77,7 @@ async function verifyPbkdf2Password(password, storedHash, storedSalt) {
 async function createJwtToken(payload, secret) {
   const header = { alg: "HS256", typ: "JWT" };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const exp = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 Hours Expiry
+  const exp = Math.floor(Date.now() / 1000) + 24 * 3600;
   const encodedPayload = base64UrlEncode(JSON.stringify({ ...payload, exp }));
 
   const key = await crypto.subtle.importKey(
@@ -106,7 +96,7 @@ async function createJwtToken(payload, secret) {
 }
 
 // ==============================================================================
-// 💡 2. MAIN FETCH HANDLER
+// 💡 2. MAIN FETCH HANDLER (EXPORT DEFAULT)
 // ==============================================================================
 export default {
   async fetch(request, env) {
@@ -164,7 +154,6 @@ export default {
             );
           }
 
-          // D1 Database ထဲမှ User ရှာဖွေခြင်း
           const user = await db.prepare(
             "SELECT id, username, password_salt, password_hash, role, branch_code FROM users WHERE LOWER(username) = LOWER(?)"
           ).bind(username).first();
@@ -176,10 +165,10 @@ export default {
             );
           }
 
-          // ၁။ PBKDF2 Hash ဖြင့် ပုံမှန်စစ်ဆေးခြင်း
+          // ၁။ Hash စစ်ဆေးခြင်း
           let isPasswordOk = await verifyPbkdf2Password(password, user.password_hash, user.password_salt);
 
-          // ၂။ Admin123 သို့မဟုတ် စံပြု Password ဖြင့် တိုက်ရိုက်ဝင်ရောက်ခွင့်ပေးခြင်း
+          // ၂။ Admin123 ဖြင့် တိုက်ရိုက်ဝင်ရောက်ခွင့်ပြုခြင်း
           const isDefaultAllowed = (
             password === "Admin123" ||
             password.toLowerCase() === "admin" ||
@@ -190,7 +179,7 @@ export default {
           if (!isPasswordOk && isDefaultAllowed) {
             isPasswordOk = true;
 
-            // Password ကို Database ထဲတွင် PBKDF2 Hash အသစ်ဖြင့် Auto-Update လုပ်ပေးခြင်း
+            // Password ကို Database ထဲတွင် PBKDF2 Hash အသစ်ဖြင့် Auto-Update ပြန်လုပ်ပေးမည်
             try {
               const newSaltBytes = crypto.getRandomValues(new Uint8Array(16));
               const newSaltBase64 = bytesToBase64(newSaltBytes);
@@ -223,7 +212,6 @@ export default {
             );
           }
 
-          // JWT Token ထုတ်ပေးခြင်း
           const token = await createJwtToken(
             { id: user.id, username: user.username, role: user.role, branch_code: user.branch_code },
             authSecret
@@ -244,7 +232,7 @@ export default {
           );
         }
 
-        // Login ဝင်ပြီးနောက် အခြား Action များ (Dashboard စသည်) ခေါ်ယူပါက Safe Data ပြန်ပေးခြင်း
+        // Dashboard နှင့် အခြား Action များအတွက် Safe Response
         return new Response(
           JSON.stringify({
             success: true,
@@ -262,7 +250,7 @@ export default {
       }
     }
 
-    // 💡 Static Assets (HTML, CSS, JS)
+    // 💡 Static Assets (Website UI)
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

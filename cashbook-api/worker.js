@@ -131,11 +131,11 @@ export default {
       }
     }
 
-    // 💡 ၂။ GET Request ဖြစ်ပါက Website မျက်နှာပြင် (index.html, CSS, JS, Sidebar) ကို အပြည့်အစုံ ပြသပေးမည်
+    // 💡 GET Request ဖြစ်ပါက Website မျက်နှာပြင် (index.html) ကို တိုက်ရိုက် ဆွဲတင်ပြသပေးမည်
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
 
-    return new Response(JSON.stringify({ success: true, message: "API is ready!" }), { headers: corsHeaders });
+    return new Response("Website loading...", { headers: { "Content-Type": "text/html" } });
   }
 };

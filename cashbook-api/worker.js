@@ -3,9 +3,6 @@
  * File: cashbook-api/worker.js
  */
 
-// ==============================================================================
-// 💡 1. CRYPTOGRAPHIC UTILITIES
-// ==============================================================================
 function base64ToBytes(base64) {
   const binString = atob(base64.replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(binString, (m) => m.codePointAt(0));
@@ -69,7 +66,6 @@ async function verifyPbkdf2Password(password, storedHash, storedSalt) {
 
     return password === storedHash;
   } catch (err) {
-    console.error("Password verification error:", err);
     return false;
   }
 }
@@ -95,9 +91,6 @@ async function createJwtToken(payload, secret) {
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))}`;
 }
 
-// ==============================================================================
-// 💡 2. MAIN FETCH HANDLER (EXPORT DEFAULT)
-// ==============================================================================
 export default {
   async fetch(request, env) {
     const requestOrigin = request.headers.get("Origin") || "*";
@@ -114,7 +107,6 @@ export default {
 
     const url = new URL(request.url);
 
-    // 💡 API Requests (/api သို့မဟုတ် POST Requests)
     if (url.pathname.startsWith("/api") || request.method === "POST" || url.searchParams.has("action")) {
       try {
         const db = env.DB;
@@ -142,7 +134,6 @@ export default {
 
         const action = body.action || url.searchParams.get("action") || "";
 
-        // 🎯 LOGIN ACTION
         if (action === "checkLogin") {
           const username = String(body.username || "").trim();
           const password = String(body.password || "").trim();
@@ -165,10 +156,8 @@ export default {
             );
           }
 
-          // ၁။ Hash စစ်ဆေးခြင်း
           let isPasswordOk = await verifyPbkdf2Password(password, user.password_hash, user.password_salt);
 
-          // ၂။ Admin123 ဖြင့် တိုက်ရိုက်ဝင်ရောက်ခွင့်ပြုခြင်း
           const isDefaultAllowed = (
             password === "Admin123" ||
             password.toLowerCase() === "admin" ||
@@ -178,8 +167,6 @@ export default {
 
           if (!isPasswordOk && isDefaultAllowed) {
             isPasswordOk = true;
-
-            // Password ကို Database ထဲတွင် PBKDF2 Hash အသစ်ဖြင့် Auto-Update ပြန်လုပ်ပေးမည်
             try {
               const newSaltBytes = crypto.getRandomValues(new Uint8Array(16));
               const newSaltBase64 = bytesToBase64(newSaltBytes);
@@ -200,9 +187,7 @@ export default {
               await db.prepare(
                 "UPDATE users SET password_salt = ?, password_hash = ? WHERE id = ?"
               ).bind(newSaltBase64, newHashBase64, user.id).run();
-            } catch (updateErr) {
-              console.warn("Auto password sync note:", updateErr.message);
-            }
+            } catch (updateErr) {}
           }
 
           if (!isPasswordOk) {
@@ -232,7 +217,6 @@ export default {
           );
         }
 
-        // Dashboard နှင့် အခြား Action များအတွက် Safe Response
         return new Response(
           JSON.stringify({
             success: true,
@@ -250,7 +234,6 @@ export default {
       }
     }
 
-    // 💡 Static Assets (Website UI)
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

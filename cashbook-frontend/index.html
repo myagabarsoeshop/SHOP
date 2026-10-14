@@ -3,11 +3,12 @@
 
 <head>
   <meta charset="UTF-8">
+  <!-- 💡 Browser Tab Icon (Favicon) - Emerald & Gold "မြ" Logo -->
   <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230c1322'/><path d='M50 20 L90 38 L50 56 L10 38 Z' fill='%23818cf8'/><path d='M25 46.5 V65 C25 75 75 75 75 65 V46.5' fill='none' stroke='%23818cf8' stroke-width='6' stroke-linecap='round'/><circle cx='82' cy='55' r='4' fill='%23fbbf24'/><path d='M82 55 V75' stroke='%23fbbf24' stroke-width='3' stroke-linecap='round'/></svg>">
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%230c1b26'/><stop offset='100%25' stop-color='%23040911'/></linearGradient><linearGradient id='mya' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%236ee7b7'/><stop offset='50%25' stop-color='%2310b981'/><stop offset='100%25' stop-color='%23fbbf24'/></linearGradient><linearGradient id='bd' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%2334d399'/><stop offset='100%25' stop-color='%23f59e0b'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23bg)'/><rect x='2' y='2' width='96' height='96' rx='20' fill='none' stroke='url(%23bd)' stroke-width='2.5'/><circle cx='50' cy='50' r='30' fill='%2310b981' fill-opacity='0.12'/><text x='50' y='63' text-anchor='middle' font-family='sans-serif' font-size='46' font-weight='900' fill='url(%23mya)'>မြ</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#090d16">
-  <title>Mya Gabar Soe Shop-ERP SYSTEM</title>
+  <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - ERP SYSTEM</title>
 
   <!-- 💡 Immediate Auth Check to prevent UI Flash (FOUC) -->
   <script>
@@ -45,7 +46,7 @@
     }
   </style>
 
-  <!-- 🎯 Cache-Busting Version အသစ်သို့ ပြောင်းထားသည် (ဖိုင်အဟောင်း ငြိနေခြင်းမှ ကာကွယ်ရန်) -->
+  <!-- 🎯 Cache-Busting Version အသစ်သို့ ပြောင်းထားသည် -->
   <link rel="stylesheet" href="css/tailwind.min.css?v=20261008">
   <link rel="stylesheet" href="css/fontawesome.min.css?v=20261008">
   <link rel="stylesheet" href="css/style.css?v=20261008">
@@ -62,14 +63,17 @@
       class="relative w-full max-w-md bg-[#0e131f]/90 border border-amber-500/20 backdrop-blur-xl rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center overflow-hidden space-y-6 text-slate-300">
 
       <div
-        class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none">
+        class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
       </div>
 
       <div class="text-center">
+        <!-- 💡 Luxury Emerald & Gold "မြ" Brand Badge -->
         <div
-          class="inline-flex items-center justify-center p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-amber-600/5 border border-amber-500/30 shadow-inner group transition-all duration-300 hover:scale-105 mb-3">
-          <i
-            class="fa-solid fa-graduation-cap text-4xl text-amber-400 filter drop-shadow-[0_2px_8px_rgba(245,158,11,0.5)]"></i>
+          class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-teal-950/40 to-slate-900/80 border border-emerald-500/40 shadow-[0_0_25px_rgba(16,185,129,0.3)] group transition-all duration-300 hover:scale-105 mb-3">
+          <span
+            class="text-3xl font-black bg-gradient-to-r from-emerald-300 via-teal-100 to-amber-300 bg-clip-text text-transparent filter drop-shadow-[0_2px_8px_rgba(16,185,129,0.7)] select-none">
+            မြ
+          </span>
         </div>
 
         <h2
@@ -85,8 +89,7 @@
 
       <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4 text-xs text-left">
         <div>
-          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Select Username /
-            Role</label>
+          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Select Username / Role</label>
           <select id="login-username" required
             class="w-full p-3 bg-[#070a12]/80 border border-slate-700/60 rounded-xl text-xs text-slate-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300 font-bold">
             <option value="">-- Select Username --</option>
@@ -137,8 +140,9 @@
       <div
         class="h-[64px] px-4 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
         <div class="flex items-center gap-2.5 font-extrabold text-sm tracking-wide">
-          <i class="fa-solid fa-graduation-cap text-indigo-400 text-lg"></i>
-          <span class="text-slate-100">မြကမ္ဘာစိုးပိုးထည်တိုက်</span>
+          <!-- 💡 Sidebar Brand "မြ" Mini Badge -->
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-black text-xs shadow-[0_0_10px_rgba(16,185,129,0.2)] select-none">မြ</span>
+          <span class="text-slate-100 font-bold">မြကမ္ဘာစိုးပိုးထည်တိုက်</span>
         </div>
         <button onclick="handleLogout()" class="text-slate-500 hover:text-rose-400 transition p-1.5 rounded-lg"
           title="Logout">
@@ -155,31 +159,28 @@
         <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Main Books</p>
         <button onclick="switchTab('bank')" id="btn-bank"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-building-columns text-amber-400 w-4 text-center"></i>Main Home Shop
+          <i class="fa-solid fa-building-columns text-amber-400 w-4 text-center"></i> Main Home Shop
         </button>
-        <button onclick="switchTab('cash')" id="btn-cash"
+        <button onclick="switchTab('shop1')" id="btn-shop1"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-money-bill-wave text-emerald-400 w-4 text-center"></i> ဆိုင်ခွဲ (၁)
+          <i class="fa-solid fa-shop text-emerald-400 w-4 text-center"></i> ဆိုင်ခွဲ (၁)
         </button>
-        <button onclick="switchTab('income')" id="btn-income"
+        <button onclick="switchTab('shop2')" id="btn-shop2"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၂)
+          <i class="fa-solid fa-shop text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၂)
         </button>
-        <button onclick="switchTab('income')" id="btn-income"
+        <button onclick="switchTab('shop3')" id="btn-shop3"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၃)
+          <i class="fa-solid fa-shop text-cyan-400 w-4 text-center"></i> ဆိုင်ခွဲ (၃)
         </button>
-        <button onclick="switchTab('income')" id="btn-income"
+        <button onclick="switchTab('shop4')" id="btn-shop4"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၄)
+          <i class="fa-solid fa-shop text-purple-400 w-4 text-center"></i> ဆိုင်ခွဲ (၄)
         </button>
-        <button onclick="switchTab('income')" id="btn-income"
+        <button onclick="switchTab('shop5')" id="btn-shop5"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-wallet text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၅)
+          <i class="fa-solid fa-shop text-rose-400 w-4 text-center"></i> ဆိုင်ခွဲ (၅)
         </button>
-
-
-
 
         <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Reporting & System</p>
         <button onclick="switchTab('report-financial')" id="btn-report-financial"
@@ -205,7 +206,6 @@
         </div>
       </header>
 
-      <!-- style="padding-top: 22px;" ကို တိုက်ရိုက် ထည့်သွင်းထားသည် -->
       <main id="main-content" style="padding-top: 10px;" class="px-6 pb-6 overflow-y-auto flex-1 bg-[#090d16] relative">
         <div id="view-container"></div>
       </main>
@@ -213,48 +213,34 @@
   </div>
 
   <!-- ==================== 3. GLOBAL UTILITIES & NOTIFICATIONS ==================== -->
-  <!-- Loading Spinner Overlay -->
   <div id="loading-overlay"
     class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[150] flex flex-col items-center justify-center hidden">
     <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-3"></div>
     <p class="text-xs font-bold text-slate-200 tracking-wide">Processing, please wait...</p>
   </div>
 
-  <!-- Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none"></div>
 
-  <!-- ==================== 4. GLOBAL SALARY GRADE MATRIX MODAL ==================== -->
+  <!-- ==================== 4. GLOBAL SETTINGS MODAL ==================== -->
   <div id="grade-modal"
     class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
     <div
       class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
       <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
         <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-          <i class="fa-solid fa-sliders"></i> Edit Salary Grade Matrix Settings (Cloudflare D1 Database)
+          <i class="fa-solid fa-sliders"></i> Edit System Matrix Settings (Cloudflare D1 Database)
         </h3>
         <button onclick="closeGradeModal()" class="text-slate-500 hover:text-white transition"><i
             class="fa-solid fa-xmark text-sm"></i></button>
       </div>
-
-
     </div>
   </div>
 
-
-
-  <!-- ==================== 6. CORE APPLICATION SCRIPTS ==================== -->
-  <!-- 🎯 Version Query String အား အသစ်သို့ ပြောင်းထားသဖြင့် ဖိုင်အဟောင်း Cache ငြိခြင်း မဖြစ်စေပါ -->
+  <!-- ==================== 5. CORE APPLICATION SCRIPTS ==================== -->
   <script src="js/config.js?v=20261008" defer></script>
   <script src="js/api.js?v=20261008" defer></script>
   <script src="js/auth.js?v=20261008" defer></script>
   <script src="js/app.js?v=20261008" defer></script>
-  
-  <!-- <script src="js/offline-sync.js?v=20261008" defer></script> -->
-  <!-- <script src="js/settings.js?v=20261008" defer></script> -->
-  <!-- <script src="js/dashboard.js?v=20261008" defer></script> -->
-  
-
-
 
   <!-- 💡 Service Worker Registration with Auto-Update Check -->
   <script>
@@ -263,7 +249,6 @@
         navigator.serviceWorker.register('./sw.js')
           .then(function (reg) {
             console.log('✅ ServiceWorker Registered Successfully:', reg.scope);
-            // 🎯 ကုတ်အသစ် တင်ထားခြင်း ရှိမရှိ အလိုအလျောက် စစ်ဆေးခိုင်းခြင်း
             if (reg && typeof reg.update === 'function') {
               reg.update();
             }

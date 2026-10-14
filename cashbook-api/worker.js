@@ -1,5 +1,5 @@
 /**
- * Github/SHOP/cashbook-api/worker.js - API WORKER (D1 DATABASE)
+ * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER (ASSETS + D1 DATABASE API)
  */
 
 function base64ToBytes(base64) {
@@ -81,58 +81,61 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    try {
-      const db = env.DB;
-      if (!db) {
-        return new Response(JSON.stringify({ success: false, message: "D1 Database Binding (env.DB) မရှိသေးပါ။" }), { status: 500, headers: corsHeaders });
-      }
+    // 💡 ၁။ POST Request (Login စစ်ဆေးမှု) ဖြစ်ပါက Database ဖြင့် စစ်ဆေးမည်
+    if (request.method === "POST") {
+      try {
+        const db = env.DB;
+        if (!db) {
+          return new Response(JSON.stringify({ success: false, message: "D1 Database Binding (env.DB) မရှိသေးပါ။" }), { status: 500, headers: corsHeaders });
+        }
 
-      const authSecret = "MYA_GABAR_SOE_SHOP_SECURE_KEY_2026";
-      let body = {};
-      let action = "";
-
-      if (request.method === "GET") {
-        const url = new URL(request.url);
-        action = url.searchParams.get("action") || "";
-      } else {
+        const authSecret = "MYA_GABAR_SOE_SHOP_SECURE_KEY_2026";
+        let body = {};
         try {
           body = await request.json();
-          action = body.action || "";
         } catch (e) {
           body = {};
         }
-      }
 
-      if (action === "checkLogin") {
-        const username = String(body.username || "").trim();
-        const password = String(body.password || "").trim();
+        const action = body.action || "";
 
-        const user = await db.prepare(
-          "SELECT id, username, password_salt, password_hash, role, branch_code FROM users WHERE LOWER(username) = LOWER(?)"
-        ).bind(username).first();
+        if (action === "checkLogin") {
+          const username = String(body.username || "").trim();
+          const password = String(body.password || "").trim();
 
-        if (!user) {
-          return new Response(JSON.stringify({ success: false, message: "အသုံးပြုသူ အမည် (Username) မှားယွင်းနေပါသည်။" }), { headers: corsHeaders });
+          const user = await db.prepare(
+            "SELECT id, username, password_salt, password_hash, role, branch_code FROM users WHERE LOWER(username) = LOWER(?)"
+          ).bind(username).first();
+
+          if (!user) {
+            return new Response(JSON.stringify({ success: false, message: "အသုံးပြုသူ အမည် (Username) မှားယွင်းနေပါသည်။" }), { headers: corsHeaders });
+          }
+
+          const isOk = await verifyPbkdf2Password(password, user.password_hash, user.password_salt);
+          if (!isOk) {
+            return new Response(JSON.stringify({ success: false, message: "Password မှားယွင်းနေပါသည်။" }), { headers: corsHeaders });
+          }
+
+          const token = await createJwtToken({ id: user.id, username: user.username, role: user.role, branch_code: user.branch_code }, authSecret);
+
+          return new Response(JSON.stringify({
+            success: true,
+            token: token,
+            user: { username: user.username, role: user.role, branch_code: user.branch_code }
+          }), { headers: corsHeaders });
         }
 
-        const isOk = await verifyPbkdf2Password(password, user.password_hash, user.password_salt);
-        if (!isOk) {
-          return new Response(JSON.stringify({ success: false, message: "Password မှားယွင်းနေပါသည်။" }), { headers: corsHeaders });
-        }
-
-        const token = await createJwtToken({ id: user.id, username: user.username, role: user.role, branch_code: user.branch_code }, authSecret);
-
-        return new Response(JSON.stringify({
-          success: true,
-          token: token,
-          user: { username: user.username, role: user.role, branch_code: user.branch_code }
-        }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, message: "Unknown action" }), { status: 400, headers: corsHeaders });
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, message: err.message }), { status: 500, headers: corsHeaders });
       }
-
-      return new Response(JSON.stringify({ success: true, message: "API is ready!" }), { headers: corsHeaders });
-
-    } catch (err) {
-      return new Response(JSON.stringify({ success: false, message: err.message }), { status: 500, headers: corsHeaders });
     }
+
+    // 💡 ၂။ GET Request ဖြစ်ပါက Website မျက်နှာပြင် (index.html, CSS, JS, Sidebar) ကို အပြည့်အစုံ ပြသပေးမည်
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    return new Response(JSON.stringify({ success: true, message: "API is ready!" }), { headers: corsHeaders });
   }
 };

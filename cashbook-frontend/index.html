@@ -8,7 +8,7 @@
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%230c1b26'/><stop offset='100%25' stop-color='%23040911'/></linearGradient><linearGradient id='mya' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%236ee7b7'/><stop offset='50%25' stop-color='%2310b981'/><stop offset='100%25' stop-color='%23fbbf24'/></linearGradient><linearGradient id='bd' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%2334d399'/><stop offset='100%25' stop-color='%23f59e0b'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23bg)'/><rect x='2' y='2' width='96' height='96' rx='20' fill='none' stroke='url(%23bd)' stroke-width='2.5'/><circle cx='50' cy='50' r='30' fill='%2310b981' fill-opacity='0.12'/><text x='50' y='63' text-anchor='middle' font-family='sans-serif' font-size='46' font-weight='900' fill='url(%23mya)'>မြ</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#090d16">
-  <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - ERP SYSTEM</title>
+  <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - CASH BOOK SYSTEM</title>
 
   <!-- 💡 Immediate Auth Check to prevent UI Flash (FOUC) -->
   <script>
@@ -39,10 +39,18 @@
       display: none;
     }
 
-    /* 💡 Print Areas မလိုလားအပ်ဘဲ မျက်နှာပြင်ပေါ် မပေါ်စေရန် ကာကွယ်ခြင်း */
     #invoice-print-area,
     #payslip-print-area {
       display: none;
+    }
+
+    /* 💡 Autofill ဝါကျင့်ကျင့်ဖြစ်နေမှုကို Luxury Dark ဖြစ်အောင် ကာကွယ်ခြင်း */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover, 
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: #f1f5f9;
+      -webkit-box-shadow: 0 0 0px 1000px #070a12 inset;
+      transition: background-color 5000s ease-in-out 0s;
     }
   </style>
 
@@ -51,7 +59,7 @@
   <link rel="stylesheet" href="css/fontawesome.min.css?v=20261008">
   <link rel="stylesheet" href="css/style.css?v=20261008">
 
-  <!-- 💡 SheetJS Library for Multi-Tab Excel (.xlsx) Export with Security Crossorigin -->
+  <!-- 💡 SheetJS Library for Multi-Tab Excel Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
 </head>
 
@@ -67,17 +75,15 @@
       </div>
 
       <div class="text-center">
-        <!-- 💎 Luxury Royal Emerald & Gold "မြ" Seal (Pure Vector Badge) -->
+        <!-- 💎 Luxury Royal Emerald & Gold "မြ" Seal -->
         <div class="flex items-center justify-center mb-3">
           <svg class="w-20 h-20 filter drop-shadow-[0_0_25px_rgba(16,185,129,0.55)] hover:scale-105 transition-transform duration-300 cursor-pointer select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <!-- Deep Emerald Jade Base Gradient -->
               <radialGradient id="gemBg" cx="50%" cy="30%" r="70%">
                 <stop offset="0%" stop-color="#10b981"/>
                 <stop offset="45%" stop-color="#064e3b"/>
                 <stop offset="100%" stop-color="#022c22"/>
               </radialGradient>
-              <!-- 3D Royal Gold Gradient -->
               <linearGradient id="goldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stop-color="#fef08a"/>
                 <stop offset="35%" stop-color="#f59e0b"/>
@@ -91,15 +97,12 @@
                 <stop offset="100%" stop-color="#b45309"/>
               </linearGradient>
             </defs>
-            <!-- Outer Gold Ring with Luxury Jade Fill -->
             <circle cx="50" cy="50" r="46" fill="url(#gemBg)" stroke="url(#goldBorder)" stroke-width="2.5"/>
             <circle cx="50" cy="50" r="41" fill="none" stroke="url(#goldBorder)" stroke-width="1" stroke-dasharray="2 3" opacity="0.8"/>
-            <!-- 4 Corner Royal Diamonds -->
             <polygon points="50,6 52,10 50,14 48,10" fill="#fef08a"/>
             <polygon points="50,86 52,90 50,94 48,90" fill="#fef08a"/>
             <polygon points="6,50 10,52 14,50 10,48" fill="#fef08a"/>
             <polygon points="86,50 90,52 94,50 90,48" fill="#fef08a"/>
-            <!-- 3D Embossed "မြ" Centerpiece -->
             <text x="51" y="66" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="42" font-weight="900" fill="#011b15" opacity="0.8">မြ</text>
             <text x="50" y="65" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="42" font-weight="900" fill="url(#goldText)">မြ</text>
           </svg>
@@ -110,9 +113,10 @@
           မြကမ္ဘာစိုး ပိုးထည်တိုက်
         </h2>
 
+        <!-- 💡 သန့်ရှင်းခေတ်မီသော CASH BOOK SYSTEM စာတန်း -->
         <p
-          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/70 pb-3 border-b border-amber-500/10">
-          Financial Management System
+          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/80 pb-3 border-b border-amber-500/10">
+          CASH BOOK SYSTEM
         </p>
       </div>
 
@@ -166,10 +170,11 @@
   <div id="erp-workspace" class="hidden h-full w-full">
     <!-- Sidebar Navigation -->
     <aside class="w-64 bg-[#0c1322] border-r border-slate-800 flex flex-col h-full shadow-2xl shrink-0">
-      <div
-        class="h-[64px] px-4 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
-        <div class="flex items-center gap-2.5 font-extrabold text-sm tracking-wide">
-          <!-- 💡 Sidebar Brand "မြ" Royal Mini Seal -->
+      
+      <!-- 💎 PRO SIDEBAR HEADER: စာတန်း မကျိုးတော့ဘဲ သပ်ရပ်ခန့်ညားသော ပုံစံ -->
+      <div class="h-[68px] px-3.5 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <!-- Mini Brand Seal -->
           <svg class="w-8 h-8 shrink-0 filter drop-shadow-[0_0_8px_rgba(16,185,129,0.45)] select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="miniGold" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -182,10 +187,15 @@
             <text x="50.5" y="66" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="46" font-weight="900" fill="#022c22" opacity="0.6">မြ</text>
             <text x="50" y="65" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="46" font-weight="900" fill="#fef08a">မြ</text>
           </svg>
-          <span class="text-slate-100 font-bold tracking-wide">မြကမ္ဘာစိုးပိုးထည်တိုက်</span>
+          
+          <!-- Two-tier Clean Brand Text -->
+          <div class="flex flex-col min-w-0 leading-tight">
+            <span class="text-slate-100 font-extrabold text-[13px] tracking-tight truncate">မြကမ္ဘာစိုး</span>
+            <span class="text-[9.5px] font-bold text-amber-400/90 tracking-wider uppercase truncate">ပိုးထည်တိုက် • Cash Book</span>
+          </div>
         </div>
-        <button onclick="handleLogout()" class="text-slate-500 hover:text-rose-400 transition p-1.5 rounded-lg"
-          title="Logout">
+
+        <button onclick="handleLogout()" class="shrink-0 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-xl transition duration-200" title="Logout">
           <i class="fa-solid fa-power-off text-xs"></i>
         </button>
       </div>
@@ -238,7 +248,7 @@
     <!-- Main Workspace View Container -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <header
-        class="bg-[#0c1322] border-b border-slate-800 h-[64px] px-6 flex justify-between items-center z-10 shrink-0">
+        class="bg-[#0c1322] border-b border-slate-800 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
         <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
         <div id="live-metadata"
           class="text-xs font-bold text-emerald-400 bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-lg">

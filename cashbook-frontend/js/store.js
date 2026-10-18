@@ -2,7 +2,7 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - STORE & INVENTORY MANAGEMENT ENGINE
  * File: cashbook-frontend/js/store.js
- * Standard: Smart Auto-Generated Codes, Names, Datalists & Price Validations
+ * Standard: Myanmar Digit Parser & Single Atomic API Call
  * ==============================================================================
  */
 
@@ -16,7 +16,18 @@ var currentStoreShop = "main";
 var searchTimeoutStore = null;
 var isStoreSubmitting = false;
 
-// 💡 Dynamic Units & Categories with Auto-Memory
+// 💡 မြန်မာဂဏန်း (၀ မှ ၉) ကို အင်္ဂလိပ်ဂဏန်း (0 to 9) သို့ အလိုအလျောက် ပြောင်းပေးသော Engine
+function parseCleanNumber(val) {
+  if (val === undefined || val === null || val === "") return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  var str = String(val).replace(/[၀-၉]/g, function (d) {
+    return d.charCodeAt(0) - 4160;
+  }).replace(/,/g, "").trim();
+  var num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+// 💡 Units & Categories with Memory
 var availableUnits = ["ထည်", "ကိုက်", "ပေါင်", "ထုပ်", "လိပ်", "စုံ"];
 try {
   var savedUnits = localStorage.getItem("mya_stored_units");
@@ -45,9 +56,6 @@ function saveNewCategoryToMemory(newCat) {
   }
 }
 
-/**
- * 💡 Generate Next Item Code Automatically based on Category
- */
 function getNextAutoItemCode(category) {
   var prefixMap = {
     'ပုဆိုး': 'PAS',
@@ -57,25 +65,21 @@ function getNextAutoItemCode(category) {
     'ပိတ်စ': 'FAB',
     'ချည်': 'YRN'
   };
-  var catTrimmed = String(category || '').trim();
-  var prefix = prefixMap[catTrimmed] || 'ITM';
+  var prefix = prefixMap[String(category || '').trim()] || 'ITM';
 
   var existingNums = storeActiveData
-    .map(function(i) { return i.item_code; })
-    .filter(function(code) { return code && code.startsWith(prefix + '-'); })
-    .map(function(code) {
+    .map(function (i) { return i.item_code; })
+    .filter(function (code) { return code && code.startsWith(prefix + '-'); })
+    .map(function (code) {
       var parts = code.split('-');
       return parseInt(parts[1], 10);
     })
-    .filter(function(n) { return !isNaN(n); });
+    .filter(function (n) { return !isNaN(n); });
 
   var nextNum = existingNums.length > 0 ? Math.max.apply(null, existingNums) + 1 : 1;
   return prefix + '-' + String(nextNum).padStart(3, '0');
 }
 
-/**
- * 💡 Auto Combine Category & Sub-Category into Item Name
- */
 function autoCombineItemName() {
   var catInput = document.getElementById('modal-item-category');
   var subInput = document.getElementById('modal-item-subcategory');
@@ -85,18 +89,11 @@ function autoCombineItemName() {
 
   var cat = catInput.value.trim();
   var sub = subInput ? subInput.value.trim() : '';
-
-  if (sub && cat) {
-    nameInput.value = sub + ' ' + cat;
-  } else if (cat) {
-    nameInput.value = cat;
-  }
+  nameInput.value = sub && cat ? (sub + ' ' + cat) : (cat || sub);
 }
 
 function onCategoryOrSubChangeStore() {
   autoCombineItemName();
-  
-  // Auto-update Item Code if user hasn't manually locked it
   var codeEl = document.getElementById('modal-item-code');
   var catEl = document.getElementById('modal-item-category');
   if (codeEl && !codeEl.disabled && catEl) {
@@ -104,9 +101,6 @@ function onCategoryOrSubChangeStore() {
   }
 }
 
-/**
- * 💡 Adjust KPI Font Sizes
- */
 function adjustStoreKpiFontSizes() {
   const kpiIds = ['store-total-items', 'store-total-stock', 'store-total-value', 'store-low-stock'];
   kpiIds.forEach(id => {
@@ -123,12 +117,9 @@ function adjustStoreKpiFontSizes() {
 }
 window.addEventListener('resize', adjustStoreKpiFontSizes);
 
-/**
- * 🔍 Filter Store Data
- */
 function filterStoreData(list, searchVal, categoryVal) {
   var safeList = Array.isArray(list) ? list : [];
-  return safeList.filter(function(row) {
+  return safeList.filter(function (row) {
     if (categoryVal && row.category !== categoryVal) return false;
     if (!searchVal || !searchVal.trim()) return true;
 
@@ -144,15 +135,12 @@ function filterStoreData(list, searchVal, categoryVal) {
 
 function onSearchInputStore() {
   if (searchTimeoutStore) clearTimeout(searchTimeoutStore);
-  searchTimeoutStore = setTimeout(function() {
+  searchTimeoutStore = setTimeout(function () {
     storePage = 1;
     renderTableStore();
   }, 200);
 }
 
-/**
- * 💡 Load Store Inventory Data from D1
- */
 async function loadStoreInventoryData(isSilent, forceRefresh) {
   var token = localStorage.getItem('golden_auth_token');
   if (!token) return;
@@ -172,8 +160,7 @@ async function loadStoreInventoryData(isSilent, forceRefresh) {
     storeActiveData = res.data || [];
     storeTotalRows = storeActiveData.length;
 
-    // Refresh Category memory list from fetched data
-    storeActiveData.forEach(function(i) {
+    storeActiveData.forEach(function (i) {
       if (i.category) saveNewCategoryToMemory(i.category);
       if (i.unit) saveNewUnitToMemory(i.unit);
     });
@@ -191,9 +178,6 @@ async function loadStoreInventoryData(isSilent, forceRefresh) {
   }
 }
 
-/**
- * 💡 Render Stats Box 4 ခု
- */
 function renderStatsStore() {
   var searchInput = document.getElementById('store-search');
   var catFilter = document.getElementById('store-category-filter');
@@ -224,9 +208,6 @@ function renderStatsStore() {
   setTimeout(adjustStoreKpiFontSizes, 50);
 }
 
-/**
- * 💡 Render Table Grid Rows with sticky Action
- */
 function renderTableStore() {
   var tbody = document.getElementById('store-table-body');
   if (!tbody) return;
@@ -251,7 +232,7 @@ function renderTableStore() {
   var endIndex = Math.min(startIndex + storeLimit, totalEntries);
   var pageItems = filteredRows.slice(startIndex, endIndex);
 
-  tbody.innerHTML = pageItems.map(function(row, idx) {
+  tbody.innerHTML = pageItems.map(function (row, idx) {
     var isLow = Number(row.current_stock || 0) <= 10;
     var wholesale = row.wholesale_price || row.default_price || 0;
 
@@ -317,9 +298,6 @@ function changePageStore(dir) {
   }
 }
 
-/**
- * 💡 Modal Controls (Smart Auto-Generated Codes & Names)
- */
 function openItemModalStore() {
   var titleEl = document.getElementById('store-form-title');
   if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-boxes-packing text-indigo-400"></i> <span>Add New Item & Stock</span>';
@@ -327,14 +305,12 @@ function openItemModalStore() {
   var shopSelect = document.getElementById('modal-item-shop');
   if (shopSelect) shopSelect.value = currentStoreShop;
 
-  // Datalist Refresh
   var dlCat = document.getElementById('category-options');
-  if (dlCat) dlCat.innerHTML = availableCategories.map(function(c) { return '<option value="' + c + '">'; }).join('');
+  if (dlCat) dlCat.innerHTML = availableCategories.map(c => `<option value="${c}">`).join('');
 
   var dlUnit = document.getElementById('unit-options');
-  if (dlUnit) dlUnit.innerHTML = availableUnits.map(function(u) { return '<option value="' + u + '">'; }).join('');
+  if (dlUnit) dlUnit.innerHTML = availableUnits.map(u => `<option value="${u}">`).join('');
 
-  // Default Category & Auto Code
   var catEl = document.getElementById('modal-item-category');
   if (catEl) catEl.value = "ပုဆိုး";
 
@@ -361,7 +337,7 @@ function openItemModalStore() {
 }
 
 function openEditModalStore(itemCode) {
-  var item = storeActiveData.find(function(i) { return i.item_code === itemCode; });
+  var item = storeActiveData.find(i => i.item_code === itemCode);
   if (!item) return;
 
   var titleEl = document.getElementById('store-form-title');
@@ -392,9 +368,7 @@ function closeItemModalStore() {
   if (modalEl) modalEl.classList.add('hidden');
 }
 
-/**
- * 💡 Save Item with Strict Price Validation (> 0)
- */
+// 💡 SINGLE ATOMIC SAVE WITH MYANMAR NUMERAL PARSER (100% RELIABLE)
 async function saveItemSubmitStore(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (isStoreSubmitting) return;
@@ -406,36 +380,38 @@ async function saveItemSubmitStore(e) {
   var subCategory = document.getElementById('modal-item-subcategory')?.value.trim() || "";
   var unitVal = document.getElementById('modal-item-unit')?.value.trim() || "ထည်";
 
-  var retailPrice = parseFloat(document.getElementById('modal-item-retail')?.value);
-  var wholesalePrice = parseFloat(document.getElementById('modal-item-wholesale')?.value);
-  var costPrice = parseFloat(document.getElementById('modal-item-cost')?.value);
-  var initialStock = parseInt(document.getElementById('modal-item-stock')?.value, 10) || 0;
+  // 🎯 မြန်မာဂဏန်းများကို တိကျစွာ အင်္ဂလိပ်ဂဏန်း ပြောင်းလဲဖတ်ယူခြင်း
+  var retailPrice = parseCleanNumber(document.getElementById('modal-item-retail')?.value);
+  var wholesalePrice = parseCleanNumber(document.getElementById('modal-item-wholesale')?.value);
+  var costPrice = parseCleanNumber(document.getElementById('modal-item-cost')?.value);
+  var initialStock = Math.floor(parseCleanNumber(document.getElementById('modal-item-stock')?.value));
   var remark = document.getElementById('modal-item-remark')?.value.trim() || "";
 
-  // 🎯 STRICT VALIDATION: မူရင်းဝယ်ဈေး၊ လက်လီဈေး၊ လက်ကားဈေး မပါမဖြစ် စစ်ဆေးခြင်း
-  if (!costPrice || costPrice <= 0 || isNaN(costPrice)) {
-    alert("⚠️ မူရင်းဝယ်ဈေး (Cost Price) ကို သုညထက်ကြီးသော တန်ဖိုး မဖြစ်မနေ ဖြည့်သွင်းပေးပါ။");
+  // ဈေးနှုန်းစစ်ဆေးခြင်း
+  if (costPrice <= 0) {
+    alert("⚠️ မူရင်းဝယ်ဈေး (Cost Price) ကို သုညထက်ကြီးသော တန်ဖိုး ဖြည့်သွင်းပေးပါ။");
     document.getElementById('modal-item-cost')?.focus();
     return;
   }
-  if (!retailPrice || retailPrice <= 0 || isNaN(retailPrice)) {
-    alert("⚠️ လက်လီရောင်းဈေး (Retail Price) ကို သုညထက်ကြီးသော တန်ဖိုး မဖြစ်မနေ ဖြည့်သွင်းပေးပါ။");
+  if (retailPrice <= 0) {
+    alert("⚠️ လက်လီရောင်းဈေး (Retail Price) ကို သုညထက်ကြီးသော တန်ဖိုး ဖြည့်သွင်းပေးပါ။");
     document.getElementById('modal-item-retail')?.focus();
     return;
   }
-  if (!wholesalePrice || wholesalePrice <= 0 || isNaN(wholesalePrice)) {
-    alert("⚠️ လက်ကားဈေး (Wholesale Price) ကို သုညထက်ကြီးသော တန်ဖိုး မဖြစ်မနေ ဖြည့်သွင်းပေးပါ။");
+  if (wholesalePrice <= 0) {
+    alert("⚠️ လက်ကားဈေး (Wholesale Price) ကို သုညထက်ကြီးသော တန်ဖိုး ဖြည့်သွင်းပေးပါ။");
     document.getElementById('modal-item-wholesale')?.focus();
     return;
   }
 
   isStoreSubmitting = true;
 
-  // Save new category and unit into browser memory
   saveNewCategoryToMemory(category);
   saveNewUnitToMemory(unitVal);
 
+  // 💡 SINGLE ATOMIC API CALL: items ရော shop_inventory ပါ တစ်ကြိမ်တည်းဖြင့် ပြီးပြတ်အောင် ပို့ခြင်း
   var payload = {
+    shop_id: targetShop,
     item_code: itemCode,
     item_name: itemName,
     unit: unitVal,
@@ -443,6 +419,8 @@ async function saveItemSubmitStore(e) {
     sub_category: subCategory,
     retail_price: retailPrice,
     wholesale_price: wholesalePrice,
+    current_stock: initialStock,
+    cost_price: costPrice,
     remark: remark
   };
 
@@ -452,14 +430,6 @@ async function saveItemSubmitStore(e) {
 
     var res = await callApi('saveItem', payload);
     if (res && res.success) {
-      await callApi('updateStock', {
-        shop_id: targetShop,
-        item_code: itemCode,
-        current_stock: initialStock,
-        cost_price: costPrice,
-        remark: remark || "Initial Stock"
-      });
-
       if (typeof showToast === 'function') showToast("SUCCESS", "ပစ္စည်းနှင့် စတိုလက်ကျန် သိမ်းဆည်းပြီးပါပြီ။");
       if (typeof window.clearAllApiCache === 'function') window.clearAllApiCache();
 
@@ -473,6 +443,7 @@ async function saveItemSubmitStore(e) {
       throw new Error(res?.message || "သိမ်းဆည်းမှု မအောင်မြင်ပါ။");
     }
   } catch (err) {
+    console.error("Save Error:", err);
     if (typeof showToast === 'function') showToast("ERROR", "မအောင်မြင်ပါ: " + err.message);
   } finally {
     isStoreSubmitting = false;
@@ -481,7 +452,7 @@ async function saveItemSubmitStore(e) {
 }
 
 function openStockModalStore(itemCode) {
-  var item = storeActiveData.find(function(i) { return i.item_code === itemCode; });
+  var item = storeActiveData.find(i => i.item_code === itemCode);
   if (!item) return;
 
   document.getElementById('stock-modal-code').value = item.item_code;
@@ -508,8 +479,8 @@ async function saveStockSubmitStore(e) {
   var payload = {
     shop_id: currentStoreShop,
     item_code: document.getElementById('stock-modal-code')?.value || "",
-    current_stock: parseInt(document.getElementById('stock-modal-qty')?.value, 10) || 0,
-    cost_price: parseFloat(document.getElementById('stock-modal-cost')?.value) || 0,
+    current_stock: Math.floor(parseCleanNumber(document.getElementById('stock-modal-qty')?.value)),
+    cost_price: parseCleanNumber(document.getElementById('stock-modal-cost')?.value),
     remark: document.getElementById('stock-modal-remark')?.value.trim() || ""
   };
 
@@ -540,7 +511,7 @@ function exportCsvStore() {
   }
 
   var csv = "NO,CODE,ITEM NAME,CATEGORY,UNIT,CURRENT STOCK,COST PRICE,RETAIL PRICE,WHOLESALE PRICE,SHOP\n";
-  storeActiveData.forEach(function(r, idx) {
+  storeActiveData.forEach(function (r, idx) {
     var wholesale = r.wholesale_price || r.default_price || 0;
     csv += (idx + 1) + ',' +
            window.safeCsvCell(r.item_code || '') + ',' +
@@ -564,7 +535,7 @@ function exportCsvStore() {
   document.body.removeChild(link);
 }
 
-// 💡 Export Engine Methods globally to window.StoreEngine
+// 💡 Global Export
 window.StoreEngine = {
   async init(shopId) {
     currentStoreShop = shopId || "main";
@@ -591,19 +562,19 @@ window.StoreEngine = {
     await loadStoreInventoryData(false, false);
   },
   loadInventory: loadStoreInventoryData,
-  changeShop: function(shopId) {
+  changeShop: function (shopId) {
     currentStoreShop = shopId;
     storePage = 1;
     loadStoreInventoryData(false, false);
   },
-  applyFilter: function() {
+  applyFilter: function () {
     storePage = 1;
     renderTableStore();
   },
   onSearchInput: onSearchInputStore,
   changePage: changePageStore,
-  prevPage: function() { changePageStore(-1); },
-  nextPage: function() { changePageStore(1); },
+  prevPage: function () { changePageStore(-1); },
+  nextPage: function () { changePageStore(1); },
   openItemModal: openItemModalStore,
   openEditModal: openEditModalStore,
   closeItemModal: closeItemModalStore,
@@ -613,8 +584,7 @@ window.StoreEngine = {
   saveStockSubmit: saveStockSubmitStore,
   exportCsv: exportCsvStore,
   onCategoryOrSubChange: onCategoryOrSubChangeStore,
-  onModalShopChange: function() {
-    // When shop changes in modal, refresh auto code
+  onModalShopChange: function () {
     var catEl = document.getElementById('modal-item-category');
     var codeEl = document.getElementById('modal-item-code');
     if (catEl && codeEl && !codeEl.disabled) {

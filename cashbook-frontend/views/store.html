@@ -1,68 +1,77 @@
 <!-- ==============================================================================
      MYA GABAR SOE SHOP - STORE & INVENTORY VIEW
      File: cashbook-frontend/views/store.html
+     Standard: Radiant Glowing Glassmorphism KPI Cards & Rich Midnight Palette
      ============================================================================== -->
 
-<div class="space-y-5" style="padding-top: 10px;">
+<div class="space-y-4" style="padding-top: 10px;">
 
-  <!-- ၁။ Top KPI Stats Cards Grid -->
+  <!-- ၁။ Top KPI Stats Cards Grid (စိုပြေတောက်ပသော Neon Glowing Box ၄ ခု) -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <div class="stats-card p-5 rounded-xl flex items-start gap-4">
-      <div class="p-3.5 rounded-lg bg-emerald-500/10 text-emerald-400">
-        <i class="fa-solid fa-shapes text-xl"></i>
+    
+    <!-- Card 1: TOTAL ITEMS -->
+    <div class="stats-card">
+      <div class="icon-glow-emerald">
+        <i class="fa-solid fa-shapes"></i>
       </div>
       <div>
-        <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500">TOTAL ITEMS</p>
-        <h3 id="store-total-items" class="text-base font-extrabold text-white mt-1">0</h3>
+        <p>TOTAL ITEMS</p>
+        <h3 id="store-total-items">0</h3>
       </div>
     </div>
 
-    <div class="stats-card p-5 rounded-xl flex items-start gap-4">
-      <div class="p-3.5 rounded-lg bg-blue-500/10 text-blue-400">
-        <i class="fa-solid fa-boxes-stacked text-xl"></i>
+    <!-- Card 2: TOTAL STOCK QTY -->
+    <div class="stats-card">
+      <div class="icon-glow-blue">
+        <i class="fa-solid fa-boxes-stacked"></i>
       </div>
       <div>
-        <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500">TOTAL STOCK QTY</p>
-        <h3 id="store-total-stock" class="text-base font-extrabold text-white mt-1">0</h3>
+        <p>TOTAL STOCK QTY</p>
+        <h3 id="store-total-stock">0</h3>
       </div>
     </div>
 
-    <div class="stats-card p-5 rounded-xl flex items-start gap-4">
-      <div class="p-3.5 rounded-lg bg-purple-500/10 text-purple-400">
-        <i class="fa-solid fa-scale-balanced text-xl"></i>
+    <!-- Card 3: TOTAL VALUATION -->
+    <div class="stats-card">
+      <div class="icon-glow-purple">
+        <i class="fa-solid fa-scale-balanced"></i>
       </div>
       <div>
-        <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500">TOTAL VALUATION (MMK)</p>
-        <h3 id="store-total-value" class="text-base font-extrabold text-white mt-1">0 MMK</h3>
+        <p>TOTAL VALUATION (MMK)</p>
+        <h3 id="store-total-value">0 MMK</h3>
       </div>
     </div>
 
-    <div class="stats-card p-5 rounded-xl flex items-start gap-4">
-      <div class="p-3.5 rounded-lg bg-rose-500/10 text-rose-400">
-        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+    <!-- Card 4: LOW STOCK ALERTS -->
+    <div class="stats-card">
+      <div class="icon-glow-rose">
+        <i class="fa-solid fa-triangle-exclamation"></i>
       </div>
       <div>
-        <p class="text-[10px] uppercase font-bold tracking-wider text-slate-500">LOW STOCK ALERTS</p>
-        <h3 id="store-low-stock" class="text-base font-extrabold text-white mt-1">0</h3>
+        <p>LOW STOCK ALERTS</p>
+        <h3 id="store-low-stock">0</h3>
       </div>
     </div>
+
   </div>
 
-  <!-- ၂။ Control Search & Action Bar -->
-  <div class="flex flex-col lg:flex-row justify-between items-center bg-[#0c1322] border border-slate-800 p-4 rounded-xl gap-4">
+  <!-- ၂။ Control Search & Action Bar (စိုပြေသော Gradient Toolbar) -->
+  <div class="control-toolbar p-4 rounded-xl flex flex-col lg:flex-row justify-between items-center gap-4">
     <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto">
+      
+      <!-- Search Input -->
       <div class="relative w-full sm:w-64">
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
           <i class="fa-solid fa-magnifying-glass text-xs"></i>
         </span>
         <input type="text" id="store-search" oninput="StoreEngine.onSearchInput()" placeholder="Search description, category, code..." 
-          class="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-[#0f172a] border border-slate-800 text-white focus:outline-none focus:border-indigo-500 transition-all">
+          class="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-[#070d18] border border-slate-700/80 text-white focus:outline-none focus:border-indigo-500 transition-all">
       </div>
       
       <!-- Store Location Dropdown -->
-      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#0f172a] border border-slate-800 p-1 rounded-lg text-xs">
-        <span class="text-[10px] text-slate-400 font-bold px-1.5 uppercase">STORE:</span>
-        <select id="store-shop-select" onchange="StoreEngine.changeShop(this.value)" class="bg-transparent text-white text-xs outline-none cursor-pointer">
+      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
+        <span class="text-[10px] text-slate-400 font-bold uppercase">STORE:</span>
+        <select id="store-shop-select" onchange="StoreEngine.changeShop(this.value)" class="bg-transparent text-white font-bold text-xs outline-none cursor-pointer">
           <option value="main">Main Home Shop (ပင်မ)</option>
           <option value="shop1">ဆိုင်ခွဲ (၁)</option>
           <option value="shop2">ဆိုင်ခွဲ (၂)</option>
@@ -73,9 +82,9 @@
       </div>
 
       <!-- Category Filter -->
-      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#0f172a] border border-slate-800 p-1 rounded-lg text-xs">
-        <span class="text-[10px] text-slate-400 font-bold px-1.5 uppercase">TYPE:</span>
-        <select id="store-category-filter" onchange="StoreEngine.applyFilter()" class="bg-transparent text-white text-xs outline-none cursor-pointer">
+      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
+        <span class="text-[10px] text-slate-400 font-bold uppercase">TYPE:</span>
+        <select id="store-category-filter" onchange="StoreEngine.applyFilter()" class="bg-transparent text-white font-bold text-xs outline-none cursor-pointer">
           <option value="">အားလုံး (All)</option>
           <option value="ပုဆိုး">ပုဆိုး</option>
           <option value="လုံချည်">လုံချည်</option>
@@ -87,37 +96,37 @@
       </div>
     </div>
 
-    <!-- Right: Buttons -->
+    <!-- Right: Action Buttons -->
     <div class="flex items-center gap-2.5 w-full lg:w-auto justify-end">
-      <button onclick="StoreEngine.loadInventory(false, true)" class="p-2 bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all" title="Refresh Data">
+      <button onclick="StoreEngine.loadInventory(false, true)" class="p-2 bg-[#0c1424] hover:bg-slate-800 border border-slate-700/70 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all" title="Refresh Data">
         <i class="fa-solid fa-rotate text-xs"></i> Refresh
       </button>
 
-      <button onclick="StoreEngine.exportCsv()" class="p-2 bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all">
-        <i class="fa-solid fa-file-export text-xs"></i> Export CSV
+      <button onclick="StoreEngine.exportCsv()" class="p-2 bg-[#0c1424] hover:bg-slate-800 border border-slate-700/70 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all">
+        <i class="fa-solid fa-file-export text-xs text-emerald-400"></i> Export CSV
       </button>
 
-      <button onclick="StoreEngine.openItemModal()" class="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg shadow-indigo-600/10 transition-all">
+      <button onclick="StoreEngine.openItemModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg shadow-indigo-600/25 active:scale-95 transition-all">
         <i class="fa-solid fa-plus text-xs"></i> + Add New Item
       </button>
     </div>
   </div>
 
   <!-- ၃။ Data Grid Table -->
-  <div class="table-container bg-[#0c1322] border border-slate-800 shadow-2xl relative overflow-x-auto">
+  <div class="table-container shadow-2xl relative overflow-x-auto">
     <table class="w-full text-left border-collapse min-w-[1200px]">
       <thead>
-        <tr class="bg-[#0e172a]" style="height: 52px;">
-          <th scope="col" class="w-12 text-center text-slate-400 text-xs py-3">NO</th>
-          <th scope="col" class="w-28 text-slate-400 text-xs py-3">CODE</th>
-          <th scope="col" class="min-w-[240px] text-slate-400 text-xs py-3">ITEM NAME</th>
-          <th scope="col" class="w-36 text-slate-400 text-xs py-3">CATEGORY</th>
-          <th scope="col" class="w-20 text-center text-slate-400 text-xs py-3">UNIT</th>
-          <th scope="col" class="w-28 text-right text-emerald-400 text-xs py-3">CURRENT STOCK</th>
-          <th scope="col" class="w-32 text-right text-rose-400 text-xs py-3">COST PRICE</th>
-          <th scope="col" class="w-32 text-right text-emerald-400 text-xs py-3">RETAIL PRICE</th>
-          <th scope="col" class="w-32 text-right text-amber-400 text-xs py-3">WHOLESALE PRICE</th>
-          <th scope="col" class="w-24 text-center text-slate-400 text-xs py-3 right-0 sticky bg-[#0c1322] border-l border-slate-800 shadow-lg">ACTION</th>
+        <tr style="height: 52px;">
+          <th scope="col" class="w-12 text-center py-3.5">NO</th>
+          <th scope="col" class="w-28 py-3.5">CODE</th>
+          <th scope="col" class="min-w-[240px] py-3.5">ITEM NAME</th>
+          <th scope="col" class="w-36 py-3.5">CATEGORY</th>
+          <th scope="col" class="w-20 text-center py-3.5">UNIT</th>
+          <th scope="col" class="w-28 text-right text-emerald-400 py-3.5">CURRENT STOCK</th>
+          <th scope="col" class="w-32 text-right text-rose-400 py-3.5">COST PRICE</th>
+          <th scope="col" class="w-32 text-right text-emerald-400 py-3.5">RETAIL PRICE</th>
+          <th scope="col" class="w-32 text-right text-amber-400 py-3.5">WHOLESALE PRICE</th>
+          <th scope="col" class="w-24 text-center py-3.5 right-0 sticky">ACTION</th>
         </tr>
       </thead>
       <tbody id="store-table-body" class="divide-y divide-slate-800/40 text-slate-300"></tbody>
@@ -125,13 +134,13 @@
   </div>
 
   <!-- ၄။ Pagination Controller Tray -->
-  <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0c1322] border border-slate-800 px-6 py-3.5 rounded-xl">
+  <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0a1120] border border-slate-800/80 px-6 py-3.5 rounded-xl shadow-lg">
     <div id="store-pagination-info" class="text-xs font-semibold text-slate-400 tracking-wide">Showing entries...</div>
     <div class="flex items-center gap-2">
-      <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
+      <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
         <i class="fa-solid fa-chevron-left text-[10px]"></i> Previous
       </button>
-      <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
+      <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
         Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
       </button>
     </div>
@@ -139,31 +148,27 @@
 
 </div>
 
-<!-- ============================================================================ -->
-<!-- 💡 ၅။ အချိုးညီ ညီညာပြီး ကာဆာချပြင်နိုင်သော ADD NEW ITEM & STOCK MODAL            -->
-<!-- ============================================================================ -->
-<div id="store-item-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-  <div class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+<!-- ၅။ DARK THEME FORM MODAL POPUP -->
+<div id="store-item-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+  <div class="rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
     
-    <!-- Modal Header -->
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
       <h3 id="store-form-title" class="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
         <i class="fa-solid fa-boxes-packing text-indigo-400"></i> <span>Add New Item & Stock</span>
       </h3>
-      <button type="button" onclick="StoreEngine.closeItemModal()" class="text-slate-500 hover:text-white transition">
-        <i class="fa-solid fa-xmark text-sm"></i>
+      <button type="button" onclick="StoreEngine.closeItemModal()" class="text-slate-400 hover:text-white transition">
+        <i class="fa-solid fa-xmark text-base"></i>
       </button>
     </div>
 
     <form id="store-item-form" onsubmit="StoreEngine.saveItemSubmit(event)" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
       
-      <!-- 💡 ROW 1: Store Location & Item Code (Auto Suggestion, Fully Editable) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Store Location *</label>
           </div>
-          <select id="modal-item-shop" onchange="StoreEngine.onModalShopChange()" class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
+          <select id="modal-item-shop" onchange="StoreEngine.onModalShopChange()" class="w-full font-bold">
             <option value="main">Main Home Shop (ပင်မ)</option>
             <option value="shop1">ဆိုင်ခွဲ (၁)</option>
             <option value="shop2">ဆိုင်ခွဲ (၂)</option>
@@ -177,87 +182,81 @@
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Item Code *</label>
             <span class="text-[9px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Auto</span>
           </div>
-          <input type="text" id="modal-item-code" required placeholder="PAS-006" title="ကာဆာချပြီး စိတ်ကြိုက် ပြင်ဆင်နိုင်ပါသည်" class="w-full bg-[#0f172a] border border-slate-800 text-amber-400 font-mono font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500 uppercase">
+          <input type="text" id="modal-item-code" required placeholder="PAS-006" class="w-full text-amber-400 font-mono font-bold uppercase">
         </div>
       </div>
 
-      <!-- 💡 ROW 2: Category & Sub-Category -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Category (ပင်မ) *</label>
           </div>
-          <input list="category-options" id="modal-item-category" value="ပုဆိုး" oninput="StoreEngine.onCategoryOrSubChange()" required class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
+          <input list="category-options" id="modal-item-category" value="ပုဆိုး" oninput="StoreEngine.onCategoryOrSubChange()" required class="w-full font-bold">
           <datalist id="category-options"></datalist>
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Sub-Category (စိပ်)</label>
           </div>
-          <input type="text" id="modal-item-subcategory" placeholder="e.g. မိုးကင်း တက်" oninput="StoreEngine.onCategoryOrSubChange()" class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
+          <input type="text" id="modal-item-subcategory" placeholder="e.g. မိုးကင်း တက်" oninput="StoreEngine.onCategoryOrSubChange()" class="w-full font-bold">
         </div>
       </div>
 
-      <!-- 💡 ROW 3: Item Name & Unit (အမြင့်တူညီသော ခေါင်းစဉ်များဖြင့် ၁၀၀% တန်းညီစေခြင်း) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Item Name *</label>
             <span class="text-[9px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Auto + Edit</span>
           </div>
-          <input type="text" id="modal-item-name" required placeholder="e.g. မိုးကင်း တက် ပုဆိုး" title="ကာဆာချပြီး စိတ်ကြိုက် ထပ်မံဖြည့်စွက် ပြင်ဆင်နိုင်ပါသည်" class="w-full bg-[#0f172a] border border-slate-800 text-white font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500">
+          <input type="text" id="modal-item-name" required placeholder="e.g. မိုးကင်း တက် ပုဆိုး" class="w-full text-white font-bold">
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Unit (ယူနစ်) *</label>
           </div>
-          <input list="unit-options" id="modal-item-unit" value="ထည်" placeholder="ရွေး/ရိုက်ပါ" required class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
+          <input list="unit-options" id="modal-item-unit" value="ထည်" placeholder="ရွေး/ရိုက်ပါ" required class="w-full font-bold">
           <datalist id="unit-options"></datalist>
         </div>
       </div>
 
-      <!-- 💡 ROW 4: Retail & Wholesale Price (မဖြစ်မနေ ထည့်ရမည့် ဈေးနှုန်းများ) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-emerald-400 uppercase tracking-wide text-[11px]">Retail Price (လက်လီ) *</label>
           </div>
-          <input type="number" step="0.01" min="1" id="modal-item-retail" required placeholder="0.00" class="w-full text-right text-emerald-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-emerald-500 font-mono">
+          <input type="number" step="0.01" min="1" id="modal-item-retail" required placeholder="0.00" class="w-full text-right text-emerald-400 font-bold font-mono">
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-amber-400 uppercase tracking-wide text-[11px]">Wholesale Price (လက်ကား) *</label>
           </div>
-          <input type="number" step="0.01" min="1" id="modal-item-wholesale" required placeholder="0.00" class="w-full text-right text-amber-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-amber-500 font-mono">
+          <input type="number" step="0.01" min="1" id="modal-item-wholesale" required placeholder="0.00" class="w-full text-right text-amber-400 font-bold font-mono">
         </div>
       </div>
 
-      <!-- 💡 ROW 5: Initial Stock & Cost Price -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-slate-300 uppercase tracking-wide text-[11px]">Initial Stock</label>
             <span class="text-[9px] text-slate-500 font-mono">qty</span>
           </div>
-          <input type="number" id="modal-item-stock" value="0" min="0" class="w-full text-right text-slate-100 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-mono">
+          <input type="number" id="modal-item-stock" value="0" min="0" class="w-full text-right text-slate-100 font-bold font-mono">
         </div>
         <div class="flex flex-col gap-1">
           <div class="flex items-center justify-between h-5">
             <label class="font-bold text-rose-400 uppercase tracking-wide text-[11px]">Cost Price (ဝယ်ဈေး) *</label>
           </div>
-          <input type="number" step="0.01" min="1" id="modal-item-cost" required placeholder="0.00" class="w-full text-right text-rose-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-rose-500 font-mono">
+          <input type="number" step="0.01" min="1" id="modal-item-cost" required placeholder="0.00" class="w-full text-right text-rose-400 font-bold font-mono">
         </div>
       </div>
 
-      <!-- ROW 6: Remark -->
       <div class="flex flex-col gap-1">
         <div class="flex items-center justify-between h-5">
           <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Remark / Color (မှတ်ချက် / ကာလာ)</label>
         </div>
-        <input type="text" id="modal-item-remark" placeholder="ကာလာ သို့မဟုတ် အထွေထွေ မှတ်ချက်..." class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500">
+        <input type="text" id="modal-item-remark" placeholder="ကာလာ သို့မဟုတ် အထွေထွေ မှတ်ချက်..." class="w-full">
       </div>
 
-      <!-- Footer Buttons -->
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
         <button type="button" onclick="StoreEngine.closeItemModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>
         <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/10 transition-all">Confirm & Save</button>
@@ -267,8 +266,8 @@
 </div>
 
 <!-- ၆။ ADJUST STOCK MODAL -->
-<div id="store-stock-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-  <div class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+<div id="store-stock-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+  <div class="rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
       <h3 class="text-sm font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
         <i class="fa-solid fa-boxes-packing"></i> <span>စတိုလက်ကျန် ညှိယူခြင်း</span>
@@ -284,15 +283,15 @@
       </div>
       <div class="flex flex-col gap-1">
         <label class="font-bold text-slate-300 uppercase tracking-wide">လက်ကျန် အရေအတွက် (Current Stock)</label>
-        <input type="number" id="stock-modal-qty" required min="0" class="w-full text-right text-emerald-400 font-black text-base bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none font-mono">
+        <input type="number" id="stock-modal-qty" required min="0" class="w-full text-right text-emerald-400 font-black text-base font-mono">
       </div>
       <div class="flex flex-col gap-1">
         <label class="font-bold text-rose-400 uppercase tracking-wide">မူရင်းဝယ်ဈေး (Cost Price MMK)</label>
-        <input type="number" step="0.01" id="stock-modal-cost" required min="0" class="w-full text-right text-rose-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none font-mono">
+        <input type="number" step="0.01" id="stock-modal-cost" required min="0" class="w-full text-right text-rose-400 font-bold font-mono">
       </div>
       <div class="flex flex-col gap-1">
         <label class="font-bold text-slate-400 uppercase tracking-wide">မှတ်ချက်</label>
-        <input type="text" id="stock-modal-remark" placeholder="ညှိယူရသည့် အကြောင်းအရင်း..." class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none">
+        <input type="text" id="stock-modal-remark" placeholder="ညှိယူရသည့် အကြောင်းအရင်း..." class="w-full">
       </div>
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
         <button type="button" onclick="StoreEngine.closeStockModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>

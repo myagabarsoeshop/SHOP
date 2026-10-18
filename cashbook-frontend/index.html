@@ -113,7 +113,6 @@
           မြကမ္ဘာစိုး ပိုးထည်တိုက်
         </h2>
 
-        <!-- 💡 သန့်ရှင်းခေတ်မီသော CASH BOOK SYSTEM စာတန်း -->
         <p
           class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/80 pb-3 border-b border-amber-500/10">
           CASH BOOK SYSTEM
@@ -171,7 +170,7 @@
     <!-- Sidebar Navigation -->
     <aside class="w-64 bg-[#0c1322] border-r border-slate-800 flex flex-col h-full shadow-2xl shrink-0">
       
-      <!-- 💎 PRO SIDEBAR HEADER: စာတန်း မကျိုးတော့ဘဲ သပ်ရပ်ခန့်ညားသော ပုံစံ -->
+      <!-- 💎 PRO SIDEBAR HEADER -->
       <div class="h-[68px] px-3.5 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <!-- Mini Brand Seal -->
@@ -250,9 +249,25 @@
       <header
         class="bg-[#0c1322] border-b border-slate-800 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
         <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
-        <div id="live-metadata"
-          class="text-xs font-bold text-emerald-400 bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-lg">
-          FY 2026-2027 | Sat | --:-- | User: Admin
+
+        <!-- 💡 Dynamic Wifi Status & Live Metadata -->
+        <div class="flex items-center text-xs font-bold bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-xl gap-2.5 shadow-sm">
+          <!-- Real-Time Wifi / Network Indicator -->
+          <div id="network-status" class="flex items-center gap-1.5 text-emerald-400 transition-colors duration-300">
+            <span class="relative flex h-2 w-2">
+              <span id="network-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="network-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <i id="network-icon" class="fa-solid fa-wifi text-[11px]"></i>
+            <span id="network-text" class="text-[10px] font-black tracking-wider uppercase select-none">Online</span>
+          </div>
+
+          <span class="text-slate-600 font-normal select-none">|</span>
+
+          <!-- FY / Date / Time / User -->
+          <div id="live-metadata" class="text-emerald-400 font-bold tracking-wide">
+            FY 2026-2027 | Sun | 04:46 PM | User: Admin
+          </div>
         </div>
       </header>
 
@@ -291,6 +306,40 @@
   <script src="js/api.js?v=20261008" defer></script>
   <script src="js/auth.js?v=20261008" defer></script>
   <script src="js/app.js?v=20261008" defer></script>
+
+  <!-- 💡 Live Network Status Tracker (Online / Offline Detector) -->
+  <script>
+    function updateNetworkStatus() {
+      const netStatus = document.getElementById('network-status');
+      const netIcon = document.getElementById('network-icon');
+      const netText = document.getElementById('network-text');
+      const netPing = document.getElementById('network-ping');
+      const netDot = document.getElementById('network-dot');
+
+      if (!netStatus) return;
+
+      if (navigator.onLine) {
+        // Online Mode (စိမ်းလန်းသော Wifi အိုင်ကွန်)
+        netStatus.className = 'flex items-center gap-1.5 text-emerald-400 transition-colors duration-300';
+        if (netIcon) netIcon.className = 'fa-solid fa-wifi text-[11px]';
+        if (netText) netText.innerText = 'Online';
+        if (netPing) netPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+        if (netDot) netDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
+      } else {
+        // Offline Mode (နီရဲသော သတိပေး အိုင်ကွန်)
+        netStatus.className = 'flex items-center gap-1.5 text-rose-400 transition-colors duration-300';
+        if (netIcon) netIcon.className = 'fa-solid fa-triangle-exclamation text-[11px] animate-pulse';
+        if (netText) netText.innerText = 'Offline';
+        if (netPing) netPing.className = 'hidden';
+        if (netDot) netDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-rose-500';
+      }
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    window.addEventListener('DOMContentLoaded', updateNetworkStatus);
+    updateNetworkStatus();
+  </script>
 
   <!-- 💡 Service Worker Registration with Auto-Update Check -->
   <script>

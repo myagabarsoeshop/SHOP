@@ -1,31 +1,41 @@
 /* ==============================================================================
- * GOLDEN ERP SYSTEM - EYE-COMFORT DARK STYLES, MODAL SCROLL & PRINT ENGINE
+ * GOLDEN ERP SYSTEM - RADIANT MIDNIGHT SAPPHIRE DARK THEME & PRINT ENGINE
  * File: css/style.css
- * 💡 Features: Glassmorphism KPI Cards, Sticky Action Columns, Enterprise Form Fields,
- *              Global Modal Scroll & Sticky Buttons Fix for Laptops & A4 Print Engine
+ * 💡 Features: Luminous Glassmorphism KPI Cards, Neon Icon Glows, Sticky Action Columns,
+ *              Enterprise Form Fields, Global Modal Scroll & Dual A4 Print Engine
  * ============================================================================== */
 
-/* 💡 Force Browser Elements Dark Scheme & Comfort Theme */
+/* 💡 Force Browser Elements Dark Scheme */
 :root { 
   color-scheme: dark; 
 }
 
+/* 💡 စိုပြေနက်ရှိုင်းသော Deep Midnight Sapphire Radiant Background */
+html,
+body, 
+#main-content,
+div#erp-workspace {
+  background-color: #070b14 !important;
+  background-image: radial-gradient(circle at 50% -10%, #111e38 0%, #070b14 70%) !important;
+  color: #cbd5e1 !important;
+}
+
 /* 💡 Guaranteed Gold Gradient Text with Browser Fallback */
 .text-gold-gradient {
-  color: #fbbf24 !important; /* Fallback: Browser က Gradient မပံ့ပိုးပါက ဒီအရောင် ပေါ်မည် */
+  color: #fbbf24 !important;
   background: linear-gradient(135deg, #fef08a 0%, #facc15 50%, #d97706 100%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   background-clip: text !important;
 }
 
-/* 💡 Custom Eye-Friendly Scrollbar */
+/* 💡 Custom Eye-Friendly Smooth Scrollbar */
 ::-webkit-scrollbar { 
   width: 6px; 
   height: 6px; 
 }
 ::-webkit-scrollbar-track { 
-  background: #090d16; 
+  background: #070b14; 
 }
 ::-webkit-scrollbar-thumb { 
   background: #1e293b; 
@@ -64,39 +74,41 @@
   margin-bottom: 0.5rem !important;
 }
 
-/* 💡 Cards & Containers - High-Visibility Glassmorphism KPI Stats Cards */
+/* ==============================================================================
+   💡 1. RADIANT GLASSMORPHISM STATS CARDS (စိုပြေတောက်ပသော Box ၄ ခု)
+   ============================================================================== */
 .stats-card { 
-  background: linear-gradient(135deg, #121d33 0%, #0c1424 100%) !important; 
-  border: 1.5px solid rgba(71, 85, 105, 0.45) !important;
-  border-radius: 0.85rem !important;
-  box-shadow: 0 6px 20px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08) !important;
+  background: linear-gradient(135deg, #13203b 0%, #0c1527 100%) !important; 
+  border: 1.5px solid rgba(71, 85, 105, 0.5) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.65), 0 0 12px rgba(99, 102, 241, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.14) !important;
   min-height: 82px !important;
-  padding: 0.85rem 1.1rem !important;
+  padding: 0.95rem 1.2rem !important;
   display: flex !important;
   align-items: center !important;
-  gap: 0.85rem !important;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+  gap: 1rem !important;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
 }
 
 .stats-card:hover {
   transform: translateY(-2px) !important;
-  border-color: rgba(99, 102, 241, 0.5) !important;
-  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.6), 0 0 15px rgba(99, 102, 241, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(99, 102, 241, 0.65) !important;
+  box-shadow: 0 14px 30px -4px rgba(0, 0, 0, 0.75), 0 0 20px rgba(99, 102, 241, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Icon box — fixed size, glowing container */
+/* 💡 Glowing Icon Box Containers (အလင်းရောင်စိုစိုလေးများ) */
 .stats-card > div:first-child {
   flex-shrink: 0 !important;
-  width: 2.85rem !important;
-  height: 2.85rem !important;
+  width: 3rem !important;
+  height: 3rem !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  border-radius: 0.65rem !important;
-  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 .stats-card > div:first-child i {
-  font-size: 1.15rem !important;
+  font-size: 1.25rem !important;
 }
 
 /* Text area */
@@ -108,22 +120,23 @@
 
 /* Label */
 .stats-card > div:last-child p {
-  font-size: 0.6rem !important;
+  font-size: 0.6875rem !important; /* 11px */
   font-weight: 700 !important;
-  letter-spacing: 0.07em !important;
+  letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
   color: #94a3b8 !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  margin-bottom: 0.2rem !important;
+  margin-bottom: 0.25rem !important;
   line-height: 1.2 !important;
 }
 
-/* Amount / Value */
+/* Amount / Value (စိုပြေကြည်လင်သော ဂဏန်းကြီးများ) */
 .stats-card > div:last-child h3 {
-  font-size: clamp(0.85rem, 1.6vw, 1.1rem) !important;
-  font-weight: 800 !important;
+  font-size: clamp(1rem, 1.8vw, 1.5rem) !important;
+  font-weight: 900 !important;
+  color: #ffffff !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -131,19 +144,32 @@
   margin-top: 0 !important;
   font-variant-numeric: lining-nums tabular-nums !important;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: -0.02em !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ==============================================================================
+   💡 2. RADIANT TOOLBAR & TABLE CONTAINER
+   ============================================================================== */
+.control-toolbar,
+div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
+  background: linear-gradient(180deg, #0e172c 0%, #0a1120 100%) !important;
+  border: 1.5px solid rgba(71, 85, 105, 0.5) !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 .table-container { 
-  border-radius: 0.75rem; 
-  border: 1px solid rgba(30, 41, 59, 0.35) !important; 
+  background-color: #0b1324 !important;
+  border-radius: 0.875rem !important; 
+  border: 1.5px solid rgba(71, 85, 105, 0.45) !important; 
+  box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
 }
 
-/* Soften Harsh Borders */
+/* Soften Harsh Borders Globally */
 div.border-slate-800, 
 div.border-slate-700,
 div.border-slate-850 {
-  border-color: rgba(51, 65, 85, 0.45) !important;
+  border-color: rgba(71, 85, 105, 0.45) !important;
 }
 
 /* Header Height & Alignment */
@@ -152,7 +178,8 @@ header,
 #app-header,
 div#erp-workspace header {
   height: 64px !important;
-  border-bottom: 1px solid rgba(30, 41, 59, 0.35) !important;
+  background-color: #0c1426 !important;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.35) !important;
 }
 
 /* Table Styling */
@@ -160,23 +187,25 @@ table thead th {
   position: sticky; 
   top: 0; 
   z-index: 20;
-  background-color: #0c1322 !important;
-  padding: 12px 16px; 
+  background-color: #0d162a !important;
+  padding: 14px 16px !important; 
   font-size: 0.725rem !important;
   text-transform: uppercase; 
-  letter-spacing: 0.05em; 
+  letter-spacing: 0.06em; 
   color: #94a3b8 !important;
-  border-bottom: 1px solid rgba(30, 41, 59, 0.4) !important;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.45) !important;
 }
+
 table tbody td {
-  padding: 10px 16px; 
-  border-bottom: 1px solid rgba(30, 41, 59, 0.25) !important;
-  font-size: 0.8rem !important; 
+  padding: 12px 16px !important; 
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3) !important;
+  font-size: 0.8125rem !important; 
   white-space: nowrap !important;
   color: #cbd5e1 !important;
 }
+
 table tbody tr:hover { 
-  background-color: rgba(30, 41, 59, 0.2) !important; 
+  background-color: rgba(30, 41, 59, 0.35) !important; 
 }
 
 /* 💡 Fix Sticky Action Column Background */
@@ -186,10 +215,10 @@ th.right-0,
 td.right-0 {
   position: sticky !important;
   right: 0 !important;
-  background-color: #0c1322 !important;
+  background-color: #0b1324 !important;
   opacity: 1 !important;
   z-index: 25 !important;
-  border-left: 1px solid rgba(30, 41, 59, 0.5) !important;
+  border-left: 1px solid rgba(71, 85, 105, 0.45) !important;
 }
 
 /* Soften Text Globally */
@@ -197,29 +226,35 @@ td.right-0 {
   color: #f1f5f9 !important;
 }
 
-/* 💡 Debit, Credit & Balance Colors */
+/* 💡 Debit, Credit & Balance Glowing Colors */
 .text-emerald-400,
 td.text-emerald-400,
 span.text-emerald-400 {
-  color: #34d399 !important; /* Emerald Green for Debit / Income */
+  color: #34d399 !important; /* Emerald Green */
 }
 
 .text-rose-400,
 td.text-rose-400,
 span.text-rose-400 {
-  color: #f87171 !important; /* Rose Red for Credit / Expense / Liabilities */
+  color: #fb7185 !important; /* Vibrant Rose Red */
 }
 
 .text-indigo-400,
 td.text-indigo-400,
 span.text-indigo-400 {
-  color: #818cf8 !important; /* Indigo Blue for Balances */
+  color: #818cf8 !important; /* Indigo Blue */
+}
+
+.text-amber-400,
+td.text-amber-400,
+span.text-amber-400 {
+  color: #fbbf24 !important; /* Amber Gold */
 }
 
 .text-teal-400,
 td.text-teal-400,
 span.text-teal-400 {
-  color: #2dd4bf !important; /* Teal for Fund */
+  color: #2dd4bf !important;
 }
 
 /* 💡 Action Delete Button Highlight */
@@ -227,56 +262,45 @@ button[onclick*="delete"] i,
 button[onclick*="Delete"] i,
 .btn-delete i,
 .action-delete i {
-  color: #f87171 !important;
+  color: #fb7185 !important;
   transition: transform 0.15s ease-in-out;
 }
 button[onclick*="delete"]:hover i,
 button[onclick*="Delete"]:hover i,
 .btn-delete:hover i {
-  color: #ef4444 !important;
+  color: #f43f5e !important;
   transform: scale(1.15);
 }
 
-/* 💡 Modal Background Base */
-#bck-modal > div,
-#office-modal > div,
-#income-modal > div,
-#student-modal > div,
-#staff-modal > div,
-#promo-modal > div,
-#uniform-modal > div,
-#cashier-modal > div,
-#grade-modal > div,
+/* ==============================================================================
+   💡 3. ENTERPRISE OPAQUE FORM MODAL SYSTEM (ဖောက်ထွင်းမမြင်နိုင်သော Modal စနစ်)
+   ============================================================================== */
 div[id$="-modal"] > div {
-  background-color: #0c1322 !important;
+  background-color: #0c1528 !important;
   opacity: 1 !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85) !important;
-  border: 1px solid rgba(30, 41, 59, 0.5) !important;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.95), 0 0 25px rgba(99, 102, 241, 0.15) !important;
+  border: 1.5px solid rgba(99, 102, 241, 0.35) !important;
 }
 
 .backdrop-blur-sm,
 div[id$="-modal"].fixed.inset-0 {
-  background-color: rgba(9, 13, 22, 0.85) !important;
+  background-color: rgba(7, 11, 20, 0.88) !important;
 }
-
-/* =============================================================
-   💡 ENTERPRISE FORM FIELD SYSTEM — Professional Modal Inputs
-   ============================================================= */
 
 div[id$="-modal"] input,
 div[id$="-modal"] select,
 div[id$="-modal"] textarea {
   display: block !important;
   width: 100% !important;
-  background-color: #080e1c !important;
-  border: 1.5px solid rgba(71, 85, 105, 0.55) !important;
+  background-color: #070d18 !important;
+  border: 1.5px solid rgba(71, 85, 105, 0.6) !important;
   border-radius: 8px !important;
-  color: #e2e8f0 !important;
+  color: #f1f5f9 !important;
   font-size: 0.8125rem !important;
   padding: 0.6rem 0.875rem !important;
   min-height: 2.5rem !important;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.15s ease !important;
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.35) !important;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4) !important;
   letter-spacing: 0.01em !important;
 }
 
@@ -302,7 +326,7 @@ div[id$="-modal"] input[type="number"] {
   font-size: 0.875rem !important;
   letter-spacing: 0.04em !important;
   color: #a5f3fc !important;
-  border-color: rgba(56, 189, 248, 0.25) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
 }
 
 div[id$="-modal"] input[type="date"] {
@@ -315,19 +339,19 @@ div[id$="-modal"] input:focus,
 div[id$="-modal"] select:focus,
 div[id$="-modal"] textarea:focus {
   border-color: #6366f1 !important;
-  background-color: #0a1128 !important;
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.18), inset 0 2px 6px rgba(0,0,0,0.4) !important;
+  background-color: #0a1224 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25), inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
   outline: none !important;
 }
 
 div[id$="-modal"] input[type="number"]:focus {
   border-color: #38bdf8 !important;
-  box-shadow: 0 0 0 3px rgba(56,189,248,0.15), inset 0 2px 6px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2), inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
 }
 
 div[id$="-modal"] input::placeholder,
 div[id$="-modal"] textarea::placeholder {
-  color: #3d4f6b !important;
+  color: #475569 !important;
   font-style: italic !important;
   opacity: 1 !important;
 }
@@ -338,7 +362,7 @@ div[id$="-modal"] label {
   font-weight: 700 !important;
   letter-spacing: 0.07em !important;
   text-transform: uppercase !important;
-  color: #64748b !important;
+  color: #94a3b8 !important;
   margin-bottom: 0.35rem !important;
 }
 
@@ -351,14 +375,14 @@ div[id$="-modal"] .space-y-3 > div {
 div[id$="-modal"] input:not(:focus):hover,
 div[id$="-modal"] select:not(:focus):hover,
 div[id$="-modal"] textarea:not(:focus):hover {
-  border-color: rgba(99, 102, 241, 0.4) !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
   background-color: #090f1e !important;
 }
 
-/* Global inputs */
+/* Global inputs outside modal */
 input, select, textarea {
-  background-color: #0b1120 !important;
-  border: 1.5px solid rgba(51, 65, 85, 0.6) !important;
+  background-color: #070d18 !important;
+  border: 1.5px solid rgba(71, 85, 105, 0.6) !important;
   color: #e2e8f0 !important;
   font-size: 0.75rem !important;
   font-variant-numeric: lining-nums tabular-nums !important;
@@ -367,7 +391,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   border-color: #6366f1 !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.18) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
 }
 
 /* Digits styling */
@@ -405,72 +429,9 @@ body.hide-delete-btn a[onclick*="delete"] {
   visibility: hidden !important;
 }
 
-/* Print styling */
-#invoice-print-area, #payslip-print-area {
-  display: none !important;
-}
-
-@media print {
-  body > *:not(.active-print) {
-    display: none !important;
-  }
-
-  #invoice-print-area.active-print,
-  #payslip-print-area.active-print {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100vh !important;
-    background-color: white !important;
-    color: black !important;
-    padding: 10px !important;
-    z-index: 999999 !important;
-    visibility: visible !important;
-    font-family: sans-serif !important;
-  }
-
-  .invoice-section, .payslip-section {
-    height: 46vh !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    border: 1px solid black !important;
-    padding: 12px !important;
-    border-radius: 6px !important;
-  }
-
-  .invoice-divider, .payslip-divider {
-    height: 4vh !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 10px !important;
-    color: #475569 !important;
-  }
-
-  table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-  }
-
-  table th, table td {
-    padding: 4px 6px !important;
-    font-size: 10px !important;
-    border: 1px solid black !important;
-    color: black !important;
-    background-color: transparent !important;
-  }
-}
-
 /* ==============================================================================
- * 💡 GLOBAL MODAL SCROLL & STICKY BUTTONS FIX FOR SHORT LAPTOPS / SMALL SCREENS
- * ============================================================================== */
-
-/* ၁။ Modal အားလုံး၏ အပြင်ဘောင်ကို Screen အမြင့် ၉၀% ထက် မကျော်စေရန် ကန့်သတ်ခြင်း */
+   💡 GLOBAL MODAL SCROLL & STICKY BUTTONS FIX FOR LAPTOPS / SMALL SCREENS
+   ============================================================================== */
 .fixed.inset-0.z-50 > div,
 div[id$="-modal"] > div {
   max-height: 90vh !important;
@@ -479,7 +440,6 @@ div[id$="-modal"] > div {
   overflow: hidden !important;
 }
 
-/* ၂။ Form အလယ်ပိုင်းကို Scroll အပေါ်အောက် အလွယ်တကူ ဆွဲနိုင်စေခြင်း */
 .fixed.inset-0.z-50 form,
 div[id$="-modal"] form {
   overflow-y: auto !important;
@@ -488,25 +448,23 @@ div[id$="-modal"] form {
   padding-bottom: 1.5rem !important;
 }
 
-/* ၃။ Cancel နှင့် Confirm ခလုတ်များကို အောက်ခြေတွင် အမြဲတမ်း ပေါ်နေစေခြင်း (Sticky Buttons) */
 .fixed.inset-0.z-50 form > div:last-child,
 div[id$="-modal"] form > div:last-child {
   position: sticky !important;
   bottom: 0 !important;
-  background-color: #0c1322 !important;
+  background-color: #0c1528 !important;
   padding-top: 1rem !important;
   padding-bottom: 0.5rem !important;
   margin-top: 1rem !important;
-  border-top: 1px solid rgba(51, 65, 85, 0.6) !important;
+  border-top: 1px solid rgba(71, 85, 105, 0.45) !important;
   z-index: 20 !important;
 }
 
-/* ၄။ Modal အတွင်း လှပသော Custom Scrollbar ပုံစံ */
 div[id$="-modal"] form::-webkit-scrollbar {
   width: 6px;
 }
 div[id$="-modal"] form::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #0a1120;
 }
 div[id$="-modal"] form::-webkit-scrollbar-thumb {
   background: #334155;
@@ -517,22 +475,18 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
 }
 
 /* ==============================================================================
- * 💡 DUAL-MODE ISOLATED PRINT ENGINE (INVOICE vs PAYSLIP SEPARATION)
- * ============================================================================== */
-
-/* Screen ပေါ်တွင် ပုံမှန်အချိန်၌ ပြေစာအားလုံးကို ဝှက်ထားမည် */
+   💡 DUAL-MODE ISOLATED PRINT ENGINE (INVOICE vs PAYSLIP SEPARATION)
+   ============================================================================== */
 #invoice-print-area, 
 #payslip-print-area {
   display: none !important;
 }
 
 @media print {
-  /* ၁။ Web App မျက်နှာပြင် (Sidebar, Header, Table) အားလုံးကို အပြီးတိုင် ဖုံးကွယ်မည် */
   body * {
     visibility: hidden !important;
   }
 
-  /* ၂။ Invoice နှိပ်ချိန်တွင် #invoice-print-area သာ သီးသန့် ပေါ်စေမည် */
   body.print-mode-invoice #invoice-print-area,
   body.print-mode-invoice #invoice-print-area * {
     visibility: visible !important;
@@ -554,7 +508,6 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
     z-index: 9999999 !important;
   }
 
-  /* ၃။ Payslip နှိပ်ချိန်တွင် #payslip-print-area သာ သီးသန့် ပေါ်စေမည် */
   body.print-mode-payslip #payslip-print-area,
   body.print-mode-payslip #payslip-print-area * {
     visibility: visible !important;
@@ -576,7 +529,6 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
     z-index: 9999999 !important;
   }
 
-  /* အထက်အောက် Dual-Copy ဘောက်ချာ အပိုင်းများ */
   .invoice-section, 
   .payslip-section {
     height: 46vh !important;

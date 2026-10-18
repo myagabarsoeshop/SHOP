@@ -464,3 +464,33 @@ window.StoreEngine = {
       if (window.viewCache["store"]) {
         container.innerHTML = window.viewCache["store"];
       }
+    }
+
+    var shopSelect = document.getElementById("store-shop-select");
+    if (shopSelect) shopSelect.value = currentStoreShop;
+
+    await loadStoreInventoryData(false, false);
+  },
+  loadInventory: loadStoreInventoryData,
+  changeShop: function(shopId) {
+    currentStoreShop = shopId;
+    storePage = 1;
+    loadStoreInventoryData(false, false);
+  },
+  applyFilter: function() {
+    storePage = 1;
+    renderTableStore();
+  },
+  onSearchInput: onSearchInputStore,
+  changePage: changePageStore,
+  prevPage: function() { changePageStore(-1); },
+  nextPage: function() { changePageStore(1); },
+  openItemModal: openItemModalStore,
+  openEditModal: openEditModalStore,
+  closeItemModal: closeItemModalStore,
+  saveItemSubmit: saveItemSubmitStore,
+  openStockModal: openStockModalStore,
+  closeStockModal: closeStockModalStore,
+  saveStockSubmit: saveStockSubmitStore,
+  exportCsv: exportCsvStore
+};

@@ -297,7 +297,7 @@ function changePageStore(dir) {
 
 function openItemModalStore() {
   var titleEl = document.getElementById('store-form-title');
-  if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-boxes-packing text-indigo-400"></i> <span>Add New Item & Stock</span>';
+  if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-boxes-packing text-indigo-400"></i> <span>Add New Entry & Stock</span>';
 
   var shopSelect = document.getElementById('modal-item-shop');
   if (shopSelect) shopSelect.value = currentStoreShop;

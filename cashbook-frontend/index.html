@@ -173,7 +173,6 @@
       <!-- 💎 PRO SIDEBAR HEADER -->
       <div class="h-[68px] px-3.5 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
-          <!-- Mini Brand Seal -->
           <svg class="w-8 h-8 shrink-0 filter drop-shadow-[0_0_8px_rgba(16,185,129,0.45)] select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="miniGold" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -187,7 +186,6 @@
             <text x="50" y="65" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="46" font-weight="900" fill="#fef08a">မြ</text>
           </svg>
           
-          <!-- Two-tier Clean Brand Text -->
           <div class="flex flex-col min-w-0 leading-tight">
             <span class="text-slate-100 font-extrabold text-[13px] tracking-tight truncate">မြကမ္ဘာစိုး</span>
             <span class="text-[9.5px] font-bold text-amber-400/90 tracking-wider uppercase truncate">ပိုးထည်တိုက် • Cash Book</span>
@@ -263,9 +261,9 @@
 
           <span class="text-slate-600 font-normal select-none">|</span>
 
-          <!-- FY / Date / Time / User -->
-          <div id="live-metadata" class="text-emerald-400 font-bold tracking-wide">
-            FY 2026-2027 | Sun | 04:46 PM | User: Admin
+          <!-- 💡 စာအသေမထည့်ဘဲ fy.js မှ Real-Time အလိုအလျောက် တွက်တင်ပေးမည့် နေရာ -->
+          <div id="live-metadata" class="text-emerald-400 font-bold tracking-wide flex items-center">
+            <span class="inline-block w-36 h-3 bg-emerald-500/20 rounded animate-pulse"></span>
           </div>
         </div>
       </header>
@@ -301,6 +299,7 @@
   </div>
 
   <!-- ==================== 5. CORE APPLICATION SCRIPTS ==================== -->
+  <!-- 💡 fy.js ကို ထိပ်ဆုံးတွင် အရင်ခေါ်ယူထားပါသည် -->
   <script src="js/fy.js?v=20261008" defer></script>
   <script src="js/config.js?v=20261008" defer></script>
   <script src="js/api.js?v=20261008" defer></script>
@@ -318,14 +317,12 @@
       if (!netStatus) return;
 
       if (navigator.onLine) {
-        // Online Mode (စိမ်းလန်းသော Wifi အိုင်ကွန်)
         netStatus.className = 'flex items-center gap-1.5 text-emerald-400 transition-colors duration-300 cursor-pointer';
         netStatus.title = 'Internet Connected (Online)';
         if (netIcon) netIcon.className = 'fa-solid fa-wifi text-xs';
         if (netPing) netPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
         if (netDot) netDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
       } else {
-        // Offline Mode (နီရဲသော သတိပေး အိုင်ကွန်)
         netStatus.className = 'flex items-center gap-1.5 text-rose-400 transition-colors duration-300 cursor-pointer animate-pulse';
         netStatus.title = 'No Internet Connection (Offline)';
         if (netIcon) netIcon.className = 'fa-solid fa-triangle-exclamation text-xs';

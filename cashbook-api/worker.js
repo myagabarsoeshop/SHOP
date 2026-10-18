@@ -2,7 +2,7 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER
  * File: cashbook-api/worker.js
- * Standard: Bulletproof D1 Store & Inventory APIs (Zero NetworkError Crashes)
+ * Standard: Stock Transfer Engine & Multi-Branch Inventory Filtering
  * ==============================================================================
  */
 
@@ -161,31 +161,57 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 2. GET STORE INVENTORY
+        // 🎯 2. GET STORE INVENTORY (ဆိုင်အလိုက် အမှန်တကယ်ရှိသော စာရင်းသာ ဆွဲထုတ်ခြင်း)
         // ====================================================================
         if (action === "getStoreInventory") {
           const shopId = String(body.shop_id || url.searchParams.get("shop_id") || "main").trim().toLowerCase();
 
-          const query = `
-            SELECT 
-              i.id AS item_id,
-              i.item_code,
-              i.item_name,
-              i.category,
-              i.sub_category,
-              i.color_code,
-              i.unit,
-              COALESCE(i.retail_price, 0) AS retail_price,
-              COALESCE(i.wholesale_price, 0) AS wholesale_price,
-              COALESCE(i.wholesale_price, 0) AS default_price,
-              COALESCE(s.current_stock, 0) AS current_stock,
-              COALESCE(s.cost_price, 0) AS cost_price,
-              COALESCE(s.remark, '') AS remark
-            FROM items i
-            LEFT JOIN shop_inventory s 
-              ON UPPER(i.item_code) = UPPER(s.item_code) AND LOWER(s.shop_id) = ?
-            ORDER BY i.id ASC;
-          `;
+          // ပင်မဆိုင် (main) ဖြစ်ပါက Catalog ပစ္စည်းအားလုံးကို ပြပေးမည်
+          // ဆိုင်ခွဲများ (shop1..5) ဖြစ်ပါက ထိုဆိုင်သို့ တကယ်ရောက်ရှိထားသော ပစ္စည်းများကိုသာ ပြပေးမည်
+          let query = "";
+          if (shopId === "main") {
+            query = `
+              SELECT 
+                i.id AS item_id,
+                i.item_code,
+                i.item_name,
+                i.category,
+                i.sub_category,
+                i.color_code,
+                i.unit,
+                COALESCE(i.retail_price, 0) AS retail_price,
+                COALESCE(i.wholesale_price, 0) AS wholesale_price,
+                COALESCE(s.current_stock, 0) AS current_stock,
+                COALESCE(s.cost_price, 0) AS cost_price,
+                COALESCE(s.remark, '') AS remark
+              FROM items i
+              LEFT JOIN shop_inventory s 
+                ON UPPER(i.item_code) = UPPER(s.item_code) AND LOWER(s.shop_id) = ?
+              ORDER BY i.id ASC;
+            `;
+          } else {
+            query = `
+              SELECT 
+                i.id AS item_id,
+                i.item_code,
+                i.item_name,
+                i.category,
+                i.sub_category,
+                i.color_code,
+                i.unit,
+                COALESCE(i.retail_price, 0) AS retail_price,
+                COALESCE(i.wholesale_price, 0) AS wholesale_price,
+                s.current_stock,
+                s.cost_price,
+                COALESCE(s.remark, '') AS remark
+              FROM shop_inventory s
+              INNER JOIN items i 
+                ON UPPER(i.item_code) = UPPER(s.item_code)
+              WHERE LOWER(s.shop_id) = ?
+              ORDER BY i.id ASC;
+            `;
+          }
+
           const { results } = await db.prepare(query).bind(shopId).all();
           return new Response(
             JSON.stringify({ success: true, shop_id: shopId, data: results || [] }),
@@ -194,7 +220,7 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 3. SAVE ITEM & INITIAL STOCK (SINGLE ATOMIC CALL - 100% SAFE)
+        // 🎯 3. SAVE ITEM & INITIAL STOCK
         // ====================================================================
         if (action === "saveItem") {
           const itemCode = String(body.item_code || "").trim().toUpperCase();
@@ -214,7 +240,6 @@ export default {
             );
           }
 
-          // ၁။ items ဇယားထဲတွင် ရှိ/မရှိ စစ်ဆေးပြီး သိမ်းဆည်းခြင်း
           const existingItem = await db.prepare(
             "SELECT id FROM items WHERE UPPER(item_code) = ?"
           ).bind(itemCode).first();
@@ -233,7 +258,7 @@ export default {
             `).bind(itemCode, itemName, category, subCategory, colorCode, unit, retailPrice, wholesalePrice, remark).run();
           }
 
-          // ၂။ စတိုလက်ကျန် ပါဝင်လာပါက shop_inventory ထဲသို့ တစ်ပါတည်း Auto သိမ်းပေးခြင်း (No 2nd API Call)
+          // စတိုလက်ကျန် ပါလာပါက အလိုအလျောက် သွင်းခြင်း
           if (body.shop_id) {
             const shopId = String(body.shop_id).trim().toLowerCase();
             const stock = Number(body.current_stock) || 0;
@@ -261,7 +286,76 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 4. UPDATE STOCK ONLY (SAFE SELECT -> UPDATE/INSERT)
+        // 🎯 4. STOCK TRANSFER (ဆိုင်ခွဲအချင်းချင်း အပြန်အလှန် ပစ္စည်းလွှဲပြောင်းမှု)
+        // ====================================================================
+        if (action === "transferStock") {
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const fromShop = String(body.from_shop || "").trim().toLowerCase();
+          const toShop = String(body.to_shop || "").trim().toLowerCase();
+          const qty = parseInt(body.quantity, 10) || 0;
+          const remark = String(body.remark || "").trim();
+
+          if (!itemCode || !fromShop || !toShop || qty <= 0) {
+            return new Response(
+              JSON.stringify({ success: false, message: "လွှဲပြောင်းမည့် အချက်အလက်များ မပြည့်စုံပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          if (fromShop === toShop) {
+            return new Response(
+              JSON.stringify({ success: false, message: "မူရင်းဆိုင်နှင့် လွှဲမည့်ဆိုင် မတူညီရပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          // ၁။ မူရင်းဆိုင်တွင် လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
+          const sourceInv = await db.prepare(
+            "SELECT id, current_stock, cost_price FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(fromShop, itemCode).first();
+
+          if (!sourceInv || sourceInv.current_stock < qty) {
+            return new Response(
+              JSON.stringify({ success: false, message: `မူရင်းဆိုင်တွင် လက်ကျန် မလုံလောက်ပါ (လက်ရှိ: ${sourceInv ? sourceInv.current_stock : 0} ထည်)` }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          // ၂။ မူရင်းဆိုင်မှ အရေအတွက် နုတ်ယူခြင်း
+          await db.prepare(
+            "UPDATE shop_inventory SET current_stock = current_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(qty, sourceInv.id).run();
+
+          // ၃။ လက်ခံမည့်ဆိုင်သို့ အရေအတွက် ပေါင်းထည့်ခြင်း (မရှိလျှင် အသစ်ဖန်တီးခြင်း)
+          const destInv = await db.prepare(
+            "SELECT id FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(toShop, itemCode).first();
+
+          if (destInv) {
+            await db.prepare(
+              "UPDATE shop_inventory SET current_stock = current_stock + ?, cost_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            ).bind(qty, sourceInv.cost_price, destInv.id).run();
+          } else {
+            await db.prepare(
+              "INSERT INTO shop_inventory (shop_id, item_code, current_stock, cost_price, remark, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            ).bind(toShop, itemCode, qty, sourceInv.cost_price, `Transferred from ${fromShop.toUpperCase()}`).run();
+          }
+
+          // ၄။ Audit Log အဖြစ် Transfer မှတ်တမ်း သိမ်းဆည်းခြင်း
+          try {
+            await db.prepare(
+              "INSERT INTO stock_transfers (item_code, from_shop, to_shop, quantity, remark) VALUES (?, ?, ?, ?, ?)"
+            ).bind(itemCode, fromShop, toShop, qty, remark).run();
+          } catch (e) {}
+
+          return new Response(
+            JSON.stringify({ success: true, message: `အထည် (${qty}) ထည်ကို ${toShop.toUpperCase()} သို့ အောင်မြင်စွာ လွှဲပြောင်းပြီးပါပြီ!` }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🎯 5. UPDATE STOCK
         // ====================================================================
         if (action === "updateStock") {
           const shopId = String(body.shop_id || "main").trim().toLowerCase();
@@ -269,13 +363,6 @@ export default {
           const stock = Number(body.current_stock) || 0;
           const cost = Number(body.cost_price) || 0;
           const remark = String(body.remark || "").trim();
-
-          if (!itemCode) {
-            return new Response(
-              JSON.stringify({ success: false, message: "Item Code မတွေ့ရှိပါ။" }),
-              { status: 400, headers: corsHeaders }
-            );
-          }
 
           const existingInv = await db.prepare(
             "SELECT id FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"

@@ -2,7 +2,7 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - STORE & INVENTORY MANAGEMENT ENGINE
  * File: cashbook-frontend/js/store.js
- * Standard: Myanmar Digit Parser & Single Atomic API Call
+ * Standard: Stock Transfer Modal, Auto-Scaling Fluid Fonts & Filtered Shop Views
  * ==============================================================================
  */
 
@@ -16,7 +16,15 @@ var currentStoreShop = "main";
 var searchTimeoutStore = null;
 var isStoreSubmitting = false;
 
-// 💡 မြန်မာဂဏန်း (၀ မှ ၉) ကို အင်္ဂလိပ်ဂဏန်း (0 to 9) သို့ အလိုအလျောက် ပြောင်းပေးသော Engine
+var ALL_SHOPS = [
+  { id: "main", name: "Main Home Shop (ပင်မ)" },
+  { id: "shop1", name: "ဆိုင်ခွဲ (၁)" },
+  { id: "shop2", name: "ဆိုင်ခွဲ (၂)" },
+  { id: "shop3", name: "ဆိုင်ခွဲ (၃)" },
+  { id: "shop4", name: "ဆိုင်ခွဲ (၄)" },
+  { id: "shop5", name: "ဆိုင်ခွဲ (၅)" }
+];
+
 function parseCleanNumber(val) {
   if (val === undefined || val === null || val === "") return 0;
   if (typeof val === "number") return isNaN(val) ? 0 : val;
@@ -27,7 +35,6 @@ function parseCleanNumber(val) {
   return isNaN(num) ? 0 : num;
 }
 
-// 💡 Units & Categories with Memory
 var availableUnits = ["ထည်", "ကိုက်", "ပေါင်", "ထုပ်", "လိပ်", "စုံ"];
 try {
   var savedUnits = localStorage.getItem("mya_stored_units");
@@ -100,22 +107,6 @@ function onCategoryOrSubChangeStore() {
     codeEl.value = getNextAutoItemCode(catEl.value);
   }
 }
-
-function adjustStoreKpiFontSizes() {
-  const kpiIds = ['store-total-items', 'store-total-stock', 'store-total-value', 'store-low-stock'];
-  kpiIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.fontSize = '24px';
-    el.style.whiteSpace = 'nowrap';
-    let currentSize = 24;
-    while (el.scrollWidth > el.clientWidth && currentSize > 12) {
-      currentSize--;
-      el.style.fontSize = currentSize + 'px';
-    }
-  });
-}
-window.addEventListener('resize', adjustStoreKpiFontSizes);
 
 function filterStoreData(list, searchVal, categoryVal) {
   var safeList = Array.isArray(list) ? list : [];
@@ -202,10 +193,9 @@ function renderStatsStore() {
 
   if (elItems) elItems.textContent = Number(filtered.length).toLocaleString('en-US');
   if (elStock) elStock.textContent = Number(totalStock).toLocaleString('en-US');
-  if (elVal) elVal.textContent = Number(totalValuation).toLocaleString('en-US') + " MMK";
+  // 💡 MMK စာလုံးကို ဖြုတ်ပြီး ဂဏန်းသီးသန့် မပြတ်တောက်အောင် ပြသခြင်း
+  if (elVal) elVal.textContent = Number(totalValuation).toLocaleString('en-US');
   if (elLow) elLow.textContent = Number(lowStockCount).toLocaleString('en-US');
-
-  setTimeout(adjustStoreKpiFontSizes, 50);
 }
 
 function renderTableStore() {
@@ -221,7 +211,8 @@ function renderTableStore() {
   renderStatsStore();
 
   if (!filteredRows || totalEntries === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-slate-500 font-bold">ရှာဖွေမှုနှင့် ကိုက်ညီသော ပစ္စည်း မရှိပါ။</td></tr>';
+    var currentShopName = (ALL_SHOPS.find(s => s.id === currentStoreShop)?.name) || currentStoreShop.toUpperCase();
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-slate-500 font-bold">${currentShopName} တွင် ပစ္စည်းစာရင်း မရှိသေးပါ။</td></tr>`;
     updatePaginationUIStore(0);
     return;
   }
@@ -251,10 +242,16 @@ function renderTableStore() {
         '<td class="text-right text-emerald-400 font-mono font-bold py-3 px-2">' + Number(row.retail_price || 0).toLocaleString('en-US', {minimumFractionDigits: 2}) + '</td>' +
         '<td class="text-right text-amber-400 font-mono font-bold py-3 px-2">' + Number(wholesale).toLocaleString('en-US', {minimumFractionDigits: 2}) + '</td>' +
         '<td class="right-0 sticky bg-[#0c1322] border-l border-slate-800 shadow-lg text-center py-3 px-2">' +
-          '<div class="flex items-center justify-center gap-3">' +
+          '<div class="flex items-center justify-center gap-2">' +
+            '<!-- 📦 Adjust Stock -->' +
             '<button onclick="StoreEngine.openStockModal(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Adjust Stock">' +
               '<i class="fa-solid fa-boxes-packing"></i>' +
             '</button>' +
+            '<!-- 🔁 Inter-Branch Transfer -->' +
+            '<button onclick="StoreEngine.openTransferModal(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-sky-400 hover:text-sky-300 transition" title="Transfer to another shop">' +
+              '<i class="fa-solid fa-right-left"></i>' +
+            '</button>' +
+            '<!-- ✏️ Edit Item -->' +
             '<button onclick="StoreEngine.openEditModal(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-indigo-400 hover:text-indigo-300 transition" title="Edit Item">' +
               '<i class="fa-solid fa-pen-to-square"></i>' +
             '</button>' +
@@ -368,7 +365,6 @@ function closeItemModalStore() {
   if (modalEl) modalEl.classList.add('hidden');
 }
 
-// 💡 SINGLE ATOMIC SAVE WITH MYANMAR NUMERAL PARSER (100% RELIABLE)
 async function saveItemSubmitStore(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (isStoreSubmitting) return;
@@ -380,14 +376,12 @@ async function saveItemSubmitStore(e) {
   var subCategory = document.getElementById('modal-item-subcategory')?.value.trim() || "";
   var unitVal = document.getElementById('modal-item-unit')?.value.trim() || "ထည်";
 
-  // 🎯 မြန်မာဂဏန်းများကို တိကျစွာ အင်္ဂလိပ်ဂဏန်း ပြောင်းလဲဖတ်ယူခြင်း
   var retailPrice = parseCleanNumber(document.getElementById('modal-item-retail')?.value);
   var wholesalePrice = parseCleanNumber(document.getElementById('modal-item-wholesale')?.value);
   var costPrice = parseCleanNumber(document.getElementById('modal-item-cost')?.value);
   var initialStock = Math.floor(parseCleanNumber(document.getElementById('modal-item-stock')?.value));
   var remark = document.getElementById('modal-item-remark')?.value.trim() || "";
 
-  // ဈေးနှုန်းစစ်ဆေးခြင်း
   if (costPrice <= 0) {
     alert("⚠️ မူရင်းဝယ်ဈေး (Cost Price) ကို သုညထက်ကြီးသော တန်ဖိုး ဖြည့်သွင်းပေးပါ။");
     document.getElementById('modal-item-cost')?.focus();
@@ -405,11 +399,9 @@ async function saveItemSubmitStore(e) {
   }
 
   isStoreSubmitting = true;
-
   saveNewCategoryToMemory(category);
   saveNewUnitToMemory(unitVal);
 
-  // 💡 SINGLE ATOMIC API CALL: items ရော shop_inventory ပါ တစ်ကြိမ်တည်းဖြင့် ပြီးပြတ်အောင် ပို့ခြင်း
   var payload = {
     shop_id: targetShop,
     item_code: itemCode,
@@ -445,6 +437,100 @@ async function saveItemSubmitStore(e) {
   } catch (err) {
     console.error("Save Error:", err);
     if (typeof showToast === 'function') showToast("ERROR", "မအောင်မြင်ပါ: " + err.message);
+  } finally {
+    isStoreSubmitting = false;
+    if (typeof toggleLoading === 'function') toggleLoading(false);
+  }
+}
+
+// ==============================================================================
+// 💡 INTER-BRANCH STOCK TRANSFER ENGINE
+// ==============================================================================
+function openTransferModalStore(itemCode) {
+  var item = storeActiveData.find(i => i.item_code === itemCode);
+  if (!item) return;
+
+  var currentStock = Number(item.current_stock || 0);
+  if (currentStock <= 0) {
+    if (typeof showToast === 'function') showToast("ERROR", "ဤဆိုင်တွင် လက်ကျန် (၀) ဖြစ်နေသဖြင့် အခြားဆိုင်သို့ လွှဲပြောင်း၍ မရပါ။");
+    return;
+  }
+
+  document.getElementById('transfer-item-code').value = item.item_code;
+  document.getElementById('transfer-item-name').textContent = `${item.item_code} - ${item.item_name}`;
+
+  var fromShopName = (ALL_SHOPS.find(s => s.id === currentStoreShop)?.name) || currentStoreShop.toUpperCase();
+  document.getElementById('transfer-from-shop-display').value = fromShopName;
+  document.getElementById('transfer-from-shop').value = currentStoreShop;
+  document.getElementById('transfer-current-stock').value = `${currentStock} ${item.unit || 'ထည်'}`;
+
+  // Populate Destination Shops (Excluding current shop)
+  var toShopSelect = document.getElementById('transfer-to-shop');
+  var otherShops = ALL_SHOPS.filter(s => s.id !== currentStoreShop);
+  toShopSelect.innerHTML = otherShops.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+  var qtyInput = document.getElementById('transfer-qty');
+  qtyInput.value = "";
+  qtyInput.max = currentStock;
+
+  document.getElementById('transfer-remark').value = "";
+
+  var modal = document.getElementById('store-transfer-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeTransferModalStore() {
+  var modal = document.getElementById('store-transfer-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveTransferSubmitStore(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (isStoreSubmitting) return;
+
+  var itemCode = document.getElementById('transfer-item-code')?.value;
+  var fromShop = document.getElementById('transfer-from-shop')?.value;
+  var toShop = document.getElementById('transfer-to-shop')?.value;
+  var qty = parseInt(document.getElementById('transfer-qty')?.value, 10) || 0;
+  var remark = document.getElementById('transfer-remark')?.value.trim() || "";
+
+  var item = storeActiveData.find(i => i.item_code === itemCode);
+  var maxStock = Number(item?.current_stock || 0);
+
+  if (qty <= 0) {
+    alert("⚠️ လွှဲပြောင်းမည့် အရေအတွက်ကို သုညထက်ကြီးသော ဂဏန်း ထည့်သွင်းပေးပါ။");
+    return;
+  }
+
+  if (qty > maxStock) {
+    alert(`⚠️ မူရင်းဆိုင်တွင် လက်ကျန် (${maxStock}) ထည်သာ ရှိသဖြင့် (${qty}) ထည် လွှဲပြောင်း၍ မရပါ။`);
+    return;
+  }
+
+  isStoreSubmitting = true;
+
+  try {
+    closeTransferModalStore();
+    if (typeof toggleLoading === 'function') toggleLoading(true);
+
+    var res = await callApi('transferStock', {
+      item_code: itemCode,
+      from_shop: fromShop,
+      to_shop: toShop,
+      quantity: qty,
+      remark: remark
+    });
+
+    if (res && res.success) {
+      if (typeof showToast === 'function') showToast("SUCCESS", res.message || "ပစ္စည်း လွှဲပြောင်းမှု အောင်မြင်ပါသည်။");
+      if (typeof window.clearAllApiCache === 'function') window.clearAllApiCache();
+      await loadStoreInventoryData(true, true);
+    } else {
+      throw new Error(res?.message || "လွှဲပြောင်းမှု မအောင်မြင်ပါ။");
+    }
+  } catch (err) {
+    console.error("Transfer Error:", err);
+    if (typeof showToast === 'function') showToast("ERROR", "လွှဲပြောင်းမှု အမှား: " + err.message);
   } finally {
     isStoreSubmitting = false;
     if (typeof toggleLoading === 'function') toggleLoading(false);
@@ -582,6 +668,9 @@ window.StoreEngine = {
   openStockModal: openStockModalStore,
   closeStockModal: closeStockModalStore,
   saveStockSubmit: saveStockSubmitStore,
+  openTransferModal: openTransferModalStore,
+  closeTransferModal: closeTransferModalStore,
+  saveTransferSubmit: saveTransferSubmitStore,
   exportCsv: exportCsvStore,
   onCategoryOrSubChange: onCategoryOrSubChangeStore,
   onModalShopChange: function () {

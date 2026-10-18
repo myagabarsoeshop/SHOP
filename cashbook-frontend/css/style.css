@@ -149,14 +149,24 @@ div#erp-workspace {
   margin-bottom: 0.2rem !important;
 }
 
-/* Value ဂဏန်းကြီးများ - ဖြူစင်တောက်ပပြီး မျက်စိအေးစေရန် */
+/* ဂဏန်းများသည့် Box အတွက် အဆင်ပြေစေမည့် CSS */
 .stats-card > div:last-child h3 {
-  font-size: 1.6rem !important;
+  /* clamp ကို အနည်းငယ် လျှော့ချထားပါသည် (အနည်းဆုံး 0.85rem မှ အများဆုံး 1.25rem အထိ) */
+  font-size: clamp(0.85rem, 1.35vw, 1.25rem) !important;
   font-weight: 800 !important;
   color: #f8fafc !important;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace !important;
-  letter-spacing: -0.03em !important;
-  margin: 0 !important;
+  
+  /* စာလုံးအကွာအဝေးကို ကျဉ်းပေးထားပါသည် */
+  letter-spacing: -0.05em !important; 
+  white-space: nowrap !important;
+  overflow: visible !important; /* အမြီးမပြတ်စေရန် */
+}
+
+/* ဂဏန်းအရမ်းရှည်လာပါက အလိုအလျောက် သေးငယ်သွားစေရန် Class (Optional) */
+.stats-card .long-digit {
+  font-size: clamp(0.75rem, 1.1vw, 1rem) !important;
+  letter-spacing: -0.06em !important;
 }
 
 /* ==============================================================================

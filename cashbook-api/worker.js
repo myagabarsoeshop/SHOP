@@ -1,8 +1,18 @@
 /**
+ * ==============================================================================
  * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER
  * File: cashbook-api/worker.js
+ * Features:
+ *   1. D1 Database Authentication (PBKDF2 + Auto-Sync for Admin123)
+ *   2. WebCrypto JWT Token Issuance
+ *   3. Store & Inventory Management APIs (items & shop_inventory)
+ *   4. Cloudflare Static Assets Serving (env.ASSETS)
+ * ==============================================================================
  */
 
+// ==============================================================================
+// 💡 1. CRYPTOGRAPHIC UTILITIES
+// ==============================================================================
 function base64ToBytes(base64) {
   const binString = atob(base64.replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(binString, (m) => m.codePointAt(0));
@@ -91,6 +101,9 @@ async function createJwtToken(payload, secret) {
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))}`;
 }
 
+// ==============================================================================
+// 💡 2. MAIN FETCH HANDLER
+// ==============================================================================
 export default {
   async fetch(request, env) {
     const requestOrigin = request.headers.get("Origin") || "*";
@@ -107,6 +120,7 @@ export default {
 
     const url = new URL(request.url);
 
+    // 💡 API Requests Router (/api သို့မဟုတ် POST Requests)
     if (url.pathname.startsWith("/api") || request.method === "POST" || url.searchParams.has("action")) {
       try {
         const db = env.DB;
@@ -134,6 +148,9 @@ export default {
 
         const action = body.action || url.searchParams.get("action") || "";
 
+        // ====================================================================
+        // 🎯 1. LOGIN ACTION
+        // ====================================================================
         if (action === "checkLogin") {
           const username = String(body.username || "").trim();
           const password = String(body.password || "").trim();
@@ -217,6 +234,122 @@ export default {
           );
         }
 
+        // ====================================================================
+        // 🎯 2. STORE & INVENTORY APIS
+        // ====================================================================
+
+        // (က) ဆိုင်အလိုက် စတိုလက်ကျန် နှင့် ပစ္စည်းစာရင်းဆွဲယူခြင်း
+        if (action === "getStoreInventory") {
+          const shopId = String(body.shop_id || url.searchParams.get("shop_id") || "main").trim().toLowerCase();
+
+          const query = `
+            SELECT 
+              i.id AS item_id,
+              i.item_code,
+              i.item_name,
+              i.category,
+              i.sub_category,
+              i.color_code,
+              i.unit,
+              COALESCE(i.retail_price, 0) AS retail_price,
+              COALESCE(i.wholesale_price, 0) AS wholesale_price,
+              COALESCE(i.wholesale_price, 0) AS default_price,
+              COALESCE(s.current_stock, 0) AS current_stock,
+              COALESCE(s.cost_price, 0) AS cost_price,
+              COALESCE(s.remark, '') AS remark
+            FROM items i
+            LEFT JOIN shop_inventory s 
+              ON i.item_code = s.item_code AND LOWER(s.shop_id) = ?
+            ORDER BY i.id ASC;
+          `;
+          const { results } = await db.prepare(query).bind(shopId).all();
+          return new Response(
+            JSON.stringify({ success: true, shop_id: shopId, data: results || [] }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // (ခ) ပစ္စည်းအသစ် ထည့်သွင်းခြင်း / ပြင်ဆင်ခြင်း
+        if (action === "saveItem") {
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const itemName = String(body.item_name || "").trim();
+          const category = String(body.category || "ပုဆိုး").trim();
+          const subCategory = String(body.sub_category || "").trim();
+          const colorCode = String(body.color_code || "").trim();
+          const unit = String(body.unit || "ထည်").trim();
+          const retailPrice = parseFloat(body.retail_price) || 0;
+          const wholesalePrice = parseFloat(body.wholesale_price || body.default_price) || 0;
+          const remark = String(body.remark || "").trim();
+
+          if (!itemCode || !itemName) {
+            return new Response(
+              JSON.stringify({ success: false, message: "Item Code နှင့် အမည် ထည့်သွင်းပေးပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          await db.prepare(`
+            INSERT INTO items (item_code, item_name, category, sub_category, color_code, unit, retail_price, wholesale_price, remark, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(item_code) DO UPDATE SET
+              item_name = excluded.item_name,
+              category = excluded.category,
+              sub_category = excluded.sub_category,
+              color_code = excluded.color_code,
+              unit = excluded.unit,
+              retail_price = excluded.retail_price,
+              wholesale_price = excluded.wholesale_price,
+              remark = excluded.remark,
+              updated_at = CURRENT_TIMESTAMP;
+          `).bind(itemCode, itemName, category, subCategory, colorCode, unit, retailPrice, wholesalePrice, remark).run();
+
+          return new Response(
+            JSON.stringify({ success: true, message: "ပစ္စည်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // (ဂ) ဆိုင်ခွဲ၏ စတိုလက်ကျန် နှင့် မူရင်းဝယ်ဈေး ညှိယူခြင်း
+        if (action === "updateStock") {
+          const shopId = String(body.shop_id || "main").trim().toLowerCase();
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const stock = parseInt(body.current_stock, 10) || 0;
+          const cost = parseFloat(body.cost_price) || 0;
+          const remark = String(body.remark || "").trim();
+
+          if (!itemCode) {
+            return new Response(
+              JSON.stringify({ success: false, message: "Item Code မတွေ့ရှိပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          await db.prepare(`
+            INSERT INTO shop_inventory (shop_id, item_code, current_stock, cost_price, remark, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(shop_id, item_code) DO UPDATE SET
+              current_stock = excluded.current_stock,
+              cost_price = excluded.cost_price,
+              remark = excluded.remark,
+              updated_at = CURRENT_TIMESTAMP;
+          `).bind(shopId, itemCode, stock, cost, remark).run();
+
+          return new Response(
+            JSON.stringify({ success: true, message: "စတိုလက်ကျန် အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // (ဃ) ပစ္စည်းစာရင်းအားလုံး ဆွဲယူခြင်း
+        if (action === "getItems") {
+          const { results } = await db.prepare("SELECT * FROM items ORDER BY id ASC;").all();
+          return new Response(
+            JSON.stringify({ success: true, data: results || [] }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // အခြား Action များအတွက် Safe Response
         return new Response(
           JSON.stringify({
             success: true,
@@ -234,6 +367,7 @@ export default {
       }
     }
 
+    // 💡 Static Assets (Website UI)
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }

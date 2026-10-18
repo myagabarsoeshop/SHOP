@@ -248,23 +248,19 @@
         class="bg-[#0c1322] border-b border-slate-800 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
         <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
 
-        <!-- 💡 Dynamic Wifi Icon Only & Live Metadata -->
-        <div class="flex items-center text-xs font-bold bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-xl gap-2.5 shadow-sm">
-          <!-- Real-Time Wifi Status (Icon Only) -->
-          <div id="network-status" class="flex items-center gap-1.5 text-emerald-400 transition-colors duration-300 cursor-pointer" title="Internet Connected (Online)">
-            <span class="relative flex h-2 w-2">
-              <span id="network-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span id="network-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <i id="network-icon" class="fa-solid fa-wifi text-xs"></i>
-          </div>
+        <!-- 💡 Symmetrical Capsule Header (ဘယ်/ညာ အချိုးညီ တိကျသော ပုံစံ) -->
+        <div class="inline-flex items-center text-xs font-bold bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-full shadow-inner gap-2.5">
+          <!-- Left: Real-Time Wifi Status (ဘယ်ဘက်အစွန်းနှင့် ကွက်တိ ညီညာစေရန်) -->
+          <span id="network-status" class="flex items-center justify-center text-emerald-400 transition-colors duration-300 cursor-pointer" title="Internet Connected (Online)">
+            <i id="network-icon" class="fa-solid fa-wifi text-[11px]"></i>
+          </span>
 
-          <span class="text-slate-600 font-normal select-none">|</span>
+          <span class="text-slate-600/70 font-normal select-none">|</span>
 
-          <!-- 💡 စာအသေမထည့်ဘဲ fy.js မှ Real-Time အလိုအလျောက် တွက်တင်ပေးမည့် နေရာ -->
-          <div id="live-metadata" class="text-emerald-400 font-bold tracking-wide flex items-center">
-            <span class="inline-block w-36 h-3 bg-emerald-500/20 rounded animate-pulse"></span>
-          </div>
+          <!-- Right: Dynamic Metadata (Auto-calculated FY 2026 / Time / User) -->
+          <span id="live-metadata" class="text-emerald-400 font-bold tracking-wide">
+            FY 2026 | -- | --:-- | User: Admin
+          </span>
         </div>
       </header>
 
@@ -299,42 +295,76 @@
   </div>
 
   <!-- ==================== 5. CORE APPLICATION SCRIPTS ==================== -->
-  <!-- 💡 fy.js ကို ထိပ်ဆုံးတွင် အရင်ခေါ်ယူထားပါသည် -->
   <script src="js/fy.js?v=20261008" defer></script>
   <script src="js/config.js?v=20261008" defer></script>
   <script src="js/api.js?v=20261008" defer></script>
   <script src="js/auth.js?v=20261008" defer></script>
   <script src="js/app.js?v=20261008" defer></script>
 
-  <!-- 💡 Live Network Status Tracker (Icon Only) -->
+  <!-- 💡 Real-Time Network & Dynamic FY 2026 Clock Engine -->
   <script>
+    // ၁။ Wifi Status Tracker (Icon Only - Symmetrical)
     function updateNetworkStatus() {
       const netStatus = document.getElementById('network-status');
       const netIcon = document.getElementById('network-icon');
-      const netPing = document.getElementById('network-ping');
-      const netDot = document.getElementById('network-dot');
 
-      if (!netStatus) return;
+      if (!netStatus || !netIcon) return;
 
       if (navigator.onLine) {
-        netStatus.className = 'flex items-center gap-1.5 text-emerald-400 transition-colors duration-300 cursor-pointer';
+        netStatus.className = 'flex items-center justify-center text-emerald-400 transition-colors duration-300 cursor-pointer';
         netStatus.title = 'Internet Connected (Online)';
-        if (netIcon) netIcon.className = 'fa-solid fa-wifi text-xs';
-        if (netPing) netPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
-        if (netDot) netDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-500';
+        netIcon.className = 'fa-solid fa-wifi text-[11px]';
       } else {
-        netStatus.className = 'flex items-center gap-1.5 text-rose-400 transition-colors duration-300 cursor-pointer animate-pulse';
+        netStatus.className = 'flex items-center justify-center text-rose-400 transition-colors duration-300 cursor-pointer animate-pulse';
         netStatus.title = 'No Internet Connection (Offline)';
-        if (netIcon) netIcon.className = 'fa-solid fa-triangle-exclamation text-xs';
-        if (netPing) netPing.className = 'hidden';
-        if (netDot) netDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-rose-500';
+        netIcon.className = 'fa-solid fa-triangle-exclamation text-[11px]';
       }
+    }
+
+    // ၂။ Dynamic FY 2026 + Clock Updater (Auto-calculated, Never Hardcoded)
+    function renderLiveHeaderMetadata() {
+      const metaEl = document.getElementById('live-metadata');
+      if (!metaEl) return;
+
+      const now = new Date();
+      // 💡 လက်ရှိနှစ်ကို System မှ Auto ယူတွက်သည် (၂၀၂၇ ရောက်ပါက အလိုအလျောက် FY 2027 ဖြစ်သွားမည်)
+      const currentYear = now.getFullYear(); 
+      const fyLabel = window.FY ? window.FY.getCurrentFY() : `FY ${currentYear}`;
+
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dayName = days[now.getDay()];
+
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      const formattedHours = String(hours).padStart(2, '0');
+      const timeStr = `${formattedHours}:${minutes} ${ampm}`;
+
+      let userName = 'Admin';
+      try {
+        const storedUser = localStorage.getItem('golden_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          userName = parsed.name || parsed.username || 'Admin';
+        }
+      } catch (e) {}
+
+      metaEl.textContent = `${fyLabel} | ${dayName} | ${timeStr} | User: ${userName}`;
     }
 
     window.addEventListener('online', updateNetworkStatus);
     window.addEventListener('offline', updateNetworkStatus);
-    window.addEventListener('DOMContentLoaded', updateNetworkStatus);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateNetworkStatus();
+      renderLiveHeaderMetadata();
+      // စက္ကန့်တိုင်း အချိန်နှင့် FY ကို Auto စစ်ဆေးမွမ်းမံပေးသည်
+      setInterval(renderLiveHeaderMetadata, 1000);
+    });
+
     updateNetworkStatus();
+    renderLiveHeaderMetadata();
   </script>
 
   <!-- 💡 Service Worker Registration with Auto-Update Check -->

@@ -75,77 +75,155 @@ div#erp-workspace {
 }
 
 /* ==============================================================================
-   💡 1. RADIANT GLASSMORPHISM STATS CARDS (စိုပြေတောက်ပသော Box ၄ ခု)
+   💡 1. PROFESSIONAL VIBRANT STATS CARDS (စိုပြေကြည်လင်သော KPI Box များ)
    ============================================================================== */
 .stats-card { 
-  background: linear-gradient(135deg, #13203b 0%, #0c1527 100%) !important; 
-  border: 1.5px solid rgba(71, 85, 105, 0.5) !important;
-  border-radius: 0.875rem !important;
-  box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.65), 0 0 12px rgba(99, 102, 241, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.14) !important;
-  min-height: 82px !important;
-  padding: 0.95rem 1.2rem !important;
+  /* ကာလာကို နက်သော်လည်း ကြည်လင်သော Slate Navy သို့ မြှင့်တင်ထားပါသည် */
+  background: #0f172a !important; 
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 1rem !important;
+  /* Box Shadow ကို အောက်ခံပြာနက်ရောင်နှင့် လိုက်ဖက်အောင် အလင်းအနားသတ် ထည့်သွင်းခြင်း */
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.1) !important;
+  min-height: 86px !important;
+  padding: 1.1rem 1.3rem !important;
   display: flex !important;
   align-items: center !important;
-  gap: 1rem !important;
-  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+  gap: 1.1rem !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
 }
 
 .stats-card:hover {
-  transform: translateY(-2px) !important;
-  border-color: rgba(99, 102, 241, 0.65) !important;
-  box-shadow: 0 14px 30px -4px rgba(0, 0, 0, 0.75), 0 0 20px rgba(99, 102, 241, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-3px) !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 0 15px rgba(99, 102, 241, 0.2) !important;
 }
 
-/* 💡 Glowing Icon Box Containers (အလင်းရောင်စိုစိုလေးများ) */
+/* 💡 Stats Box တစ်ခုချင်းစီကို Icon အရောင် စိုစိုပြေပြေ ခွဲထုတ်ခြင်း */
+/* Card 1: TOTAL ITEMS (ခရမ်းပြာရောင်) */
+.stats-card:nth-child(1) > div:first-child {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #818cf8 !important;
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+}
+/* Card 2: TOTAL STOCK QTY (အပြာနုရောင်) */
+.stats-card:nth-child(2) > div:first-child {
+  background: rgba(14, 165, 233, 0.15) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(14, 165, 233, 0.3) !important;
+}
+/* Card 3: VALUATION (စိမ်းစိုရောင် / Emerald) */
+.stats-card:nth-child(3) > div:first-child {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+/* Card 4: LOW STOCK ALERTS (ပတ္တမြားနီရောင် / Rose Red) */
+.stats-card:nth-child(4) > div:first-child {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #fb7185 !important;
+  border: 1px solid rgba(244, 63, 94, 0.3) !important;
+}
+
 .stats-card > div:first-child {
   flex-shrink: 0 !important;
-  width: 3rem !important;
-  height: 3rem !important;
+  width: 3.2rem !important;
+  height: 3.2rem !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   border-radius: 0.75rem !important;
-  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
 .stats-card > div:first-child i {
-  font-size: 1.25rem !important;
+  font-size: 1.35rem !important;
 }
 
-/* Text area */
-.stats-card > div:last-child {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  overflow: hidden !important;
-}
-
-/* Label */
+/* Label စာသား - ကြည်လင်သော ငွေပြာရောင် */
 .stats-card > div:last-child p {
-  font-size: 0.6875rem !important; /* 11px */
+  font-size: 0.7rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
-  text-transform: uppercase !important;
   color: #94a3b8 !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  margin-bottom: 0.25rem !important;
-  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  margin-bottom: 0.2rem !important;
 }
 
-/* Amount / Value (စိုပြေကြည်လင်သော ဂဏန်းကြီးများ) */
+/* Value ဂဏန်းကြီးများ - ဖြူစင်တောက်ပပြီး မျက်စိအေးစေရန် */
 .stats-card > div:last-child h3 {
-  font-size: clamp(1rem, 1.8vw, 1.5rem) !important;
-  font-weight: 900 !important;
-  color: #ffffff !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  line-height: 1.25 !important;
-  margin-top: 0 !important;
-  font-variant-numeric: lining-nums tabular-nums !important;
+  font-size: 1.6rem !important;
+  font-weight: 800 !important;
+  color: #f8fafc !important;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace !important;
-  letter-spacing: -0.02em !important;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+  letter-spacing: -0.03em !important;
+  margin: 0 !important;
+}
+
+/* ==============================================================================
+   💡 2. CRISP TOOLBAR & ELEVATED TABLE (မွဲမနေဘဲ ကြည်လင်သန့်ပြန့်သော စားပွဲဇယား)
+   ============================================================================== */
+/* ရှာဖွေသည့် Toolbar */
+.control-toolbar,
+div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
+  background: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Table Container - နောက်ခံမမည်းဘဲ သန့်ပြန့်ကြည်လင်အောင် */
+.table-container { 
+  background-color: #0f172a !important;
+  border-radius: 0.875rem !important; 
+  border: 1px solid rgba(255, 255, 255, 0.08) !important; 
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5) !important;
+  overflow: hidden !important;
+}
+
+/* Table Header (ခေါင်းစဉ်တန်း) - ညစ်မနေစေရန် */
+table thead th {
+  position: sticky; 
+  top: 0; 
+  z-index: 20;
+  background-color: #131d33 !important; /* အနည်းငယ် ပိုကြည်သော Slate */
+  padding: 13px 16px !important; 
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase; 
+  letter-spacing: 0.05em; 
+  color: #cbd5e1 !important; /* စာသားကို ပိုမို ကြည်လင်စေသည် */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Table Body Rows */
+table tbody td {
+  padding: 13px 16px !important; 
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important; /* လိုင်းကြမ်းမဖြစ်အောင် အနုစိတ်ဖျော့ထားခြင်း */
+  font-size: 0.825rem !important; 
+  color: #e2e8f0 !important;
+}
+
+/* Row Hover ဖြစ်ချိန် စိုပြေသော Indigo-Blue အလင်းပြေးလေးပြခြင်း */
+table tbody tr {
+  transition: background-color 0.15s ease !important;
+}
+table tbody tr:hover { 
+  background-color: rgba(99, 102, 241, 0.06) !important; 
+}
+
+/* Table ရဲ့ ညာဘက်ကပ် Action Column */
+table th.sticky,
+table td.sticky,
+th.right-0,
+td.right-0 {
+  position: sticky !important;
+  right: 0 !important;
+  background-color: #0f172a !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+table tbody tr:hover td.sticky,
+table tbody tr:hover td.right-0 {
+  background-color: #141d36 !important;
 }
 
 /* ==============================================================================

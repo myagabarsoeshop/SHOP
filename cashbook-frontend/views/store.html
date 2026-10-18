@@ -140,7 +140,7 @@
 </div>
 
 <!-- ============================================================================ -->
-<!-- 💡 ၅။ စမတ် အဆင့်မြှင့်တင်ထားသော ADD NEW ITEM & STOCK MODAL                        -->
+<!-- 💡 ၅။ အချိုးညီ ညီညာပြီး ကာဆာချပြင်နိုင်သော ADD NEW ITEM & STOCK MODAL            -->
 <!-- ============================================================================ -->
 <div id="store-item-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
   <div class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
@@ -157,10 +157,12 @@
 
     <form id="store-item-form" onsubmit="StoreEngine.saveItemSubmit(event)" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
       
-      <!-- 💡 ROW 1: Store Location (စတိုဆိုင်ခွဲ) & Item Code (Auto-Generated) -->
+      <!-- 💡 ROW 1: Store Location & Item Code (Auto Suggestion, Fully Editable) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide">Store Location (စတိုဆိုင်ခွဲ) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Store Location *</label>
+          </div>
           <select id="modal-item-shop" onchange="StoreEngine.onModalShopChange()" class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
             <option value="main">Main Home Shop (ပင်မ)</option>
             <option value="shop1">ဆိုင်ခွဲ (၁)</option>
@@ -171,38 +173,44 @@
           </select>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide flex justify-between">
-            <span>Item Code (ပစ္စည်းကုတ်) *</span>
-            <span class="text-[9px] text-amber-400 lowercase font-mono">(auto)</span>
-          </label>
-          <input type="text" id="modal-item-code" required placeholder="PAS-006" class="w-full bg-[#0f172a] border border-slate-800 text-amber-400 font-mono font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500 uppercase">
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Item Code *</label>
+            <span class="text-[9px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Auto</span>
+          </div>
+          <input type="text" id="modal-item-code" required placeholder="PAS-006" title="ကာဆာချပြီး စိတ်ကြိုက် ပြင်ဆင်နိုင်ပါသည်" class="w-full bg-[#0f172a] border border-slate-800 text-amber-400 font-mono font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500 uppercase">
         </div>
       </div>
 
-      <!-- 💡 ROW 2: Category (Dynamic Memory) & Sub-Category -->
+      <!-- 💡 ROW 2: Category & Sub-Category -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide">Category (ပင်မအမျိုးအစား) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Category (ပင်မ) *</label>
+          </div>
           <input list="category-options" id="modal-item-category" value="ပုဆိုး" oninput="StoreEngine.onCategoryOrSubChange()" required class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
           <datalist id="category-options"></datalist>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide">Sub-Category (အမျိုးအစားစိပ်)</label>
-          <input type="text" id="modal-item-subcategory" placeholder="e.g. ကချင်" oninput="StoreEngine.onCategoryOrSubChange()" class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Sub-Category (စိပ်)</label>
+          </div>
+          <input type="text" id="modal-item-subcategory" placeholder="e.g. မိုးကင်း တက်" oninput="StoreEngine.onCategoryOrSubChange()" class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
         </div>
       </div>
 
-      <!-- 💡 ROW 3: Item Name (Auto Combined) & Unit (Dynamic Memory) - အကျယ်အဝန်း ကွက်တိတူညီသော နေရာချထားမှု -->
+      <!-- 💡 ROW 3: Item Name & Unit (အမြင့်တူညီသော ခေါင်းစဉ်များဖြင့် ၁၀၀% တန်းညီစေခြင်း) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide flex justify-between">
-            <span>Item Name (ပစ္စည်းအမည်) *</span>
-            <span class="text-[9px] text-emerald-400 lowercase font-mono">(auto combined)</span>
-          </label>
-          <input type="text" id="modal-item-name" required placeholder="e.g. ကချင် ပုဆိုး" class="w-full bg-[#0f172a] border border-slate-800 text-white font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500">
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Item Name *</label>
+            <span class="text-[9px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Auto + Edit</span>
+          </div>
+          <input type="text" id="modal-item-name" required placeholder="e.g. မိုးကင်း တက် ပုဆိုး" title="ကာဆာချပြီး စိတ်ကြိုက် ထပ်မံဖြည့်စွက် ပြင်ဆင်နိုင်ပါသည်" class="w-full bg-[#0f172a] border border-slate-800 text-white font-bold rounded-lg p-2.5 outline-none focus:border-indigo-500">
         </div>
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-400 uppercase tracking-wide">Unit (ယူနစ်) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Unit (ယူနစ်) *</label>
+          </div>
           <input list="unit-options" id="modal-item-unit" value="ထည်" placeholder="ရွေး/ရိုက်ပါ" required class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-bold">
           <datalist id="unit-options"></datalist>
         </div>
@@ -211,33 +219,41 @@
       <!-- 💡 ROW 4: Retail & Wholesale Price (မဖြစ်မနေ ထည့်ရမည့် ဈေးနှုန်းများ) -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-emerald-400 uppercase tracking-wide">Retail Price (လက်လီရောင်းဈေး MMK) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-emerald-400 uppercase tracking-wide text-[11px]">Retail Price (လက်လီ) *</label>
+          </div>
           <input type="number" step="0.01" min="1" id="modal-item-retail" required placeholder="0.00" class="w-full text-right text-emerald-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-emerald-500 font-mono">
         </div>
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-amber-400 uppercase tracking-wide">Wholesale Price (လက်ကားဈေး MMK) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-amber-400 uppercase tracking-wide text-[11px]">Wholesale Price (လက်ကား) *</label>
+          </div>
           <input type="number" step="0.01" min="1" id="modal-item-wholesale" required placeholder="0.00" class="w-full text-right text-amber-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-amber-500 font-mono">
         </div>
       </div>
 
-      <!-- 💡 ROW 5: Initial Stock (Auto Calculated / Snapshot) & Cost Price (မူရင်းဝယ်ဈေး) -->
+      <!-- 💡 ROW 5: Initial Stock & Cost Price -->
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-slate-300 uppercase tracking-wide flex justify-between">
-            <span>Initial Stock (စတိုအဖွင့်လက်ကျန်)</span>
-            <span id="stock-calc-hint" class="text-[9px] text-slate-500 font-mono">qty</span>
-          </label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-slate-300 uppercase tracking-wide text-[11px]">Initial Stock</label>
+            <span class="text-[9px] text-slate-500 font-mono">qty</span>
+          </div>
           <input type="number" id="modal-item-stock" value="0" min="0" class="w-full text-right text-slate-100 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-indigo-500 font-mono">
         </div>
         <div class="flex flex-col gap-1">
-          <label class="font-bold text-rose-400 uppercase tracking-wide">Cost Price (မူရင်းဝယ်ဈေး MMK) *</label>
+          <div class="flex items-center justify-between h-5">
+            <label class="font-bold text-rose-400 uppercase tracking-wide text-[11px]">Cost Price (ဝယ်ဈေး) *</label>
+          </div>
           <input type="number" step="0.01" min="1" id="modal-item-cost" required placeholder="0.00" class="w-full text-right text-rose-400 font-bold bg-[#0f172a] border border-slate-800 rounded-lg p-2.5 outline-none focus:border-rose-500 font-mono">
         </div>
       </div>
 
       <!-- ROW 6: Remark -->
       <div class="flex flex-col gap-1">
-        <label class="font-bold text-slate-400 uppercase tracking-wide">Remark / Color Code (မှတ်ချက် / ကာလာ)</label>
+        <div class="flex items-center justify-between h-5">
+          <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Remark / Color (မှတ်ချက် / ကာလာ)</label>
+        </div>
         <input type="text" id="modal-item-remark" placeholder="ကာလာ သို့မဟုတ် အထွေထွေ မှတ်ချက်..." class="w-full bg-[#0f172a] border border-slate-800 text-slate-100 rounded-lg p-2.5 outline-none focus:border-indigo-500">
       </div>
 

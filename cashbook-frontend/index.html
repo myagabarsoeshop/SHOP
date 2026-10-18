@@ -203,6 +203,13 @@
           <i class="fa-solid fa-gauge-high w-4 text-center text-indigo-400"></i> Home Dashboard
         </button>
 
+        <!-- 💡 STORE & INVENTORY MODULE -->
+        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Store & Inventory</p>
+        <button onclick="switchTab('store')" id="btn-store"
+          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
+          <i class="fa-solid fa-boxes-stacked text-amber-400 w-4 text-center"></i> ကုန်ချောစတို (Store)
+        </button>
+
         <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Main Books</p>
         <button onclick="switchTab('bank')" id="btn-bank"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
@@ -303,9 +310,55 @@
   <script src="js/auth.js?v=20261008" defer></script>
   <script src="js/app.js?v=20261008" defer></script>
 
+  <!-- 💡 Tab Switching & Routing Controller -->
+  <script>
+    window.switchTab = function(tabName) {
+      const pageTitle = document.getElementById("page-title");
+      
+      // Sidebar Active Button Styling
+      document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.classList.remove("bg-indigo-600/30", "text-white", "font-bold");
+      });
+      const activeBtn = document.getElementById("btn-" + tabName);
+      if (activeBtn) {
+        activeBtn.classList.add("bg-indigo-600/30", "text-white", "font-bold");
+      }
+
+      // 🎯 Tab Actions
+      if (tabName === "store") {
+        if (pageTitle) pageTitle.textContent = "ကုန်ချောစတို စီမံခန့်ခွဲမှု (Store & Inventory)";
+        if (window.StoreEngine) {
+          window.StoreEngine.init("main");
+        }
+      } else if (tabName === "dashboard") {
+        if (pageTitle) pageTitle.textContent = "Home Dashboard";
+        const viewContainer = document.getElementById("view-container");
+        if (viewContainer) {
+          viewContainer.innerHTML = `
+            <div class="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-2xl mb-4">
+                <i class="fa-solid fa-gauge-high"></i>
+              </div>
+              <h3 class="text-base font-bold text-slate-200">မြကမ္ဘာစိုး ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
+              <p class="text-xs text-slate-400 mt-1 max-w-md">စတိုစာရင်းများနှင့် ပစ္စည်းလက်ကျန်များကို စတင်ကြည့်ရှုရန် ဘယ်ဘက်ရှိ <span class="text-amber-400 font-bold">'ကုန်ချောစတို (Store)'</span> မီနူးကို နှိပ်ပါခင်ဗျာ။</p>
+              <button onclick="switchTab('store')" class="mt-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20">
+                <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတိုသို့ သွားမည်
+              </button>
+            </div>
+          `;
+        }
+      } else {
+        if (pageTitle) pageTitle.textContent = tabName.toUpperCase();
+        // အခြား Tab များဖွင့်ရန် (app.js သို့ ဆက်သွယ်ခြင်း)
+        if (window.AppRouter && typeof window.AppRouter.switchTab === "function") {
+          window.AppRouter.switchTab(tabName);
+        }
+      }
+    };
+  </script>
+
   <!-- 💡 Real-Time Network & Dynamic FY 2026 Clock Engine -->
   <script>
-    // ၁။ Wifi Status Tracker (Icon Only - Symmetrical)
     function updateNetworkStatus() {
       const netStatus = document.getElementById('network-status');
       const netIcon = document.getElementById('network-icon');
@@ -323,13 +376,11 @@
       }
     }
 
-    // ၂။ Dynamic FY 2026 + Clock Updater (Auto-calculated, Never Hardcoded)
     function renderLiveHeaderMetadata() {
       const metaEl = document.getElementById('live-metadata');
       if (!metaEl) return;
 
       const now = new Date();
-      // 💡 လက်ရှိနှစ်ကို System မှ Auto ယူတွက်သည် (၂၀၂၇ ရောက်ပါက အလိုအလျောက် FY 2027 ဖြစ်သွားမည်)
       const currentYear = now.getFullYear(); 
       const fyLabel = window.FY ? window.FY.getCurrentFY() : `FY ${currentYear}`;
 
@@ -361,8 +412,14 @@
     document.addEventListener('DOMContentLoaded', () => {
       updateNetworkStatus();
       renderLiveHeaderMetadata();
-      // စက္ကန့်တိုင်း အချိန်နှင့် FY ကို Auto စစ်ဆေးမွမ်းမံပေးသည်
       setInterval(renderLiveHeaderMetadata, 1000);
+
+      // 💡 စာမျက်နှာ စဖွင့်ဖွင့်ချင်းတွင် စတိုစာရင်းကို တန်းဖွင့်ပေးမည်
+      setTimeout(() => {
+        if (document.documentElement.classList.contains('is-authed')) {
+          switchTab('store');
+        }
+      }, 300);
     });
 
     updateNetworkStatus();

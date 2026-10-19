@@ -2,7 +2,9 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - MULTI-BRANCH CASHBOOK & INVOICING ENGINE
  * File: cashbook-frontend/js/cashbook.js
- * Standard: Split Payment (Cash + Bank), Discount, Subcategory & Auto MY
+ * Standard: Split Payment (Cash + Bank), Discount, Subcategory, Auto MY & A5 Twin Print
+ * 💡 Features: 🛡️ Resilient Dual-Token Auth, Graceful 401 Session Expiry Catch,
+ *              Full Edit Modal & Twin Invoice Print Engine
  * ==============================================================================
  */
 
@@ -19,6 +21,7 @@ var storeGarmentItems = [];
 var storeYarnItems = [];
 var searchTimeoutCb = null;
 var isCbSubmitting = false;
+var editingEntryId = null;
 
 var ALL_CB_SHOPS = [
   { id: "main", name: "Main Home Shop (ပင်မ)" },
@@ -28,6 +31,11 @@ var ALL_CB_SHOPS = [
   { id: "shop4", name: "ဆိုင်ခွဲ (၄)" },
   { id: "shop5", name: "ဆိုင်ခွဲ (၅)" }
 ];
+
+// 💡 Auth Token ရယူခြင်း (token သို့မဟုတ် golden_auth_token နှစ်မျိုးလုံး ထောက်ပံ့သည်)
+function getCbAuthToken() {
+  return localStorage.getItem("token") || localStorage.getItem("golden_auth_token") || "";
+}
 
 // 💡 နေ့စွဲမှ Month-Year (ဥပမာ - Oct 26) အလိုအလျောက် ထုတ်ပေးသည့် ဖန်ရှင်
 function getMonthYearString(dateString) {
@@ -54,9 +62,14 @@ function formatMoney(num) {
   return Number(num || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// 💡 ငွေစာရင်း ဒေတာများ ဆွဲယူခြင်း
 async function loadCashbookData(isSilent, forceRefresh) {
-  var token = localStorage.getItem("golden_auth_token");
-  if (!token) return;
+  var token = getCbAuthToken();
+  if (!token) {
+    console.warn("[Cashbook] Token မရှိသေးသဖြင့် ဒေတာ ခေါ်ယူခြင်းကို ရပ်တန့်ထားပါသည်။");
+    if (typeof showLogin === "function") showLogin();
+    return;
+  }
 
   var category = document.getElementById("cb-category-filter")?.value || "";
 
@@ -65,6 +78,7 @@ async function loadCashbookData(isSilent, forceRefresh) {
 
     var res = await callApi("getCashbookEntries", {
       shop_id: currentCashbookShop,
+      branch: currentCashbookShop, // Worker Compatibility အတွက် ပူးတွဲပေးပို့ခြင်း
       category: category,
       forceRefresh: forceRefresh
     });
@@ -81,6 +95,11 @@ async function loadCashbookData(isSilent, forceRefresh) {
 
   } catch (err) {
     console.error("Cashbook Load Error:", err);
+    // 💡 Session သက်တမ်းကုန်သွားပါက Login ဖောင်သို့ ပြန်ပို့ပေးခြင်း
+    if (err && err.message && err.message.includes("401")) {
+      if (typeof showLogin === "function") showLogin();
+      return;
+    }
     if (!isSilent && typeof showToast === "function") {
       showToast("ERROR", "ငွေစာရင်း ရယူ၍ မရပါ: " + err.message);
     }
@@ -136,7 +155,7 @@ function renderTableCashbook() {
 
   if (!filteredRows || totalEntries === 0) {
     var shopName = (ALL_CB_SHOPS.find(s => s.id === currentCashbookShop)?.name) || currentCashbookShop.toUpperCase();
-    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-slate-500 font-bold">${shopName} တွင် ငွေစာရင်း မရှိသေးပါ။</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-10 text-slate-500 font-bold">${shopName} တွင် ငွေစာရင်း မရှိသေးပါ။</td></tr>`;
     updatePaginationUICashbook(0);
     return;
   }
@@ -267,10 +286,10 @@ function setModeCashbook(mode) {
 
 async function preloadCatalogData() {
   try {
-    const resGarment = await callApi("getStoreInventory", { shop_id: currentCashbookShop });
+    const resGarment = await callApi("getStoreInventory", { shop_id: currentCashbookShop, branch: currentCashbookShop });
     if (resGarment && resGarment.success) storeGarmentItems = resGarment.data || [];
 
-    const resYarn = await callApi("getYarnInventory", { shop_id: currentCashbookShop });
+    const resYarn = await callApi("getYarnInventory", { shop_id: currentCashbookShop, branch: currentCashbookShop });
     if (resYarn && resYarn.success) storeYarnItems = resYarn.data || [];
   } catch (e) {
     console.warn("Preload Catalog Error:", e);
@@ -408,7 +427,8 @@ function renderLineItemsGrid() {
     `;
   }).join("");
 
-  document.getElementById("cb-bill-subtotal").value = subtotal;
+  var subtotalEl = document.getElementById("cb-bill-subtotal");
+  if (subtotalEl) subtotalEl.value = subtotal;
   recalculateBillingTotals();
 }
 
@@ -447,14 +467,17 @@ function onPaymentInputChangeCashbook(changedType) {
 }
 
 function openEntryModalCashbook() {
+  editingEntryId = null;
   currentBillItems = [];
   setModeCashbook("sale");
+
+  var titleEl = document.getElementById("cb-modal-title");
+  if (titleEl) titleEl.textContent = "New Transaction Entry";
 
   var d = new Date();
   var dateStr = d.toISOString().slice(0, 10);
   document.getElementById("cb-form-date").value = dateStr;
   
-  // 💡 Auto MY preview if needed
   document.getElementById("cb-form-shop-display").value = (ALL_CB_SHOPS.find(s => s.id === currentCashbookShop)?.name) || currentCashbookShop.toUpperCase();
 
   var prefix = currentCashbookShop === "main" ? "MVR" : `VR-${currentCashbookShop.toUpperCase()}`;
@@ -479,7 +502,53 @@ function openEntryModalCashbook() {
   if (modal) modal.classList.remove("hidden");
 }
 
+// 💡 စာရင်းဟောင်း ပြင်ဆင်ရန် ဖွင့်ခြင်း (Edit Entry)
+function openEditModalCashbook(id) {
+  var row = cbActiveData.find(r => r.id === id);
+  if (!row) return;
+
+  editingEntryId = id;
+  currentBillItems = Array.isArray(row.items) ? [...row.items] : [];
+
+  var mode = row.category === "အရောင်း" ? "sale" : 
+             row.category === "အဝယ်" ? "purchase" : 
+             row.category === "အသုံးစရိတ်" ? "expense" : "transfer";
+  setModeCashbook(mode);
+
+  var titleEl = document.getElementById("cb-modal-title");
+  if (titleEl) titleEl.textContent = `Edit Transaction (#${row.voucher_no || row.id})`;
+
+  document.getElementById("cb-form-date").value = row.tx_date || "";
+  document.getElementById("cb-form-shop-display").value = (ALL_CB_SHOPS.find(s => s.id === currentCashbookShop)?.name) || currentCashbookShop.toUpperCase();
+  document.getElementById("cb-form-vrno").value = row.voucher_no || "";
+  document.getElementById("cb-form-desc").value = row.description || "";
+
+  if (mode === "expense") {
+    var subCatSelect = document.getElementById("cb-expense-subcat");
+    if (subCatSelect && row.sub_category) subCatSelect.value = row.sub_category;
+  }
+
+  var netAmount = Number(row.debit || row.credit || 0);
+  document.getElementById("cb-bill-subtotal").value = row.subtotal || netAmount;
+  document.getElementById("cb-bill-discount").value = row.discount || 0;
+  document.getElementById("cb-bill-net").value = netAmount;
+  document.getElementById("cb-pay-cash").value = row.cash_amount || 0;
+  document.getElementById("cb-pay-bank").value = row.bank_amount || 0;
+
+  if (row.bank_name) {
+    var bankNameSelect = document.getElementById("cb-pay-bank-name");
+    if (bankNameSelect) bankNameSelect.value = row.bank_name;
+  }
+
+  preloadCatalogData().then(() => onCategorySelectChangeCashbook());
+  renderLineItemsGrid();
+
+  var modal = document.getElementById("cb-entry-modal");
+  if (modal) modal.classList.remove("hidden");
+}
+
 function closeEntryModalCashbook() {
+  editingEntryId = null;
   var modal = document.getElementById("cb-entry-modal");
   if (modal) modal.classList.add("hidden");
 }
@@ -489,15 +558,17 @@ async function saveEntrySubmitCashbook(e) {
   if (isCbSubmitting) return;
 
   var txDate = document.getElementById("cb-form-date")?.value;
-  var myVal = getMonthYearString(txDate); // 💡 "Oct 26" အလိုအလျောက် တွက်ထုတ်ခြင်း
+  var myVal = getMonthYearString(txDate);
   var subCategoryVal = currentMode === "expense" ? (document.getElementById("cb-expense-subcat")?.value || "အထွေထွေ အသုံးစရိတ်") : "";
 
   var payload = {
+    id: editingEntryId || undefined,
     shop_id: currentCashbookShop,
+    branch: currentCashbookShop,
     tx_date: txDate,
-    my: myVal, // 👈 D1 သို့ ပို့မည့် MY တန်ဖိုး
+    my: myVal,
     category: currentMode === "sale" ? "အရောင်း" : currentMode === "purchase" ? "အဝယ်" : currentMode === "expense" ? "အသုံးစရိတ်" : "ငွေလွှဲ",
-    sub_category: subCategoryVal, // 👈 D1 သို့ ပို့မည့် Subcategory တန်ဖိုး
+    sub_category: subCategoryVal,
     description: document.getElementById("cb-form-desc")?.value.trim(),
     voucher_no: document.getElementById("cb-form-vrno")?.value,
     subtotal: parseCleanNumber(document.getElementById("cb-bill-subtotal")?.value),
@@ -540,7 +611,7 @@ async function deleteEntryCashbook(id) {
   if (!confirm("⚠️ ဤငွေစာရင်းကို အမှန်တကယ် ဖျက်မှာ သေချာပါသလား?")) return;
   try {
     if (typeof toggleLoading === "function") toggleLoading(true);
-    var res = await callApi("deleteCashbookEntry", { id: id });
+    var res = await callApi("deleteCashbookEntry", { id: id, shop_id: currentCashbookShop });
     if (res && res.success) {
       if (typeof showToast === "function") showToast("SUCCESS", "ဖျက်ပြီးပါပြီ။");
       if (typeof window.clearAllApiCache === "function") window.clearAllApiCache();
@@ -589,6 +660,98 @@ function exportCsvCashbook() {
   document.body.removeChild(link);
 }
 
+// 💡 A5 Twin Voucher Print Engine (ဝယ်သူမိတ္တူ + ဆိုင်မိတ္တူ)
+function openPrintModalCashbook(voucherNo) {
+  var row = cbActiveData.find(r => r.voucher_no === voucherNo);
+  if (!row) {
+    alert("ဘောက်ချာ အချက်အလက် ရှာမတွေ့ပါ။");
+    return;
+  }
+
+  var printable = document.getElementById("cb-printable-area");
+  if (!printable) return;
+
+  var shopObj = ALL_CB_SHOPS.find(s => s.id === currentCashbookShop) || { name: "မြကမ္ဘာစိုး ပိုးထည်တိုက်" };
+  var payMethod = "Cash";
+  if (Number(row.cash_amount) > 0 && Number(row.bank_amount) > 0) {
+    payMethod = `Split (Cash: ${formatMoney(row.cash_amount)} + ${row.bank_name || 'Bank'}: ${formatMoney(row.bank_amount)})`;
+  } else if (Number(row.bank_amount) > 0) {
+    payMethod = `${row.bank_name || 'Bank'} (${formatMoney(row.bank_amount)})`;
+  }
+
+  var itemsList = Array.isArray(row.items) && row.items.length > 0 ? row.items : [
+    { item_name: row.description || "ပိုးထည်နှင့် အထည်များ", quantity: 1, unit_price: row.debit || row.credit || 0, total_price: row.debit || row.credit || 0 }
+  ];
+
+  var renderSingleVoucher = function (title) {
+    return `
+      <div class="border border-slate-400 p-4 rounded-lg bg-white text-slate-900 mb-4">
+        <div class="flex justify-between items-start border-b border-slate-300 pb-2 mb-2">
+          <div>
+            <h2 class="font-extrabold text-base text-slate-900">မြကမ္ဘာစိုး ပိုးထည်တိုက်</h2>
+            <p class="text-[10px] text-slate-600">${shopObj.name} | ဖုန်း: 09-xxxxxxxxx</p>
+          </div>
+          <div class="text-right">
+            <span class="inline-block px-2 py-0.5 bg-slate-100 border border-slate-300 rounded text-[10px] font-bold uppercase tracking-wider">${title}</span>
+            <p class="text-[10px] font-mono font-bold mt-1 text-slate-700">VR: ${window.escapeHtml(row.voucher_no || "-")}</p>
+            <p class="text-[10px] text-slate-500">ရက်စွဲ: ${row.tx_date || "-"}</p>
+          </div>
+        </div>
+
+        <div class="text-[11px] mb-2 flex justify-between">
+          <p><span class="font-bold">ဝယ်သူ/အကြောင်းအရာ:</span> ${window.escapeHtml(row.description || "-")}</p>
+          <p><span class="font-bold">ငွေပေးချေမှု:</span> ${window.escapeHtml(payMethod)}</p>
+        </div>
+
+        <table class="w-full text-left text-[10px] border border-slate-300 mb-2">
+          <thead class="bg-slate-100 border-b border-slate-300 font-bold">
+            <tr>
+              <th class="p-1 border-r border-slate-300 w-8 text-center">စဉ်</th>
+              <th class="p-1 border-r border-slate-300">အမျိုးအမည်</th>
+              <th class="p-1 border-r border-slate-300 text-center w-14">အရေအတွက်</th>
+              <th class="p-1 border-r border-slate-300 text-right w-20">နှုန်း</th>
+              <th class="p-1 text-right w-24">စုစုပေါင်း</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsList.map((itm, i) => `
+              <tr class="border-b border-slate-200">
+                <td class="p-1 border-r border-slate-200 text-center">${i + 1}</td>
+                <td class="p-1 border-r border-slate-200 font-bold">${window.escapeHtml(itm.item_name || "-")}</td>
+                <td class="p-1 border-r border-slate-200 text-center font-mono">${itm.quantity || 1}</td>
+                <td class="p-1 border-r border-slate-200 text-right font-mono">${formatMoney(itm.unit_price || 0)}</td>
+                <td class="p-1 text-right font-mono font-bold">${formatMoney(itm.total_price || 0)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+
+        <div class="flex justify-between items-end text-[10px] pt-1">
+          <div class="text-slate-500">
+            <p>ဝယ်ယူအားပေးမှုကို အထူးကျေးဇူးတင်ရှိပါသည်။</p>
+          </div>
+          <div class="text-right space-y-0.5">
+            <p class="font-bold text-xs">ကျသင့်ငွေ စုစုပေါင်း: <span class="font-mono text-sm">${formatMoney(row.debit || row.credit || 0)} ကျပ်</span></p>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  printable.innerHTML = `
+    ${renderSingleVoucher("ဝယ်သူမိတ္တူ (Customer Copy)")}
+    <div class="border-t border-dashed border-slate-400 my-3 text-center text-[10px] text-slate-400 font-mono">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - ✂</div>
+    ${renderSingleVoucher("ဆိုင်မိတ္တူ (Shop Copy)")}
+  `;
+
+  var printModal = document.getElementById("cb-print-modal");
+  if (printModal) printModal.classList.remove("hidden");
+}
+
+function triggerBrowserPrintCashbook() {
+  window.print();
+}
+
 window.CashbookEngine = {
   async init(shopId) {
     currentCashbookShop = shopId || "main";
@@ -599,8 +762,18 @@ window.CashbookEngine = {
       if (!window.viewCache["cashbook"]) {
         try {
           var res = await fetch("views/cashbook.html?v=20261019");
-          if (res.ok) window.viewCache["cashbook"] = await res.text();
-        } catch (e) {}
+          if (res.ok) {
+            window.viewCache["cashbook"] = await res.text();
+          } else {
+            var res2 = await fetch("cashbook.html?v=20261019");
+            if (res2.ok) window.viewCache["cashbook"] = await res2.text();
+          }
+        } catch (e) {
+          try {
+            var resFallback = await fetch("cashbook.html?v=20261019");
+            if (resFallback.ok) window.viewCache["cashbook"] = await resFallback.text();
+          } catch (err) {}
+        }
       }
       if (window.viewCache["cashbook"]) container.innerHTML = window.viewCache["cashbook"];
     }
@@ -617,6 +790,7 @@ window.CashbookEngine = {
   onSearchInput: onSearchInputCashbook,
   changePage: changePageCashbook,
   openEntryModal: openEntryModalCashbook,
+  openEditModal: openEditModalCashbook,
   closeEntryModal: closeEntryModalCashbook,
   setMode: setModeCashbook,
   addLineItem: addLineItemCashbook,
@@ -628,7 +802,7 @@ window.CashbookEngine = {
   saveEntrySubmit: saveEntrySubmitCashbook,
   deleteEntry: deleteEntryCashbook,
   exportCsv: exportCsvCashbook,
-  openPrintModal: async function(vn) { /* ... Print Modal Logic ... */ },
+  openPrintModal: openPrintModalCashbook,
   closePrintModal: function() { document.getElementById("cb-print-modal")?.classList.add("hidden"); },
-  triggerBrowserPrint: function() { /* ... */ }
+  triggerBrowserPrint: triggerBrowserPrintCashbook
 };

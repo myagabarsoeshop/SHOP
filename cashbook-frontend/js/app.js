@@ -2,15 +2,13 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - MAIN SPA ROUTER & CONTROLLER
  * File: js/app.js (Location: cashbook-frontend/js/app.js)
- * 💡 Features: 🛡️ Zero 404 Missing View Errors, RBAC & Multi-Branch Support
+ * 💡 Features: 🛡️ Zero Flicker, Unified Router, Stable Token & RBAC Support
  * ==============================================================================
  */
 
 "use strict";
 
 window.viewCache = window.viewCache || {};
-
-// Cloudflare Worker API Endpoint (သင့်အလိုက် ပြင်ဆင်ရန်)
 const API_BASE_URL = "https://shop.myagabarsoeshop.workers.dev/api";
 
 /**
@@ -40,9 +38,10 @@ window.formatCategoryBadgeHtml = function (categoryStr) {
 };
 
 /**
- * 💡 Initialize ERP Application Shell
+ * 💡 Initialize ERP Application Shell (Stable Class Management)
  */
 function initApp() {
+  // 🎯 Use unified 'token' key matching auth.js
   const token = localStorage.getItem('token') || localStorage.getItem('golden_auth_token');
   const userObj = localStorage.getItem('user');
   let username = 'Admin';
@@ -50,25 +49,22 @@ function initApp() {
   if (userObj) {
     try {
       const parsed = JSON.parse(userObj);
-      username = parsed.username || 'Admin';
+      username = parsed.username || parsed.name || 'Admin';
     } catch (e) {}
-  } else {
-    username = localStorage.getItem('golden_user_name') || 'Admin';
   }
 
   if (!token) {
-    document.documentElement.className = 'dark not-authed';
-    // မူလ Login စာမျက်နှာသို့ ပို့ဆောင်ရန် (index.html သို့မဟုတ် login.html)
-    if (!window.location.pathname.includes('index.html') && !window.location.pathname.endsWith('/')) {
-      window.location.href = 'index.html';
-    }
+    document.documentElement.classList.remove('is-authed');
+    document.documentElement.classList.add('dark', 'not-authed');
     return;
   }
 
-  document.documentElement.className = 'dark is-authed';
+  document.documentElement.classList.remove('not-authed');
+  document.documentElement.classList.add('dark', 'is-authed');
+  
   updateHeaderMetadata(username);
 
-  // စတင်ဖွင့်ချိန်တွင် Dashboard သို့မဟုတ် Store သို့ ဦးတည်မည်
+  // 🎯 Default to Dashboard smoothly without double loading
   switchTab('dashboard');
 }
 
@@ -77,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
- * 💡 Dynamic Header Calendar FY & Time Indicator
+ * 💡 Dynamic Header Calendar FY & Time Indicator (Optimized Interval)
  */
 function updateHeaderMetadata(username) {
   const metaEl = document.getElementById('live-metadata');
@@ -87,7 +83,7 @@ function updateHeaderMetadata(username) {
   if (!activeUser) {
     const userObj = localStorage.getItem('user');
     if (userObj) {
-      try { activeUser = JSON.parse(userObj).username; } catch(e) {}
+      try { activeUser = JSON.parse(userObj).username || JSON.parse(userObj).name; } catch(e) {}
     }
     activeUser = activeUser || 'Admin';
   }
@@ -109,21 +105,22 @@ function updateHeaderMetadata(username) {
 }
 
 if (!window.headerClockInterval) {
+  // 🎯 Updated to 10 seconds to prevent unnecessary CPU/DOM repaints
   window.headerClockInterval = setInterval(() => {
     updateHeaderMetadata();
   }, 10000);
 }
 
 /**
- * 💡 Central Tab & View Router Engine (Zero 404 Errors)
+ * 💡 Central Tab & View Router Engine (Single Source of Truth)
  */
 async function switchTab(tabId) {
   if (!tabId) tabId = 'dashboard';
 
   const token = localStorage.getItem('token') || localStorage.getItem('golden_auth_token');
   if (!token) {
-    document.documentElement.className = 'dark not-authed';
-    window.location.href = 'index.html';
+    document.documentElement.classList.remove('is-authed');
+    document.documentElement.classList.add('dark', 'not-authed');
     return;
   }
 

@@ -254,8 +254,8 @@ function renderTableStore() {
             '<button onclick="StoreEngine.openEditModal(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-indigo-400 hover:text-indigo-300 transition" title="Edit Item">' +
               '<i class="fa-solid fa-pen-to-square"></i>' +
             '</button>' +
-            '<!-- 🗑️ Delete Item -->' +
-            '<button onclick="StoreEngine.deleteItem(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-rose-400 hover:text-rose-300 transition" title="Delete Item">' +
+            '<!-- 🗑️ Remove Item (CSS Permission Rule မငြိစေရန် removeEntry ဟု သုံးထားသည်) -->' +
+            '<button onclick="StoreEngine.removeEntry(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-rose-400 hover:text-rose-300 transition" title="Remove Item">' +
               '<i class="fa-solid fa-trash-can"></i>' +
             '</button>' +
           '</div>' +
@@ -446,7 +446,7 @@ async function saveItemSubmitStore(e) {
   }
 }
 
-async function deleteItemStore(itemCode) {
+async function removeEntryStore(itemCode) {
   if (!confirm(`⚠️ အမှန်တကယ် ဖျက်မှာ သေချာပါသလား (${itemCode})?`)) return;
 
   try {
@@ -536,7 +536,6 @@ async function saveTransferSubmitStore(e) {
     closeTransferModalStore();
     if (typeof toggleLoading === 'function') toggleLoading(true);
 
-    // 💡 D1 ဇယားဘက်တွင် transferred_at နှင့် transferred_by ကို မှတ်တမ်းတင်ရန် လက်ရှိအချိန်နှင့် User ကို ပေးပို့ခြင်း
     var currentUser = "Admin";
     try {
       var storedUser = localStorage.getItem('golden_user');
@@ -700,7 +699,8 @@ window.StoreEngine = {
   openEditModal: openEditModalStore,
   closeItemModal: closeItemModalStore,
   saveItemSubmit: saveItemSubmitStore,
-  deleteItem: deleteItemStore,
+  removeEntry: removeEntryStore,
+  deleteItem: removeEntryStore, // Backwards compatibility
   openStockModal: openStockModalStore,
   closeStockModal: closeStockModalStore,
   saveStockSubmit: saveStockSubmitStore,

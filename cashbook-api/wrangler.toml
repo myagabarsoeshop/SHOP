@@ -1,5 +1,5 @@
 # ==============================================================================
-# GOLDEN ERP SYSTEM - CLOUDFLARE WORKER CONFIGURATION
+# MYA GABAR SOE SHOP - CLOUDFLARE WORKER CONFIGURATION
 # File: wrangler.toml  
 # 💡 Features: Strict Production CORS Whitelist, D1 Database Binding, 
 #              Automated Cron Triggers for Database Maintenance

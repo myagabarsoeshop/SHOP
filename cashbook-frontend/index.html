@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#090d16">
   <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - CASH BOOK SYSTEM</title>
 
-  <!-- 💡 Immediate Auth Check to prevent UI Flash (FOUC) -->
+  <!-- 💡 Immediate Auth Check: token ကို Standard အဖြစ် စစ်ဆေးပြီး golden_auth_token အဟောင်းပါ ကျန်ခဲ့လျှင် အလုပ်လုပ်စေရန် ထည့်သွင်းထားသည် -->
   <script>
     (function () {
-      var token = localStorage.getItem('golden_auth_token');
+      var token = localStorage.getItem('token') || localStorage.getItem('golden_auth_token');
       if (token) {
         document.documentElement.className = 'dark is-authed';
       } else {
@@ -54,7 +54,7 @@
     }
   </style>
 
-  <!-- 🎯 Cache-Busting Version အသစ်သို့ ပြောင်းထားသည် -->
+  <!-- 🎯 Cache-Busting Version -->
   <link rel="stylesheet" href="css/tailwind.min.css?v=20261008">
   <link rel="stylesheet" href="css/fontawesome.min.css?v=20261008">
   <link rel="stylesheet" href="css/style.css?v=20261008">
@@ -167,7 +167,7 @@
 
   <!-- ==================== 2. MAIN WORKSPACE ==================== -->
   <div id="erp-workspace" class="hidden h-full w-full">
-    <!-- Sidebar Navigation (Subtle Border Right) -->
+    <!-- Sidebar Navigation -->
     <aside class="w-64 bg-[#0c1322] border-r border-slate-800/40 flex flex-col h-full shadow-2xl shrink-0">
       
       <!-- 💎 PRO SIDEBAR HEADER -->
@@ -197,7 +197,7 @@
         </button>
       </div>
 
-     <!-- Left sidebar Menu --> 
+      <!-- Left sidebar Menu --> 
       <nav class="flex-1 px-2.5 py-2.5 space-y-0.5 overflow-y-auto" id="sidebar-nav">
         <button onclick="switchTab('dashboard')" id="btn-dashboard"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
@@ -205,7 +205,9 @@
         </button>
 
         <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Main Books</p>
-        <button onclick="switchTab('bank')" id="btn-bank"
+        
+        <!-- 💡 Main Home Shop: switchTab('main') နှင့် id='btn-main' အဖြစ် ညှိထားသည် -->
+        <button onclick="switchTab('main')" id="btn-main"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
           <i class="fa-solid fa-building-columns text-amber-400 w-4 text-center"></i> Main Home Shop
         </button>
@@ -230,7 +232,7 @@
           <i class="fa-solid fa-shop text-rose-400 w-4 text-center"></i> ဆိုင်ခွဲ (၅)
         </button>
 
-   <!-- 💡 STORE & INVENTORY MODULE -->
+        <!-- 💡 STORE & INVENTORY MODULE -->
         <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Store & Inventory</p>
         <button onclick="switchTab('store')" id="btn-store"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
@@ -319,52 +321,18 @@
   <script src="js/auth.js?v=20261008" defer></script>
   <script src="js/app.js?v=20261008" defer></script>
 
-  <!-- 💡 Tab Switching & Routing Controller -->
+  <!-- 💡 Unified Network, Metadata & Logout Controllers -->
   <script>
-    window.switchTab = function(tabName) {
-      const pageTitle = document.getElementById("page-title");
-      
-      document.querySelectorAll(".nav-btn").forEach(btn => {
-        btn.classList.remove("bg-indigo-600/30", "text-white", "font-bold");
-      });
-      const activeBtn = document.getElementById("btn-" + tabName);
-      if (activeBtn) {
-        activeBtn.classList.add("bg-indigo-600/30", "text-white", "font-bold");
-      }
+    // 💡 Logout Handler (token နှင့် user အားလုံးကို ပြေပြစ်စွာ ရှင်းလင်းပေးသည်)
+    function handleLogout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('golden_auth_token');
+      localStorage.removeItem('golden_user');
+      window.location.reload();
+    }
 
-      if (tabName === "store") {
-        if (pageTitle) pageTitle.textContent = "ကုန်ချောစတို စီမံခန့်ခွဲမှု (Store & Inventory)";
-        if (window.StoreEngine) {
-          window.StoreEngine.init("main");
-        }
-      } else if (tabName === "dashboard") {
-        if (pageTitle) pageTitle.textContent = "Home Dashboard";
-        const viewContainer = document.getElementById("view-container");
-        if (viewContainer) {
-          viewContainer.innerHTML = `
-            <div class="p-12 text-center text-slate-500 flex flex-col items-center justify-center">
-              <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-2xl mb-4">
-                <i class="fa-solid fa-gauge-high"></i>
-              </div>
-              <h3 class="text-base font-bold text-slate-200">မြကမ္ဘာစိုး ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
-              <p class="text-xs text-slate-400 mt-1 max-w-md">စတိုစာရင်းများနှင့် ပစ္စည်းလက်ကျန်များကို စတင်ကြည့်ရှုရန် ဘယ်ဘက်ရှိ <span class="text-amber-400 font-bold">'ကုန်ချောစတို (Store)'</span> မီနူးကို နှိပ်ပါခင်ဗျာ။</p>
-              <button onclick="switchTab('store')" class="mt-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20">
-                <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတိုသို့ သွားမည်
-              </button>
-            </div>
-          `;
-        }
-      } else {
-        if (pageTitle) pageTitle.textContent = tabName.toUpperCase();
-        if (window.AppRouter && typeof window.AppRouter.switchTab === "function") {
-          window.AppRouter.switchTab(tabName);
-        }
-      }
-    };
-  </script>
-
-  <!-- 💡 Real-Time Network & Dynamic FY 2026 Clock Engine -->
-  <script>
+    // 💡 Network & Wifi Status Check
     function updateNetworkStatus() {
       const netStatus = document.getElementById('network-status');
       const netIcon = document.getElementById('network-icon');
@@ -382,6 +350,7 @@
       }
     }
 
+    // 💡 Dynamic Header Date & Time Indicator (user သို့မဟုတ် golden_user နှစ်မျိုးလုံး ထောက်ပံ့သည်)
     function renderLiveHeaderMetadata() {
       const metaEl = document.getElementById('live-metadata');
       if (!metaEl) return;
@@ -402,7 +371,7 @@
 
       let userName = 'Admin';
       try {
-        const storedUser = localStorage.getItem('golden_user');
+        const storedUser = localStorage.getItem('user') || localStorage.getItem('golden_user');
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
           userName = parsed.name || parsed.username || 'Admin';
@@ -419,16 +388,7 @@
       updateNetworkStatus();
       renderLiveHeaderMetadata();
       setInterval(renderLiveHeaderMetadata, 10000);
-
-      setTimeout(() => {
-        if (document.documentElement.classList.contains('is-authed')) {
-          switchTab('store');
-        }
-      }, 300);
     });
-
-    updateNetworkStatus();
-    renderLiveHeaderMetadata();
   </script>
 </body>
 

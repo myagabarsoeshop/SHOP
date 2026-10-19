@@ -594,7 +594,7 @@ function exportCsvYarn() {
            window.safeCsvCell(r.yarn_type || "") + "," +
            window.safeCsvCell(r.color_code || "") + "," +
            window.safeCsvCell(r.color_name || "") + "," +
-           window.safeCsvCell(r.unit || "ထည်") + "," +
+           window.safeCsvCell(r.unit || "ထုပ်") + "," + // 💡 Default Unit ကို "ထုပ်" ဟု ပြင်ထားသည်
            (r.current_stock || 0) + "," +
            (r.cost_price || 0) + "," +
            (r.retail_price || 0) + "," +
@@ -657,6 +657,7 @@ window.YarnEngine = {
   closeItemModal: closeItemModalYarn,
   saveItemSubmit: saveItemSubmitYarn,
   removeEntry: removeEntryYarn,
+  deleteItem: removeEntryYarn, // 💡 Compatibility အတွက် ထည့်သွင်းထားသည်
   openStockModal: openStockModalYarn,
   closeStockModal: closeStockModalYarn,
   saveStockSubmit: saveStockSubmitYarn,

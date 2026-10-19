@@ -120,7 +120,7 @@
     </table>
   </div>
 
-  <!-- ၄။ Pagination Controller Tray (အပေါ်က Toolbar နှင့် Class & Border အရောင် အတိအကျ တူညီစေရန် ပြင်ဆင်ထားသည်) -->
+  <!-- ၄။ Pagination Controller Tray -->
   <div class="control-toolbar p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-slate-800/60 bg-[#0e172a] shadow-lg">
     <div id="store-pagination-info" class="text-xs font-semibold text-slate-400 tracking-wide">Showing entries...</div>
     <div class="flex items-center gap-2">
@@ -232,7 +232,7 @@
   </div>
 </div>
 
-<!-- 💡 ၆။ INTER-BRANCH STOCK TRANSFER MODAL -->
+<!-- 💡 ၆။ INTER-BRANCH STOCK TRANSFER MODAL (ခလုတ်များ ပေါ်လွင်ထင်ရှားစေရန် ပြင်ဆင်ထားသည်) -->
 <div id="store-transfer-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
   <div class="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 border border-slate-800">
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
@@ -278,9 +278,10 @@
         <input type="text" id="transfer-remark" placeholder="ကားဂိတ်တင် / အမည် / လက်ဆင့်ကမ်း စသည်..." class="w-full">
       </div>
 
+      <!-- 💡 ပေါ်လွင်ထင်ရှားသော Cancel နှင့် Confirm Transfer ခလုတ်များ -->
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
-        <button type="button" onclick="StoreEngine.closeTransferModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>
-        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/20 transition-all flex items-center gap-1.5 cursor-pointer">
+        <button type="button" onclick="StoreEngine.closeTransferModal()" class="px-4 py-2.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-all cursor-pointer">Cancel</button>
+        <button type="submit" class="px-5 py-2.5 rounded-lg text-xs font-black bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/30 transition-all flex items-center gap-1.5 cursor-pointer">
           <i class="fa-solid fa-right-left"></i> <span>Confirm Transfer</span>
         </button>
       </div>

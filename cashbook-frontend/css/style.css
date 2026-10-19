@@ -182,7 +182,7 @@ div#erp-workspace header {
 }
 
 /* ==============================================================================
-   💡 2. RADIANT TOOLBAR & ELEVATED TABLE CONTAINER
+   💡 2. RADIANT TOOLBAR & ELEVATED TABLE CONTAINER (အကျယ်အဝန်း ဘယ်ညာရွှေ့နိုင်ရန် ပြင်ဆင်ခြင်း)
    ============================================================================== */
 .control-toolbar,
 div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
@@ -197,7 +197,7 @@ div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
   border-radius: 0.875rem !important; 
   border: 1.5px solid var(--border-medium) !important; 
   box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 var(--border-subtle) !important;
-  overflow: hidden !important;
+  overflow-x: auto !important; /* 👈 overflow: hidden အစား overflow-x: auto သို့ ပြောင်းပေးလိုက်ပါ */
 }
 
 /* Soften Harsh Borders Globally */

@@ -2,7 +2,7 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - ALL-IN-ONE WORKER
  * File: cashbook-api/worker.js
- * Standard: Stock Transfer Engine & Multi-Branch Inventory Filtering
+ * Standard: Stock Transfer Engine & Multi-Branch Inventory (Garments & Yarns)
  * ==============================================================================
  */
 
@@ -161,13 +161,11 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 2. GET STORE INVENTORY (ဆိုင်အလိုက် အမှန်တကယ်ရှိသော စာရင်းသာ ဆွဲထုတ်ခြင်း)
+        // 🎯 2. GARMENT STORE - GET INVENTORY
         // ====================================================================
         if (action === "getStoreInventory") {
           const shopId = String(body.shop_id || url.searchParams.get("shop_id") || "main").trim().toLowerCase();
 
-          // ပင်မဆိုင် (main) ဖြစ်ပါက Catalog ပစ္စည်းအားလုံးကို ပြပေးမည်
-          // ဆိုင်ခွဲများ (shop1..5) ဖြစ်ပါက ထိုဆိုင်သို့ တကယ်ရောက်ရှိထားသော ပစ္စည်းများကိုသာ ပြပေးမည်
           let query = "";
           if (shopId === "main") {
             query = `
@@ -220,7 +218,7 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 3. SAVE ITEM & INITIAL STOCK
+        // 🎯 3. GARMENT STORE - SAVE ITEM & INITIAL STOCK
         // ====================================================================
         if (action === "saveItem") {
           const itemCode = String(body.item_code || "").trim().toUpperCase();
@@ -258,7 +256,6 @@ export default {
             `).bind(itemCode, itemName, category, subCategory, colorCode, unit, retailPrice, wholesalePrice, remark).run();
           }
 
-          // စတိုလက်ကျန် ပါလာပါက အလိုအလျောက် သွင်းခြင်း
           if (body.shop_id) {
             const shopId = String(body.shop_id).trim().toLowerCase();
             const stock = Number(body.current_stock) || 0;
@@ -286,7 +283,7 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 4. STOCK TRANSFER (ဆိုင်ခွဲအချင်းချင်း အပြန်အလှန် ပစ္စည်းလွှဲပြောင်းမှု)
+        // 🎯 4. GARMENT STORE - STOCK TRANSFER
         // ====================================================================
         if (action === "transferStock") {
           const itemCode = String(body.item_code || "").trim().toUpperCase();
@@ -309,7 +306,6 @@ export default {
             );
           }
 
-          // ၁။ မူရင်းဆိုင်တွင် လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
           const sourceInv = await db.prepare(
             "SELECT id, current_stock, cost_price FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
           ).bind(fromShop, itemCode).first();
@@ -321,12 +317,10 @@ export default {
             );
           }
 
-          // ၂။ မူရင်းဆိုင်မှ အရေအတွက် နုတ်ယူခြင်း
           await db.prepare(
             "UPDATE shop_inventory SET current_stock = current_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
           ).bind(qty, sourceInv.id).run();
 
-          // ၃။ လက်ခံမည့်ဆိုင်သို့ အရေအတွက် ပေါင်းထည့်ခြင်း (မရှိလျှင် အသစ်ဖန်တီးခြင်း)
           const destInv = await db.prepare(
             "SELECT id FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
           ).bind(toShop, itemCode).first();
@@ -341,7 +335,6 @@ export default {
             ).bind(toShop, itemCode, qty, sourceInv.cost_price, `Transferred from ${fromShop.toUpperCase()}`).run();
           }
 
-          // ၄။ Audit Log အဖြစ် Transfer မှတ်တမ်း သိမ်းဆည်းခြင်း
           try {
             await db.prepare(
               "INSERT INTO stock_transfers (item_code, from_shop, to_shop, quantity, remark) VALUES (?, ?, ?, ?, ?)"
@@ -355,7 +348,7 @@ export default {
         }
 
         // ====================================================================
-        // 🎯 5. UPDATE STOCK
+        // 🎯 5. GARMENT STORE - UPDATE STOCK
         // ====================================================================
         if (action === "updateStock") {
           const shopId = String(body.shop_id || "main").trim().toLowerCase();
@@ -380,6 +373,247 @@ export default {
 
           return new Response(
             JSON.stringify({ success: true, message: "စတိုလက်ကျန် အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🎯 6. GARMENT STORE - DELETE ITEM
+        // ====================================================================
+        if (action === "deleteItem") {
+          const shopId = String(body.shop_id || "main").trim().toLowerCase();
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+
+          await db.prepare(
+            "DELETE FROM shop_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(shopId, itemCode).run();
+
+          return new Response(
+            JSON.stringify({ success: true, message: "ပစ္စည်း စာရင်း ဖျက်ပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🧶 7. YARN STORE - GET INVENTORY
+        // ====================================================================
+        if (action === "getYarnInventory") {
+          const shopId = String(body.shop_id || url.searchParams.get("shop_id") || "main").trim().toLowerCase();
+
+          let query = "";
+          if (shopId === "main") {
+            query = `
+              SELECT 
+                y.id AS item_id,
+                y.item_code,
+                y.yarn_type,
+                y.color_code,
+                y.color_name,
+                y.unit,
+                COALESCE(y.retail_price, 0) AS retail_price,
+                COALESCE(y.wholesale_price, 0) AS wholesale_price,
+                COALESCE(s.current_stock, 0) AS current_stock,
+                COALESCE(s.cost_price, 0) AS cost_price,
+                COALESCE(s.remark, '') AS remark
+              FROM yarn_items y
+              LEFT JOIN yarn_inventory s 
+                ON UPPER(y.item_code) = UPPER(s.item_code) AND LOWER(s.shop_id) = ?
+              ORDER BY y.id ASC;
+            `;
+          } else {
+            query = `
+              SELECT 
+                y.id AS item_id,
+                y.item_code,
+                y.yarn_type,
+                y.color_code,
+                y.color_name,
+                y.unit,
+                COALESCE(y.retail_price, 0) AS retail_price,
+                COALESCE(y.wholesale_price, 0) AS wholesale_price,
+                s.current_stock,
+                s.cost_price,
+                COALESCE(s.remark, '') AS remark
+              FROM yarn_inventory s
+              INNER JOIN yarn_items y 
+                ON UPPER(y.item_code) = UPPER(s.item_code)
+              WHERE LOWER(s.shop_id) = ?
+              ORDER BY y.id ASC;
+            `;
+          }
+
+          const { results } = await db.prepare(query).bind(shopId).all();
+          return new Response(
+            JSON.stringify({ success: true, shop_id: shopId, data: results || [] }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🧶 8. YARN STORE - SAVE ITEM & STOCK
+        // ====================================================================
+        if (action === "saveYarnItem") {
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const yarnType = String(body.yarn_type || "ယုံချည်").trim();
+          const colorCode = String(body.color_code || "").trim();
+          const colorName = String(body.color_name || "").trim();
+          const unit = String(body.unit || "ထုပ်").trim();
+          const retailPrice = Number(body.retail_price) || 0;
+          const wholesalePrice = Number(body.wholesale_price) || 0;
+          const remark = String(body.remark || "").trim();
+
+          if (!itemCode || !colorName) {
+            return new Response(
+              JSON.stringify({ success: false, message: "ချည်ကုတ်နှင့် အရောင်အမည် ထည့်သွင်းပေးပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          const existingItem = await db.prepare(
+            "SELECT id FROM yarn_items WHERE UPPER(item_code) = ?"
+          ).bind(itemCode).first();
+
+          if (existingItem) {
+            await db.prepare(`
+              UPDATE yarn_items SET
+                yarn_type = ?, color_code = ?, color_name = ?, unit = ?,
+                retail_price = ?, wholesale_price = ?, remark = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `).bind(yarnType, colorCode, colorName, unit, retailPrice, wholesalePrice, remark, existingItem.id).run();
+          } else {
+            await db.prepare(`
+              INSERT INTO yarn_items (item_code, yarn_type, color_code, color_name, unit, retail_price, wholesale_price, remark, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            `).bind(itemCode, yarnType, colorCode, colorName, unit, retailPrice, wholesalePrice, remark).run();
+          }
+
+          if (body.shop_id) {
+            const shopId = String(body.shop_id).trim().toLowerCase();
+            const stock = Number(body.current_stock) || 0;
+            const cost = Number(body.cost_price) || 0;
+
+            const existingInv = await db.prepare(
+              "SELECT id FROM yarn_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+            ).bind(shopId, itemCode).first();
+
+            if (existingInv) {
+              await db.prepare(
+                "UPDATE yarn_inventory SET current_stock = ?, cost_price = ?, remark = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+              ).bind(stock, cost, remark || "Updated", existingInv.id).run();
+            } else {
+              await db.prepare(
+                "INSERT INTO yarn_inventory (shop_id, item_code, current_stock, cost_price, remark, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+              ).bind(shopId, itemCode, stock, cost, remark || "Initial").run();
+            }
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: "ချည်နှင့် စတိုလက်ကျန် သိမ်းဆည်းပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🧶 9. YARN STORE - STOCK TRANSFER
+        // ====================================================================
+        if (action === "transferYarnStock") {
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const fromShop = String(body.from_shop || "").trim().toLowerCase();
+          const toShop = String(body.to_shop || "").trim().toLowerCase();
+          const qty = Number(body.quantity) || 0;
+          const remark = String(body.remark || "").trim();
+
+          if (!itemCode || !fromShop || !toShop || qty <= 0) {
+            return new Response(
+              JSON.stringify({ success: false, message: "လွှဲပြောင်းမည့် အချက်အလက်များ မပြည့်စုံပါ။" }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          const sourceInv = await db.prepare(
+            "SELECT id, current_stock, cost_price FROM yarn_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(fromShop, itemCode).first();
+
+          if (!sourceInv || sourceInv.current_stock < qty) {
+            return new Response(
+              JSON.stringify({ success: false, message: `မူရင်းဆိုင်တွင် လက်ကျန် မလုံလောက်ပါ (လက်ရှိ: ${sourceInv ? sourceInv.current_stock : 0})` }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+
+          await db.prepare(
+            "UPDATE yarn_inventory SET current_stock = current_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+          ).bind(qty, sourceInv.id).run();
+
+          const destInv = await db.prepare(
+            "SELECT id FROM yarn_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(toShop, itemCode).first();
+
+          if (destInv) {
+            await db.prepare(
+              "UPDATE yarn_inventory SET current_stock = current_stock + ?, cost_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            ).bind(qty, sourceInv.cost_price, destInv.id).run();
+          } else {
+            await db.prepare(
+              "INSERT INTO yarn_inventory (shop_id, item_code, current_stock, cost_price, remark, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            ).bind(toShop, itemCode, qty, sourceInv.cost_price, `Transferred from ${fromShop.toUpperCase()}`).run();
+          }
+
+          try {
+            await db.prepare(
+              "INSERT INTO yarn_transfers (item_code, from_shop, to_shop, quantity, remark) VALUES (?, ?, ?, ?, ?)"
+            ).bind(itemCode, fromShop, toShop, qty, remark).run();
+          } catch (e) {}
+
+          return new Response(
+            JSON.stringify({ success: true, message: `ချည် (${qty}) ကို ${toShop.toUpperCase()} သို့ အောင်မြင်စွာ လွှဲပြောင်းပြီးပါပြီ!` }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🧶 10. YARN STORE - UPDATE STOCK ONLY
+        // ====================================================================
+        if (action === "updateYarnStock") {
+          const shopId = String(body.shop_id || "main").trim().toLowerCase();
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+          const stock = Number(body.current_stock) || 0;
+          const cost = Number(body.cost_price) || 0;
+          const remark = String(body.remark || "").trim();
+
+          const existingInv = await db.prepare(
+            "SELECT id FROM yarn_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(shopId, itemCode).first();
+
+          if (existingInv) {
+            await db.prepare(
+              "UPDATE yarn_inventory SET current_stock = ?, cost_price = ?, remark = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            ).bind(stock, cost, remark, existingInv.id).run();
+          } else {
+            await db.prepare(
+              "INSERT INTO yarn_inventory (shop_id, item_code, current_stock, cost_price, remark, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            ).bind(shopId, itemCode, stock, cost, remark).run();
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: "ချည်စတိုလက်ကျန် အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ!" }),
+            { headers: corsHeaders }
+          );
+        }
+
+        // ====================================================================
+        // 🧶 11. YARN STORE - DELETE ITEM
+        // ====================================================================
+        if (action === "deleteYarnItem") {
+          const shopId = String(body.shop_id || "main").trim().toLowerCase();
+          const itemCode = String(body.item_code || "").trim().toUpperCase();
+
+          await db.prepare(
+            "DELETE FROM yarn_inventory WHERE LOWER(shop_id) = ? AND UPPER(item_code) = ?"
+          ).bind(shopId, itemCode).run();
+
+          return new Response(
+            JSON.stringify({ success: true, message: "ချည် စာရင်း ဖျက်ပြီးပါပြီ!" }),
             { headers: corsHeaders }
           );
         }

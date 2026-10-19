@@ -151,7 +151,45 @@ async function switchTab(tabId) {
   }
 
   // ==========================================================================
-  // 🎯 3. HOME DASHBOARD
+  // 💰 3. CASHBOOK BRANCHES (Main Home Shop & ဆိုင်ခွဲ ၁ မှ ၅ ထိ ငွေစာရင်းများ)
+  // ==========================================================================
+  const cashbookShops = ['bank', 'shop1', 'shop2', 'shop3', 'shop4', 'shop5'];
+  if (cashbookShops.includes(tabId)) {
+    const shopTitles = {
+      'bank': 'Main Home Shop (ပင်မဆိုင် ငွေစာရင်း)',
+      'shop1': 'ဆိုင်ခွဲ (၁) - အရောင်းနှင့် ငွေစာရင်း',
+      'shop2': 'ဆိုင်ခွဲ (၂) - အရောင်းနှင့် ငွေစာရင်း',
+      'shop3': 'ဆိုင်ခွဲ (၃) - အရောင်းနှင့် ငွေစာရင်း',
+      'shop4': 'ဆိုင်ခွဲ (၄) - အရောင်းနှင့် ငွေစာရင်း',
+      'shop5': 'ဆိုင်ခွဲ (၅) - အရောင်းနှင့် ငွေစာရင်း'
+    };
+
+    const currentTitle = shopTitles[tabId] || "ငွေစာရင်း (Cash Book)";
+    if (titleEl) titleEl.textContent = currentTitle;
+
+    // 💡 CashbookEngine အသင့်ရှိပါက တိုက်ရိုက် မောင်းနှင်မည် (သို့မဟုတ် သပ်ရပ်သော Safe Loading ပြမည်)
+    if (window.CashbookEngine) {
+      await window.CashbookEngine.init(tabId);
+    } else {
+      if (container) {
+        container.innerHTML = `
+          <div style="padding-top: 10px;" class="space-y-4 animate-in fade-in duration-200">
+            <div class="p-12 text-center text-slate-500 bg-[#0e172a] border border-slate-800 rounded-3xl flex flex-col items-center justify-center shadow-xl">
+              <div class="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-400 text-2xl mb-4">
+                <i class="fa-solid fa-cash-register"></i>
+              </div>
+              <h3 class="text-base font-bold text-slate-200">${currentTitle}</h3>
+              <p class="text-xs text-slate-400 mt-1 max-w-md">ငွေစာရင်းစနစ် (cashbook.js & cashbook.html) ကို စတင်ချိတ်ဆက်နေပါသည်...</p>
+            </div>
+          </div>
+        `;
+      }
+    }
+    return;
+  }
+
+  // ==========================================================================
+  // 🎯 4. HOME DASHBOARD
   // ==========================================================================
   if (tabId === 'dashboard') {
     if (titleEl) titleEl.textContent = "Home Dashboard";
@@ -180,39 +218,25 @@ async function switchTab(tabId) {
   }
 
   // ==========================================================================
-  // 🎯 4. MAIN BOOKS (Bank & Shop 1..5) & OTHERS (Safe Non-Crash View)
+  // 🎯 5. REPORTS & SYSTEM SETTINGS
   // ==========================================================================
-  const shopTitles = {
-    'bank': 'Main Home Shop (ပင်မဆိုင် ငွေစာရင်း)',
-    'shop1': 'ဆိုင်ခွဲ (၁) - အရောင်းနှင့် ငွေစာရင်း',
-    'shop2': 'ဆိုင်ခွဲ (၂) - အရောင်းနှင့် ငွေစာရင်း',
-    'shop3': 'ဆိုင်ခွဲ (၃) - အရောင်းနှင့် ငွေစာရင်း',
-    'shop4': 'ဆိုင်ခွဲ (၄) - အရောင်းနှင့် ငွေစာရင်း',
-    'shop5': 'ဆိုင်ခွဲ (၅) - အရောင်းနှင့် ငွေစာရင်း',
+  const otherTitles = {
     'report-financial': 'Financial Reports (ဘဏ္ဍာရေး အစီရင်ခံစာများ)',
     'settings': 'System Settings (စနစ် ဆက်တင်များ)'
   };
 
-  const currentTitle = shopTitles[tabId] || tabId.toUpperCase();
-  if (titleEl) titleEl.textContent = currentTitle;
+  const otherTitle = otherTitles[tabId] || tabId.toUpperCase();
+  if (titleEl) titleEl.textContent = otherTitle;
 
   if (container) {
     container.innerHTML = `
       <div style="padding-top: 10px;" class="space-y-4 animate-in fade-in duration-200">
         <div class="p-12 text-center text-slate-500 bg-[#0e172a] border border-slate-800 rounded-3xl flex flex-col items-center justify-center shadow-xl">
-          <div class="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-400 text-2xl mb-4">
-            <i class="fa-solid fa-cash-register"></i>
+          <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-2xl mb-4">
+            <i class="fa-solid fa-chart-pie"></i>
           </div>
-          <h3 class="text-base font-bold text-slate-200">${currentTitle}</h3>
-          <p class="text-xs text-slate-400 mt-1 max-w-md">ဤ စာရင်းဇယားအပိုင်းကို cashbook.js တည်ဆောက်ပြီးပါက ချိတ်ဆက်အသုံးပြုနိုင်မည် ဖြစ်ပါသည်။</p>
-          <div class="flex items-center gap-2.5 mt-4">
-            <button onclick="switchTab('store')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 transition cursor-pointer">
-              <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတို
-            </button>
-            <button onclick="switchTab('yarn')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 transition cursor-pointer">
-              <i class="fa-solid fa-scroll"></i> ချည်စတို
-            </button>
-          </div>
+          <h3 class="text-base font-bold text-slate-200">${otherTitle}</h3>
+          <p class="text-xs text-slate-400 mt-1 max-w-md">ဤ အစီရင်ခံစာအပိုင်းကို ငွေစာရင်းပြီးစီးပါက ချိတ်ဆက်အသုံးပြုနိုင်မည် ဖြစ်ပါသည်။</p>
         </div>
       </div>
     `;

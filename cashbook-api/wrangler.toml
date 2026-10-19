@@ -1,0 +1,16 @@
+name = "shop"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 💡 D1 Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "shop-db"
+database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
+
+[vars]
+ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
+
+[triggers]
+crons = ["0 0 * * *"]

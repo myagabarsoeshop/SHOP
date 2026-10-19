@@ -3,7 +3,7 @@
  * MYA GABAR SOE SHOP - MAIN SPA ROUTER & CONTROLLER
  * File: js/app.js (Location: cashbook-frontend/js/app.js)
  * 💡 Features: 🛡️ Zero 404 Missing View Errors (Integrated Component Rendering),
- *              🎯 Multi-Branch Store & Cashbook Router (Main, Shop 1..5),
+ *              🎯 Multi-Branch Store, Yarn & Cashbook Router (Main, Shop 1..5),
  *              🎯 Dynamic Calendar FY Header Indicator (Jan 1 - Dec 31 Aligned),
  *              🛡️ Textile & Shop Category Badge Formatter (XSS-Safe),
  *              🔄 Event-Safe Animated Refresh Controller
@@ -140,7 +140,18 @@ async function switchTab(tabId) {
   }
 
   // ==========================================================================
-  // 🎯 2. HOME DASHBOARD
+  // 🧶 2. YARN STORE & INVENTORY (ချည်စတို စီမံခန့်ခွဲမှု)
+  // ==========================================================================
+  if (tabId === 'yarn') {
+    if (titleEl) titleEl.textContent = "ချည်စတို စီမံခန့်ခွဲမှု (Yarn Store & Inventory)";
+    if (window.YarnEngine) {
+      await window.YarnEngine.init("main");
+    }
+    return;
+  }
+
+  // ==========================================================================
+  // 🎯 3. HOME DASHBOARD
   // ==========================================================================
   if (tabId === 'dashboard') {
     if (titleEl) titleEl.textContent = "Home Dashboard";
@@ -152,10 +163,15 @@ async function switchTab(tabId) {
               <i class="fa-solid fa-gauge-high"></i>
             </div>
             <h3 class="text-base font-bold text-slate-200">မြကမ္ဘာစိုး ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
-            <p class="text-xs text-slate-400 mt-1 max-w-md">စတိုစာရင်းများနှင့် ပစ္စည်းလက်ကျန်များကို စတင်ကြည့်ရှုရန် အောက်ပါခလုတ်ကို နှိပ်ပါခင်ဗျာ။</p>
-            <button onclick="switchTab('store')" class="mt-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition">
-              <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတိုသို့ သွားမည်
-            </button>
+            <p class="text-xs text-slate-400 mt-1 max-w-md">စတိုစာရင်းများနှင့် ပစ္စည်းလက်ကျန်များကို ကြည့်ရှုရန် အောက်ပါခလုတ်များကို နှိပ်ပါခင်ဗျာ။</p>
+            <div class="flex items-center gap-3 mt-4">
+              <button onclick="switchTab('store')" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer">
+                <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတို
+              </button>
+              <button onclick="switchTab('yarn')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition cursor-pointer">
+                <i class="fa-solid fa-scroll text-sky-300"></i> ချည်စတို (Yarn)
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -164,7 +180,7 @@ async function switchTab(tabId) {
   }
 
   // ==========================================================================
-  // 🎯 3. MAIN BOOKS (Bank & Shop 1..5) & OTHERS (Safe Non-Crash View)
+  // 🎯 4. MAIN BOOKS (Bank & Shop 1..5) & OTHERS (Safe Non-Crash View)
   // ==========================================================================
   const shopTitles = {
     'bank': 'Main Home Shop (ပင်မဆိုင် ငွေစာရင်း)',
@@ -189,9 +205,14 @@ async function switchTab(tabId) {
           </div>
           <h3 class="text-base font-bold text-slate-200">${currentTitle}</h3>
           <p class="text-xs text-slate-400 mt-1 max-w-md">ဤ စာရင်းဇယားအပိုင်းကို cashbook.js တည်ဆောက်ပြီးပါက ချိတ်ဆက်အသုံးပြုနိုင်မည် ဖြစ်ပါသည်။</p>
-          <button onclick="switchTab('store')" class="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 transition">
-            <i class="fa-solid fa-arrow-left"></i> ကုန်ချောစတိုသို့ ပြန်သွားမည်
-          </button>
+          <div class="flex items-center gap-2.5 mt-4">
+            <button onclick="switchTab('store')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 transition cursor-pointer">
+              <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတို
+            </button>
+            <button onclick="switchTab('yarn')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 font-bold rounded-xl text-xs flex items-center gap-2 border border-slate-700 transition cursor-pointer">
+              <i class="fa-solid fa-scroll"></i> ချည်စတို
+            </button>
+          </div>
         </div>
       </div>
     `;

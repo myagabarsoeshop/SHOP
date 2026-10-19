@@ -615,18 +615,30 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
 }
 
-/* 💡 Pagination Tray & Previous/Next Buttons ၏ အဖြူရောင်ဘောင်များကို အပေါ်နှင့် တစ်ပြေးညီ မသိမသာ ဖျော့ခြင်း */
-div.flex.justify-between.items-center.gap-4.bg-\[\#0a1120\],
-#store-btn-prev,
-#store-btn-next {
-  border: 1px solid rgba(71, 85, 105, 0.35) !important; /* အပေါ်က Toolbar နည်းတူ ဖျော့တော့သော မီးခိုးရောင် */
-  background-color: #070d18 !important;
+/* ==============================================================================
+   💡 4. CONTROL TOOLBAR & PAGINATION TRAY EXACT BORDER UNIFICATION
+   (အပေါ်က Search/Toolbar ဘောင်အရောင်အတိုင်း အောက်ဆုံး Showing Tray ကိုပါ အတိအကျတူညီစေရန်)
+   ============================================================================== */
+div.flex.flex-col.sm\:flex-row.justify-between.items-center.gap-4.bg-\[\#0a1120\],
+div.flex.flex-col.sm\:flex-row.justify-between.items-center.gap-4.bg-\[\#070d18\],
+div.flex.flex-col.sm\:flex-row.justify-between.items-center.gap-4[class*="rounded-xl"][class*="border"] {
+  background: linear-gradient(180deg, #0e172c 0%, #0a1120) !important;
+  border: 1.5px solid var(--border-medium) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Hover ပြုလုပ်ချိန်တွင် အနည်းငယ် လင်းလာစေရန် */
+/* Pagination Previous & Next Buttons Styling */
+#store-btn-prev,
+#store-btn-next {
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background-color: #070d18 !important;
+  color: #cbd5e1 !important;
+}
+
 #store-btn-prev:hover,
 #store-btn-next:hover {
-  border-color: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
   background-color: #0d162a !important;
-  color: #ffffff !important;
+  color: #f1f5f9 !important;
 }

@@ -614,3 +614,19 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
   background-color: #4338ca !important;
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
 }
+
+/* 💡 Pagination Tray & Previous/Next Buttons ၏ အဖြူရောင်ဘောင်များကို အပေါ်နှင့် တစ်ပြေးညီ မသိမသာ ဖျော့ခြင်း */
+div.flex.justify-between.items-center.gap-4.bg-\[\#0a1120\],
+#store-btn-prev,
+#store-btn-next {
+  border: 1px solid rgba(71, 85, 105, 0.35) !important; /* အပေါ်က Toolbar နည်းတူ ဖျော့တော့သော မီးခိုးရောင် */
+  background-color: #070d18 !important;
+}
+
+/* Hover ပြုလုပ်ချိန်တွင် အနည်းငယ် လင်းလာစေရန် */
+#store-btn-prev:hover,
+#store-btn-next:hover {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  background-color: #0d162a !important;
+  color: #ffffff !important;
+}

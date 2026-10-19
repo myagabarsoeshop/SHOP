@@ -4,7 +4,7 @@
  * File: cashbook-api/worker.js
  * Standard: Imports modular handlers for Store, Yarn, and Cashbook
  * ==============================================================================
- */ 
+ */  
 
 import { handleStoreAction } from "./handler.store.js";
 import { handleYarnAction } from "./handler.yarn.js";

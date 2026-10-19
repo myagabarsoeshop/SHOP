@@ -2,6 +2,7 @@
      MYA GABAR SOE SHOP - CASHBOOK & INVOICING VIEW
      File: cashbook-frontend/views/cashbook.html
      Standard: Matched 100% with store.html Luxury Layout, Split Payment & Twin Print
+     Features: Added MY (Month-Year) Column and Expense Sub-Category Selection
      ============================================================================== -->
 
 <div class="space-y-4" style="padding-top: 10px;">
@@ -47,7 +48,7 @@
 
   </div>
 
-  <!-- ၂။ Control Search & Action Bar (Store View နှင့် ၁၀၀% တပြေးညီ ညီညာစေရန် ပြင်ဆင်ထားသည်) -->
+  <!-- ၂။ Control Search & Action Bar -->
   <div class="control-toolbar p-4 rounded-xl flex flex-col lg:flex-row justify-between items-center gap-4 border border-slate-800/60 bg-[#0e172a]">
     <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto">
       
@@ -56,7 +57,7 @@
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
           <i class="fa-solid fa-magnifying-glass text-xs"></i>
         </span>
-        <input type="text" id="cb-search" oninput="CashbookEngine.onSearchInput()" placeholder="Search description, vr no..." 
+        <input type="text" id="cb-search" oninput="CashbookEngine.onSearchInput()" placeholder="Search description, MY, vr no..." 
           class="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-[#070d18] border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-all">
       </div>
 
@@ -89,15 +90,17 @@
     </div>
   </div>
 
-  <!-- ၃။ Data Grid Table -->
+  <!-- ၃။ Data Grid Table (MY နှင့် SUB CATEGORY ကော်လံများ ပါဝင်သည်) -->
   <div class="table-container shadow-2xl relative overflow-x-auto border border-slate-800/60 rounded-xl">
-    <table class="w-full text-left border-collapse min-w-[1250px]">
+    <table class="w-full text-left border-collapse min-w-[1350px]">
       <thead>
         <tr style="height: 52px;">
           <th scope="col" class="w-12 text-center py-3.5">NO</th>
+          <th scope="col" class="w-20 text-center py-3.5 text-amber-400">MY</th>
           <th scope="col" class="w-28 py-3.5">DATE</th>
-          <th scope="col" class="w-32 py-3.5">CATEGORY</th>
-          <th scope="col" class="min-w-[220px] py-3.5">DESCRIPTION</th>
+          <th scope="col" class="w-28 py-3.5">CATEGORY</th>
+          <th scope="col" class="w-36 py-3.5 text-sky-400">SUB CATEGORY</th>
+          <th scope="col" class="min-w-[200px] py-3.5">DESCRIPTION</th>
           <th scope="col" class="w-24 text-center py-3.5">METHOD</th>
           <th scope="col" class="w-32 text-right text-emerald-400 py-3.5">DEBIT (INCOME)</th>
           <th scope="col" class="w-32 text-right text-rose-400 py-3.5">CREDIT (EXPENSE)</th>
@@ -157,6 +160,22 @@
         <div class="flex flex-col gap-1">
           <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">Voucher No *</label>
           <input type="text" id="cb-form-vrno" readonly class="w-full bg-[#0c1426] border border-slate-800 text-amber-400 font-mono font-bold cursor-not-allowed">
+        </div>
+      </div>
+
+      <!-- 💡 Expense Mode အတွက် အသုံးစရိတ် အမျိုးအစား ခွဲခြားရန် Subcategory Section -->
+      <div id="cb-expense-subcat-section" class="p-3 bg-[#070d18] border border-slate-800 rounded-xl hidden">
+        <div class="flex flex-col gap-1">
+          <label class="font-bold text-sky-400 uppercase tracking-wide text-[11px]">အသုံးစရိတ် အမျိုးအစား (Expense Sub-Category) *</label>
+          <select id="cb-expense-subcat" class="w-full font-bold bg-[#0c1424] border border-slate-800 text-slate-200 p-2 rounded-lg">
+            <option value="အုပ်ချုပ်မှုအသုံးစရိတ်">အုပ်ချုပ်မှုအသုံးစရိတ် (Administrative)</option>
+            <option value="ဆိုင်ခန်းငှားရမ်းခ">ဆိုင်ခန်းငှားရမ်းခ (Shop Rent)</option>
+            <option value="ဝန်ထမ်းလစာ">ဝန်ထမ်းလစာ (Staff Salaries)</option>
+
+            <option value="မီးဖိုး / အင်တာနက်">မီးဖိုး / အင်တာနက် (Electricity & Internet)</option>
+            <option value="သယ်ယူပို့ဆောင်ခ">သယ်ယူပို့ဆောင်ခ (Logistics / Delivery)</option>
+            <option value="အထွေထွေ အသုံးစရိတ်">အထွေထွေ အသုံးစရိတ် (General Expenses)</option>
+          </select>
         </div>
       </div>
 
@@ -241,7 +260,6 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1">
             <label class="font-bold text-slate-400 uppercase tracking-wide text-[11px]">လွှဲမည့်ဆိုင် *</label>
-            <!-- 💡 ID ပြင်ဆင်ထားသည်: cb-transfer-target ကို cb-transfer-shop နှင့် တညီတညွတ်တည်း ဖြစ်စေရန် -->
             <select id="cb-transfer-target" class="w-full font-bold"></select>
           </div>
           <div class="flex flex-col gap-1">
@@ -259,7 +277,6 @@
           </div>
           <div class="flex flex-col gap-1">
             <label class="font-bold text-rose-400 uppercase tracking-wide text-[11px]">Discount *</label>
-            <!-- 💡 Function အမည် ပြင်ဆင်ထားသည်: recalculateNetTotal မဟုတ်ဘဲ recalculateBillingTotals သို့ -->
             <input type="number" id="cb-bill-discount" value="0" oninput="CashbookEngine.recalculateBillingTotals()" class="w-full text-right font-mono font-bold text-rose-300">
           </div>
           <div class="flex flex-col gap-1">

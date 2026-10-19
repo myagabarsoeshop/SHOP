@@ -185,15 +185,8 @@ async function switchTab(tabId) {
   // 4. HOME DASHBOARD
   if (tabId === 'dashboard') {
     if (titleEl) titleEl.textContent = "Home Dashboard";
-    if (container) {
-      container.innerHTML = `
-        <div class="space-y-6">
-          <div class="bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-amber-500/20 p-6 rounded-2xl">
-            <h3 class="text-lg font-semibold text-amber-300">မြဂမ္ဘား စိုး ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
-            <p class="text-xs text-slate-300 mt-1">ဆိုင်ခွဲများ၏ ငွေစာရင်းများနှင့် စတိုလက်ကျန်များကို ဘယ်ဘက်မီနူးမှ ရွေးချယ်ကြည့်ရှုနိုင်ပါသည်။</p>
-          </div>
-        </div>
-      `;
+    if (window.DashboardEngine) {
+      await window.DashboardEngine.init();
     }
     return;
   }

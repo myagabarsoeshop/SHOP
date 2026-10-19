@@ -1,28 +1,49 @@
 /**
- * GOLDEN ERP SYSTEM - AUTHENTICATION & ROLE ENGINE
- * File: js/auth.js 
- * 💡 SECURED (D1 Database Edition): JWT Verification & Bulletproof RBAC Matrix
+ * ==============================================================================
+ * မြကမ္ဘာစိုး ပိုးထည်တိုက် - AUTHENTICATION & ROLE ENGINE
+ * File: js/auth.js (Location: cashbook-frontend/js/auth.js)
+ * 💡 Features: 🛡️ Resilient Dual-Token Architecture (Standard 'token' + 'user'),
+ *              Cloudflare D1 Verified JWT Engine & Seamless RBAC Matrix,
+ *              Textile Shop Branch Role Enforcement (Main & Shop 1 to 5)
+ * ==============================================================================
  */
 
 /**
  * 💡 Central Role-Based Access Control (RBAC) Permission Verifier
- * @param {string} permissionName - 'can_delete' | 'can_edit' | 'can_manage_grades' | 'can_backup'
+ * @param {string} permissionName - 'can_view' | 'can_add' | 'can_edit' | 'can_delete' | 'can_manage_settings' | 'can_backup'
  * @returns {boolean}
  */
 function hasPermission(permissionName) {
-  const rawRole = (window.AppState?.currentUserRole || localStorage.getItem('golden_user_role') || 'Viewer').trim();
-  const role = rawRole.replace(/\s+/g, ' ');
+  let role = 'Viewer';
 
+  if (window.AppState && window.AppState.currentUserRole) {
+    role = window.AppState.currentUserRole;
+  } else {
+    const userStr = localStorage.getItem('user') || localStorage.getItem('golden_user');
+    if (userStr) {
+      try {
+        const parsed = JSON.parse(userStr);
+        role = parsed.role || 'Viewer';
+      } catch (e) {}
+    } else {
+      role = localStorage.getItem('user_role') || localStorage.getItem('golden_user_role') || 'Viewer';
+    }
+  }
+
+  role = String(role).trim();
+
+  // 💡 မြကမ္ဘာစိုး ပိုးထည်တိုက်၏ ရာထူးနှင့် ဆိုင်ခွဲအလိုက် လုပ်ပိုင်ခွင့် ဇယား (RBAC Matrix)
   const matrix = {
-    'Owner': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: true, can_backup: true },
-    'Admin': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: true, can_backup: true },
-    'Finance': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: false, can_backup: true },
-    'Accountant': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: false, can_backup: true },
-    'HR': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: true, can_backup: false }, // ✅ Added 'HR'
-    'HR Staff': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: true, can_backup: false },
-    'Cashier': { can_view: true, can_add: true, can_edit: true, can_delete: true, can_manage_grades: false, can_backup: false },
-    'Staff': { can_view: true, can_add: true, can_edit: false, can_delete: false, can_manage_grades: false, can_backup: false },
-    'Viewer': { can_view: true, can_add: false, can_edit: false, can_delete: false, can_manage_grades: false, can_backup: false }
+    'Owner':    { can_view: true, can_add: true, can_edit: true,  can_delete: true,  can_manage_settings: true,  can_backup: true },
+    'Admin':    { can_view: true, can_add: true, can_edit: true,  can_delete: true,  can_manage_settings: true,  can_backup: true },
+    'Finance':  { can_view: true, can_add: true, can_edit: true,  can_delete: true,  can_manage_settings: false, can_backup: true },
+    'Shop1':    { can_view: true, can_add: true, can_edit: true,  can_delete: false, can_manage_settings: false, can_backup: false },
+    'Shop2':    { can_view: true, can_add: true, can_edit: true,  can_delete: false, can_manage_settings: false, can_backup: false },
+    'Shop3':    { can_view: true, can_add: true, can_edit: true,  can_delete: false, can_manage_settings: false, can_backup: false },
+    'Shop4':    { can_view: true, can_add: true, can_edit: true,  can_delete: false, can_manage_settings: false, can_backup: false },
+    'Shop5':    { can_view: true, can_add: true, can_edit: true,  can_delete: false, can_manage_settings: false, can_backup: false },
+    'Staff':    { can_view: true, can_add: true, can_edit: false, can_delete: false, can_manage_settings: false, can_backup: false },
+    'Viewer':   { can_view: true, can_add: false, can_edit: false, can_delete: false, can_manage_settings: false, can_backup: false }
   };
 
   const userPerms = matrix[role] || matrix['Viewer'];
@@ -30,7 +51,7 @@ function hasPermission(permissionName) {
 }
 
 /**
- * 💡 Verify JWT Token or Local Session Expiration with Robust Base64 Padding
+ * 💡 Verify JWT Token or Local Session Expiration
  * @param {string} token 
  * @returns {boolean} True if expired, false if valid
  */
@@ -42,9 +63,14 @@ function isTokenExpired(token) {
     if (parts.length === 3) {
       let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       while (base64.length % 4) {
-        base64 += '='; // ✅ Added Padding Fix
+        base64 += '=';
       }
-      const payloadJson = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      const payloadJson = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
       const payload = JSON.parse(payloadJson);
 
       if (payload && payload.exp) {
@@ -53,10 +79,10 @@ function isTokenExpired(token) {
       }
     }
   } catch (err) {
-    console.warn("[Auth] JWT payload exp parse fallback:", err.message);
+    console.warn("[Auth] JWT payload parse fallback:", err.message);
   }
 
-  const expiresAt = localStorage.getItem('golden_token_expires_at');
+  const expiresAt = localStorage.getItem('token_expires_at') || localStorage.getItem('golden_token_expires_at');
   if (expiresAt) {
     return Date.now() > Number(expiresAt);
   }
@@ -65,13 +91,21 @@ function isTokenExpired(token) {
 }
 
 /**
- * 💡 Clear All Authentication State & Local Storage Keys
+ * 💡 Clear All Authentication State & Storage Keys (Standard + Legacy Purge)
  */
 function clearAuthStorage() {
-  localStorage.removeItem('golden_user_name');
-  localStorage.removeItem('golden_user_role');
+  // 💡 Standard Keys
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('user_role');
+  localStorage.removeItem('user_name');
+  localStorage.removeItem('token_expires_at');
+
+  // 💡 Legacy Keys (အဟောင်းအကြွင်းအကျန်များပါ ရှင်းထုတ်ခြင်း)
   localStorage.removeItem('golden_auth_token');
   localStorage.removeItem('golden_user');
+  localStorage.removeItem('golden_user_name');
+  localStorage.removeItem('golden_user_role');
   localStorage.removeItem('golden_token_expires_at');
 
   if (window.AppState) {
@@ -82,21 +116,19 @@ function clearAuthStorage() {
 }
 
 /**
- * 💡 Enhanced Input Validation
+ * 💡 Input Validation
  */
 function validateLoginInput(username, password) {
   const errors = [];
 
   if (!username || username.trim().length === 0) {
-    errors.push("အသုံးပြုသူအမည် ဖြည့်သွင်းပါ");
-  } else if (username.length < 2) {
-    errors.push("အသုံးပြုသူအမည် အနည်းဆုံး ၂ လုံး ရှိရပါမည်");
+    errors.push("အသုံးပြုသူအမည် ရွေးချယ်ပါ");
   }
 
   if (!password || password.trim().length === 0) {
-    errors.push("လျှို့ဝှက်နံပါတ် ဖြည့်သွင်းပါ");
-  } else if (password.length < 4) {
-    errors.push("လျှို့ဝှက်နံပါတ် အနည်းဆုံး ၄ လုံး ရှိရပါမည်");
+    errors.push("လျှို့ဝှက်နံပါတ် ရိုက်ထည့်ပါ");
+  } else if (password.length < 3) {
+    errors.push("လျှို့ဝှက်နံပါတ် အနည်းဆုံး ၃ လုံး ရှိရပါမည်");
   }
 
   return {
@@ -106,7 +138,7 @@ function validateLoginInput(username, password) {
 }
 
 /**
- * 💡 Handle Login Form Submission (D1 Database Compatible)
+ * 💡 Handle Login Form Submission (Cloudflare Worker D1 Database)
  */
 async function handleLoginSubmit(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -137,35 +169,59 @@ async function handleLoginSubmit(e) {
     if (typeof window.toggleLoading === 'function') window.toggleLoading(false);
 
     if (response && response.success) {
-      const resUser = response.user ? response.user.username : (response.username || username);
-      const resRole = response.user ? response.user.role : (response.role || 'Admin');
-      const resToken = response.token;
+      const resUser = response.user ? (response.user.username || response.user.name) : (response.username || username);
+      const resRole = response.user ? response.user.role : (response.role || username);
+      const resBranch = response.user ? (response.user.branch_code || response.user.shop_id || 'main') : 'main';
+      const resToken = response.token || response.authToken || 'session_token_' + Date.now();
 
+      // AppState ထဲသို့ သတ်မှတ်ပေးခြင်း
       window.AppState = window.AppState || {};
       window.AppState.currentUser = resUser;
       window.AppState.currentUserRole = resRole;
       window.AppState.authToken = resToken;
 
-      const defaultTtlMs = 8 * 60 * 60 * 1000;
+      const defaultTtlMs = 12 * 60 * 60 * 1000; // 12 Hours Session
       const expiresAt = Date.now() + (response.expiresInMs || defaultTtlMs);
 
-      const userObj = JSON.stringify({ username: resUser, role: resRole });
+      const userObject = {
+        username: resUser,
+        name: resUser,
+        role: resRole,
+        branch_code: resBranch,
+        token: resToken
+      };
+
+      const userObjStr = JSON.stringify(userObject);
+
+      // 💡 Standard Keys (အခြားဖိုင်များ အဆင်ပြေစေရန် အဓိက သတ်မှတ်ပေးသည်)
+      localStorage.setItem('token', resToken);
+      localStorage.setItem('user', userObjStr);
+      localStorage.setItem('user_name', resUser);
+      localStorage.setItem('user_role', resRole);
+      localStorage.setItem('token_expires_at', String(expiresAt));
+
+      // 💡 Fallback Keys (လိုအပ်ပါက ရှာတွေ့နိုင်ရန် ပူးတွဲသိမ်းဆည်းပေးသည်)
+      localStorage.setItem('golden_auth_token', resToken);
+      localStorage.setItem('golden_user', userObjStr);
       localStorage.setItem('golden_user_name', resUser);
       localStorage.setItem('golden_user_role', resRole);
-      localStorage.setItem('golden_auth_token', resToken);
-      localStorage.setItem('golden_user', userObj);
       localStorage.setItem('golden_token_expires_at', String(expiresAt));
 
       showWorkspace();
       applyRoleRestrictions();
 
+      // Dashboard သို့ တိုက်ရိုက် ဦးတည်ဖွင့်လှစ်ပေးခြင်း
       if (typeof switchTab === 'function') {
-        const initialTab = (resRole === 'Cashier' || resRole === 'Main Cashier') ? 'cashier' : 'dashboard';
-        switchTab(initialTab);
+        const lowerRole = resRole.toLowerCase();
+        if (['shop1', 'shop2', 'shop3', 'shop4', 'shop5'].includes(lowerRole)) {
+          switchTab(lowerRole);
+        } else {
+          switchTab('dashboard');
+        }
       }
 
       if (typeof showToast === 'function') {
-        showToast("SUCCESS", `မင်္ဂလာပါ ${resUser} (${resRole})၊ လော့ဂ်အင် ဝင်ရောက်မှု အောင်မြင်ပါသည်။`);
+        showToast("SUCCESS", `မင်္ဂလာပါ ${resUser}၊ စနစ်အတွင်းသို့ အောင်မြင်စွာ ဝင်ရောက်ပြီးပါပြီ။`);
       }
     } else {
       if (errorBox) {
@@ -186,26 +242,6 @@ async function handleLoginSubmit(e) {
  * 💡 Apply Navigation & Button Level Permissions by User Role
  */
 function applyRoleRestrictions() {
-  const role = (window.AppState?.currentUserRole || localStorage.getItem('golden_user_role') || 'Viewer').trim();
-  const hrSection = document.getElementById('nav-hr-section');
-  const settingsSection = document.getElementById('nav-settings-section');
-
-  if (settingsSection) {
-    settingsSection.classList.remove('hidden');
-    settingsSection.style.removeProperty('display');
-  }
-
-  // ✅ Added 'HR' to allowed roles
-  const allowedHrRoles = ["Owner", "Admin", "Finance", "HR", "HR Staff", "HRStaff"];
-  if (hrSection) {
-    if (allowedHrRoles.includes(role)) {
-      hrSection.classList.remove('hidden');
-      hrSection.style.removeProperty('display');
-    } else {
-      hrSection.classList.add('hidden');
-    }
-  }
-
   const canDelete = hasPermission('can_delete');
   if (!canDelete) {
     document.body.classList.add('hide-delete-btn');
@@ -261,8 +297,8 @@ function showLogin() {
 /**
  * 💡 Handle System Logout Action
  */
-function handleLogout() {
-  if (confirm("စနစ်မှ ထွက်ခွာလိုပါသလား။")) {
+function handleLogout(skipConfirm = false) {
+  if (skipConfirm || confirm("မြကမ္ဘာစိုး စနစ်မှ ထွက်ခွာလိုပါသလား။")) {
     clearAuthStorage();
 
     if (window.clearAllApiCache) {
@@ -270,24 +306,25 @@ function handleLogout() {
     }
 
     showLogin();
-    if (typeof showToast === 'function') showToast("SUCCESS", "စနစ်မှ အောင်မြင်စွာ ထွက်ခွာပြီးပါပြီ။");
+    if (typeof showToast === 'function') {
+      showToast("SUCCESS", "စနစ်မှ အောင်မြင်စွာ ထွက်ခွာပြီးပါပြီ။");
+    }
 
     setTimeout(function() {
       window.location.reload();
-    }, 300);
+    }, 250);
   }
 }
 
 /**
- * 💡 Verify Existing Session State with Expiration & Auto-Landing
+ * 💡 Verify Existing Session State on Page Startup
  */
 function checkExistingSession() {
-  const savedUser = localStorage.getItem('golden_user_name');
-  const savedRole = localStorage.getItem('golden_user_role');
-  const savedToken = localStorage.getItem('golden_auth_token');
+  const token = localStorage.getItem('token') || localStorage.getItem('golden_auth_token');
+  const userStr = localStorage.getItem('user') || localStorage.getItem('golden_user');
 
-  if (savedUser && savedRole && savedToken) {
-    if (isTokenExpired(savedToken)) {
+  if (token && userStr) {
+    if (isTokenExpired(token)) {
       console.warn("[Auth] Session expired. Automatically logging out.");
       clearAuthStorage();
       showLogin();
@@ -297,22 +334,27 @@ function checkExistingSession() {
       return;
     }
 
+    let parsedUser = { username: 'Admin', role: 'Admin' };
+    try {
+      parsedUser = JSON.parse(userStr);
+    } catch (e) {}
+
     window.AppState = window.AppState || {};
-    window.AppState.currentUser = savedUser;
-    window.AppState.currentUserRole = savedRole;
-    window.AppState.authToken = savedToken;
+    window.AppState.currentUser = parsedUser.username || parsedUser.name || 'Admin';
+    window.AppState.currentUserRole = parsedUser.role || 'Admin';
+    window.AppState.authToken = token;
 
     showWorkspace();
     applyRoleRestrictions();
-
-    if (typeof switchTab === 'function') {
-      const initialTab = (savedRole === 'Cashier' || savedRole === 'Main Cashier') ? 'cashier' : 'dashboard';
-      switchTab(initialTab);
-    }
   } else {
     showLogin();
   }
 }
+
+// 💡 Global Event Initialization
+document.addEventListener('DOMContentLoaded', () => {
+  checkExistingSession();
+});
 
 // 💡 EXPOSE GLOBALLY
 window.hasPermission = hasPermission;

@@ -8,7 +8,7 @@
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%230c1b26'/><stop offset='100%25' stop-color='%23040911'/></linearGradient><linearGradient id='mya' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%236ee7b7'/><stop offset='50%25' stop-color='%2310b981'/><stop offset='100%25' stop-color='%23fbbf24'/></linearGradient><linearGradient id='bd' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%2334d399'/><stop offset='100%25' stop-color='%23f59e0b'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23bg)'/><rect x='2' y='2' width='96' height='96' rx='20' fill='none' stroke='url(%23bd)' stroke-width='2.5'/><circle cx='50' cy='50' r='30' fill='%2310b981' fill-opacity='0.12'/><text x='50' y='63' text-anchor='middle' font-family='sans-serif' font-size='46' font-weight='900' fill='url(%23mya)'>မြ</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#090d16">
-  <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - CASH BOOK SYSTEM</title>
+  <title>မြ ပိုးထည်တိုက် - CASH BOOK SYSTEM</title>
 
   <!-- 💡 Immediate Auth Check to prevent UI Flash (FOUC) -->
   <script>
@@ -68,7 +68,7 @@
   <!-- ==================== 1. LOGIN OVERLAY ==================== -->
   <div id="login-overlay" class="fixed inset-0 bg-[#090d16] z-[100] flex items-center justify-center p-4">
     <div
-      class="relative w-full max-w-md bg-[#0e131f]/90 border border-amber-500/20 backdrop-blur-xl rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center overflow-hidden space-y-6 text-slate-300">
+      class="relative w-full max-w-md bg-[#0e131f]/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center overflow-hidden space-y-6 text-slate-300">
 
       <div
         class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
@@ -110,11 +110,11 @@
 
         <h2
           class="text-xl font-black tracking-tight mb-1 text-gold-gradient filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-          မြကမ္ဘာစိုး ပိုးထည်တိုက်
+          မြ ပိုးထည်တိုက်
         </h2>
 
         <p
-          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/80 pb-3 border-b border-amber-500/10">
+          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/80 pb-3 border-b border-slate-800">
           CASH BOOK SYSTEM
         </p>
       </div>
@@ -123,7 +123,7 @@
         <div>
           <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Select Username / Role</label>
           <select id="login-username" required
-            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/60 rounded-xl text-xs text-slate-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300 font-bold">
+            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/50 rounded-xl text-xs text-slate-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300 font-bold">
             <option value="">-- Select Username --</option>
             <option value="Admin">Admin</option>
             <option value="Finance">Finance</option>
@@ -140,7 +140,7 @@
         <div>
           <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Password</label>
           <input type="password" id="login-password" required placeholder="Type password..."
-            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/60 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300">
+            class="w-full p-3 bg-[#070a12]/80 border border-slate-700/50 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300">
         </div>
 
         <div id="login-error"
@@ -167,11 +167,11 @@
 
   <!-- ==================== 2. MAIN WORKSPACE ==================== -->
   <div id="erp-workspace" class="hidden h-full w-full">
-    <!-- Sidebar Navigation -->
-    <aside class="w-64 bg-[#0c1322] border-r border-slate-800 flex flex-col h-full shadow-2xl shrink-0">
+    <!-- Sidebar Navigation (Refined Subtle Border) -->
+    <aside class="w-64 bg-[#0c1322] border-r border-slate-800/80 flex flex-col h-full shadow-2xl shrink-0">
       
       <!-- 💎 PRO SIDEBAR HEADER -->
-      <div class="h-[68px] px-3.5 border-b border-slate-800 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
+      <div class="h-[68px] px-3.5 border-b border-slate-800/80 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <svg class="w-8 h-8 shrink-0 filter drop-shadow-[0_0_8px_rgba(16,185,129,0.45)] select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -187,8 +187,8 @@
           </svg>
           
           <div class="flex flex-col min-w-0 leading-tight">
-            <span class="text-slate-100 font-extrabold text-[13px] tracking-tight truncate">မြကမ္ဘာစိုး</span>
-            <span class="text-[9.5px] font-bold text-amber-400/90 tracking-wider uppercase truncate">ပိုးထည်တိုက် • Cash Book</span>
+            <span class="text-slate-100 font-extrabold text-[13px] tracking-tight truncate">မြ ပိုးထည်တိုက်</span>
+            <span class="text-[9.5px] font-bold text-amber-400/90 tracking-wider uppercase truncate">CASH BOOK</span>
           </div>
         </div>
 
@@ -197,7 +197,7 @@
         </button>
       </div>
 
-     <!-- Left sidber Menu --> 
+     <!-- Left sidebar Menu --> 
       <nav class="flex-1 px-2.5 py-2.5 space-y-0.5 overflow-y-auto" id="sidebar-nav">
         <button onclick="switchTab('dashboard')" id="btn-dashboard"
           class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
@@ -253,19 +253,19 @@
     <!-- Main Workspace View Container -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <header
-        class="bg-[#0c1322] border-b border-slate-800 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
+        class="bg-[#0c1322] border-b border-slate-800/80 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
         <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
 
         <!-- 💡 Symmetrical Capsule Header (ဘယ်/ညာ အချိုးညီ တိကျသော ပုံစံ) -->
-        <div class="inline-flex items-center text-xs font-bold bg-[#111c44] border border-emerald-500/20 px-3.5 py-1.5 rounded-full shadow-inner gap-2.5">
-          <!-- Left: Real-Time Wifi Status (ဘယ်ဘက်အစွန်းနှင့် ကွက်တိ ညီညာစေရန်) -->
+        <div class="inline-flex items-center text-xs font-bold bg-[#111c44] border border-slate-700/50 px-3.5 py-1.5 rounded-full shadow-inner gap-2.5">
+          <!-- Left: Real-Time Wifi Status -->
           <span id="network-status" class="flex items-center justify-center text-emerald-400 transition-colors duration-300 cursor-pointer" title="Internet Connected (Online)">
             <i id="network-icon" class="fa-solid fa-wifi text-[11px]"></i>
           </span>
 
           <span class="text-slate-600/70 font-normal select-none">|</span>
 
-          <!-- Right: Dynamic Metadata (Auto-calculated FY 2026 / Time / User) -->
+          <!-- Right: Dynamic Metadata -->
           <span id="live-metadata" class="text-emerald-400 font-bold tracking-wide">
             FY 2026 | -- | --:-- | User: Admin
           </span>
@@ -340,7 +340,7 @@
               <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 text-2xl mb-4">
                 <i class="fa-solid fa-gauge-high"></i>
               </div>
-              <h3 class="text-base font-bold text-slate-200">မြကမ္ဘာစိုး ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
+              <h3 class="text-base font-bold text-slate-200">မြ ပိုးထည်တိုက် စနစ်သို့ ကြိုဆိုပါသည်</h3>
               <p class="text-xs text-slate-400 mt-1 max-w-md">စတိုစာရင်းများနှင့် ပစ္စည်းလက်ကျန်များကို စတင်ကြည့်ရှုရန် ဘယ်ဘက်ရှိ <span class="text-amber-400 font-bold">'ကုန်ချောစတို (Store)'</span> မီနူးကို နှိပ်ပါခင်ဗျာ။</p>
               <button onclick="switchTab('store')" class="mt-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20">
                 <i class="fa-solid fa-boxes-stacked"></i> ကုန်ချောစတိုသို့ သွားမည်
@@ -350,7 +350,6 @@
         }
       } else {
         if (pageTitle) pageTitle.textContent = tabName.toUpperCase();
-        // အခြား Tab များဖွင့်ရန် (app.js သို့ ဆက်သွယ်ခြင်း)
         if (window.AppRouter && typeof window.AppRouter.switchTab === "function") {
           window.AppRouter.switchTab(tabName);
         }
@@ -415,7 +414,6 @@
       renderLiveHeaderMetadata();
       setInterval(renderLiveHeaderMetadata, 1000);
 
-      // 💡 စာမျက်နှာ စဖွင့်ဖွင့်ချင်းတွင် စတိုစာရင်းကို တန်းဖွင့်ပေးမည်
       setTimeout(() => {
         if (document.documentElement.classList.contains('is-authed')) {
           switchTab('store');

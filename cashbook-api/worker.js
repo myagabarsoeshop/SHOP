@@ -1,14 +1,14 @@
 /**
  * ==============================================================================
- * MYA GABAR SOE SHOP - MAIN ROUTER WORKER
+ * MYA GABAR SOE SHOP - MAIN ROUTER WORKER (WITH RBAC & PERMISSIONS)
  * File: cashbook-api/worker.js
- * Standard: Imports modular handlers for Store, Yarn, and Cashbook
  * ==============================================================================
- */  
+ */
 
 import { handleStoreAction } from "./handler.store.js";
 import { handleYarnAction } from "./handler.yarn.js";
 import { handleCashbookAction } from "./handler.cashbook.js";
+import { checkPermission, filterShopQuery } from "./permission.js";
 
 function base64ToBytes(base64) {
   const binString = atob(base64.replace(/-/g, "+").replace(/_/g, "/"));
@@ -74,6 +74,38 @@ async function createJwtToken(payload, secret) {
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)))}`;
 }
 
+async function verifyJwtToken(token, secret) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const [encodedHeader, encodedPayload, signature] = parts;
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+
+    const sigBytes = base64ToBytes(signature);
+    const dataToVerify = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
+    const isValid = await crypto.subtle.verify("HMAC", key, sigBytes, dataToVerify);
+
+    if (!isValid) return null;
+
+    const payloadJson = decodeURIComponent(escape(atob(encodedPayload.replace(/-/g, "+").replace(/_/g, "/"))));
+    const payload = JSON.parse(payloadJson);
+
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) {
+      return null; // Token expired
+    }
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const requestOrigin = request.headers.get("Origin") || "*";
@@ -118,7 +150,7 @@ export default {
 
         const action = body.action || url.searchParams.get("action") || "";
 
-        // 1. LOGIN ACTION
+        // 1. LOGIN ACTION (Public Route)
         if (action === "checkLogin") {
           const username = String(body.username || "").trim();
           const password = String(body.password || "").trim();
@@ -162,7 +194,48 @@ export default {
           );
         }
 
-        // 2. DISPATCH TO HANDLERS
+        // 2. AUTHENTICATION & TOKEN VERIFICATION FOR PROTECTED ACTIONS
+        const authHeader = request.headers.get("Authorization") || "";
+        const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : (body.token || url.searchParams.get("token") || "");
+        
+        let currentUser = null;
+        if (token) {
+          currentUser = await verifyJwtToken(token, authSecret);
+        }
+
+        // For non-login actions, ensure user is authenticated
+        if (!currentUser) {
+          return new Response(
+            JSON.stringify({ success: false, message: "Unauthorized: ကျေးဇူးပြု၍ Login ပြန်ဝင်ပါ သို့မဟုတ် Token မမှန်ကန်ပါ။" }),
+            { status: 401, headers: corsHeaders }
+          );
+        }
+
+        // 3. ENFORCE BRANCH SCOPING & ROLE PERMISSIONS
+        // Auto-assign or filter shop_id based on user role and branch restrictions
+        const requestedShop = body.shop_id || url.searchParams.get("shop_id") || "";
+        const allowedShop = filterShopQuery(currentUser, requestedShop);
+        body.shop_id = allowedShop; // Enforce secure branch scope
+
+        // Check specific action permissions (Edit / Delete / Save)
+        let permAction = "view";
+        if (action.startsWith("save") || action.startsWith("update") || action.startsWith("transfer")) {
+          permAction = "edit";
+        } else if (action.startsWith("delete")) {
+          permAction = "delete";
+        }
+
+        if (permAction === "edit" || permAction === "delete") {
+          const permCheck = checkPermission(currentUser, permAction, body);
+          if (!permCheck.allowed) {
+            return new Response(
+              JSON.stringify({ success: false, message: permCheck.message }),
+              { status: 403, headers: corsHeaders }
+            );
+          }
+        }
+
+        // 4. DISPATCH TO HANDLERS
         let res = await handleStoreAction(action, db, body, url, corsHeaders);
         if (res) return res;
 

@@ -42,7 +42,7 @@
 
   </div>
 
-  <!-- ၂။ Control Search & Action Bar (Subtle & Clean Borders) -->
+  <!-- ၂။ Control Search & Action Bar -->
   <div class="control-toolbar p-4 rounded-xl flex flex-col lg:flex-row justify-between items-center gap-4 border border-slate-800/60 bg-[#0e172a]">
     <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto">
       
@@ -83,7 +83,7 @@
       </div>
     </div>
 
-    <!-- Action Buttons (Subtle Border) -->
+    <!-- Action Buttons -->
     <div class="flex items-center gap-2.5 w-full lg:w-auto justify-end">
       <button onclick="StoreEngine.loadInventory(false, true)" class="p-2 bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all" title="Refresh Data">
         <i class="fa-solid fa-rotate text-xs"></i> Refresh
@@ -94,8 +94,8 @@
       </button>
 
       <button onclick="StoreEngine.openItemModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer">
-  <i class="fa-solid fa-plus text-xs"></i> Add New Entry
-     </button>
+        <i class="fa-solid fa-plus text-xs"></i> Add New Entry
+      </button>
     </div>
   </div>
 
@@ -120,18 +120,18 @@
     </table>
   </div>
 
-  <!-- ၄။ Pagination Controller Tray (Subtle & Soft Border) -->
-<div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#070d18] border border-slate-800/80 px-6 py-3.5 rounded-xl shadow-lg">
-  <div id="store-pagination-info" class="text-xs font-semibold text-slate-400 tracking-wide">Showing entries...</div>
-  <div class="flex items-center gap-2">
-    <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0c1424] hover:bg-slate-800 border border-slate-800/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
-      <i class="fa-solid fa-chevron-left text-[10px]"></i> Previous
-    </button>
-    <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0c1424] hover:bg-slate-800 border border-slate-800/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
-      Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
-    </button>
+  <!-- ၄။ Pagination Controller Tray (အပေါ်က Toolbar နှင့် Class & Border အရောင် အတိအကျ တူညီစေရန် ပြင်ဆင်ထားသည်) -->
+  <div class="control-toolbar p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 border border-slate-800/60 bg-[#0e172a] shadow-lg">
+    <div id="store-pagination-info" class="text-xs font-semibold text-slate-400 tracking-wide">Showing entries...</div>
+    <div class="flex items-center gap-2">
+      <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="p-2 bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none">
+        <i class="fa-solid fa-chevron-left text-[10px]"></i> Previous
+      </button>
+      <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="p-2 bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none">
+        Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
+      </button>
+    </div>
   </div>
-</div>
 
 </div>
 

@@ -28,7 +28,6 @@
       <div class="icon-glow-purple"><i class="fa-solid fa-scale-balanced"></i></div>
       <div class="min-w-0 flex-1">
         <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">VALUATION (MMK)</p>
-        <!-- MMK ဖြုတ်ထားပြီး နံပါတ်သီးသန့် မပြတ်တောက်အောင် ပြသမည် -->
         <h3 id="store-total-value" class="text-2xl font-black text-white font-mono mt-0.5">0</h3>
       </div>
     </div>
@@ -43,61 +42,65 @@
 
   </div>
 
-  <!-- ၂။ Control Search & Action Bar -->
-  <div class="control-toolbar p-4 rounded-xl flex flex-col lg:flex-row justify-between items-center gap-4">
+  <!-- ၂။ Control Search & Action Bar (Subtle & Clean Borders) -->
+  <div class="control-toolbar p-4 rounded-xl flex flex-col lg:flex-row justify-between items-center gap-4 border border-slate-800/80 bg-[#0e172a]">
     <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto">
       
+      <!-- Search Input -->
       <div class="relative w-full sm:w-64">
         <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
           <i class="fa-solid fa-magnifying-glass text-xs"></i>
         </span>
         <input type="text" id="store-search" oninput="StoreEngine.onSearchInput()" placeholder="Search description, category, code..." 
-          class="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-[#070d18] border border-slate-700/80 text-white focus:outline-none focus:border-indigo-500 transition-all">
+          class="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-[#070d18] border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-all">
       </div>
       
-      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
-        <span class="text-[10px] text-slate-400 font-bold uppercase">STORE:</span>
-        <select id="store-shop-select" onchange="StoreEngine.changeShop(this.value)" class="bg-transparent text-white font-bold text-xs outline-none cursor-pointer">
-          <option value="main">Main Home Shop (ပင်မ)</option>
-          <option value="shop1">ဆိုင်ခွဲ (၁)</option>
-          <option value="shop2">ဆိုင်ခွဲ (၂)</option>
-          <option value="shop3">ဆိုင်ခွဲ (၃)</option>
-          <option value="shop4">ဆိုင်ခွဲ (၄)</option>
-          <option value="shop5">ဆိုင်ခွဲ (၅)</option>
+      <!-- Store Filter Dropdown -->
+      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-800 px-2.5 py-1.5 rounded-lg text-xs">
+        <span class="text-[10px] text-slate-400 font-bold uppercase select-none">STORE:</span>
+        <select id="store-shop-select" onchange="StoreEngine.changeShop(this.value)" class="bg-transparent text-slate-200 font-bold text-xs outline-none cursor-pointer">
+          <option value="main" class="bg-[#0c1424]">Main Home Shop (ပင်မ)</option>
+          <option value="shop1" class="bg-[#0c1424]">ဆိုင်ခွဲ (၁)</option>
+          <option value="shop2" class="bg-[#0c1424]">ဆိုင်ခွဲ (၂)</option>
+          <option value="shop3" class="bg-[#0c1424]">ဆိုင်ခွဲ (၃)</option>
+          <option value="shop4" class="bg-[#0c1424]">ဆိုင်ခွဲ (၄)</option>
+          <option value="shop5" class="bg-[#0c1424]">ဆိုင်ခွဲ (၅)</option>
         </select>
       </div>
 
-      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
-        <span class="text-[10px] text-slate-400 font-bold uppercase">TYPE:</span>
-        <select id="store-category-filter" onchange="StoreEngine.applyFilter()" class="bg-transparent text-white font-bold text-xs outline-none cursor-pointer">
-          <option value="">အားလုံး (All)</option>
-          <option value="ပုဆိုး">ပုဆိုး</option>
-          <option value="လုံချည်">လုံချည်</option>
-          <option value="အင်္ကျီ">အင်္ကျီ</option>
-          <option value="ဝမ်းဆက်">ဝမ်းဆက်</option>
-          <option value="ပိတ်စ">ပိတ်စ</option>
-          <option value="ချည်">ချည်</option>
+      <!-- Type Filter Dropdown -->
+      <div class="flex items-center gap-1.5 w-full sm:w-auto bg-[#070d18] border border-slate-800 px-2.5 py-1.5 rounded-lg text-xs">
+        <span class="text-[10px] text-slate-400 font-bold uppercase select-none">TYPE:</span>
+        <select id="store-category-filter" onchange="StoreEngine.applyFilter()" class="bg-transparent text-slate-200 font-bold text-xs outline-none cursor-pointer">
+          <option value="" class="bg-[#0c1424]">အားလုံး (All)</option>
+          <option value="ပုဆိုး" class="bg-[#0c1424]">ပုဆိုး</option>
+          <option value="လုံချည်" class="bg-[#0c1424]">လုံချည်</option>
+          <option value="အင်္ကျီ" class="bg-[#0c1424]">အင်္ကျီ</option>
+          <option value="ဝမ်းဆက်" class="bg-[#0c1424]">ဝမ်းဆက်</option>
+          <option value="ပိတ်စ" class="bg-[#0c1424]">ပိတ်စ</option>
+          <option value="ချည်" class="bg-[#0c1424]">ချည်</option>
         </select>
       </div>
     </div>
 
+    <!-- Action Buttons -->
     <div class="flex items-center gap-2.5 w-full lg:w-auto justify-end">
-      <button onclick="StoreEngine.loadInventory(false, true)" class="p-2 bg-[#0c1424] hover:bg-slate-800 border border-slate-700/70 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all" title="Refresh Data">
+      <button onclick="StoreEngine.loadInventory(false, true)" class="p-2 bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all" title="Refresh Data">
         <i class="fa-solid fa-rotate text-xs"></i> Refresh
       </button>
 
-      <button onclick="StoreEngine.exportCsv()" class="p-2 bg-[#0c1424] hover:bg-slate-800 border border-slate-700/70 text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all">
+      <button onclick="StoreEngine.exportCsv()" class="p-2 bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all">
         <i class="fa-solid fa-file-export text-xs text-emerald-400"></i> Export CSV
       </button>
 
-      <button onclick="StoreEngine.openItemModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg shadow-indigo-600/25 active:scale-95 transition-all">
+      <button onclick="StoreEngine.openItemModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer">
         <i class="fa-solid fa-plus text-xs"></i> + Add New Entry
       </button>
     </div>
   </div>
 
   <!-- ၃။ Data Grid Table -->
-  <div class="table-container shadow-2xl relative overflow-x-auto">
+  <div class="table-container shadow-2xl relative overflow-x-auto border border-slate-800/80 rounded-xl">
     <table class="w-full text-left border-collapse min-w-[1200px]">
       <thead>
         <tr style="height: 52px;">
@@ -117,14 +120,14 @@
     </table>
   </div>
 
-  <!-- ၄။ Pagination Controller Tray -->
-  <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0a1120] border border-slate-800/80 px-6 py-3.5 rounded-xl shadow-lg">
+  <!-- ၄။ Pagination Controller Tray (Subtle Border) -->
+  <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#0a1120] border border-slate-800/60 px-6 py-3.5 rounded-xl shadow-lg">
     <div id="store-pagination-info" class="text-xs font-semibold text-slate-400 tracking-wide">Showing entries...</div>
     <div class="flex items-center gap-2">
-      <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
+      <button onclick="StoreEngine.changePage(-1)" id="store-btn-prev" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
         <i class="fa-solid fa-chevron-left text-[10px]"></i> Previous
       </button>
-      <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
+      <button onclick="StoreEngine.changePage(1)" id="store-btn-next" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#070d18] hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold transition-all disabled:opacity-30 disabled:pointer-events-none text-xs">
         Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
       </button>
     </div>
@@ -134,7 +137,7 @@
 
 <!-- ၅။ ADD / EDIT ITEM MODAL -->
 <div id="store-item-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-  <div class="rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+  <div class="rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200 border border-slate-800">
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
       <h3 id="store-form-title" class="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
         <i class="fa-solid fa-boxes-packing text-indigo-400"></i> <span>Add New Entry & Stock</span>
@@ -223,15 +226,15 @@
 
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
         <button type="button" onclick="StoreEngine.closeItemModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>
-        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-all">Confirm & Save</button>
+        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-all cursor-pointer">Confirm & Save</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- 💡 ၆။ INTER-BRANCH STOCK TRANSFER MODAL (ဆိုင်အချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု) -->
+<!-- 💡 ၆။ INTER-BRANCH STOCK TRANSFER MODAL -->
 <div id="store-transfer-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-  <div class="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+  <div class="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 border border-slate-800">
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
       <h3 class="text-sm font-black text-sky-400 uppercase tracking-wider flex items-center gap-2">
         <i class="fa-solid fa-right-left text-sky-400"></i> <span>Inter-Branch Stock Transfer</span>
@@ -277,7 +280,7 @@
 
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
         <button type="button" onclick="StoreEngine.closeTransferModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>
-        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/20 transition-all flex items-center gap-1.5">
+        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/20 transition-all flex items-center gap-1.5 cursor-pointer">
           <i class="fa-solid fa-right-left"></i> <span>Confirm Transfer</span>
         </button>
       </div>
@@ -287,7 +290,7 @@
 
 <!-- ၇။ ADJUST STOCK MODAL -->
 <div id="store-stock-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-  <div class="rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+  <div class="rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 border border-slate-800">
     <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
       <h3 class="text-sm font-black text-emerald-400 uppercase tracking-wider flex items-center gap-2">
         <i class="fa-solid fa-boxes-packing"></i> <span>စတိုလက်ကျန် ညှိယူခြင်း</span>
@@ -315,7 +318,7 @@
       </div>
       <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-800">
         <button type="button" onclick="StoreEngine.closeStockModal()" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition">Cancel</button>
-        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition-all">Update Stock</button>
+        <button type="submit" class="px-5 py-2 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition-all cursor-pointer">Update Stock</button>
       </div>
     </form>
   </div>

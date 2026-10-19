@@ -1,13 +1,23 @@
 /* ==============================================================================
  * GOLDEN ERP SYSTEM - RADIANT MIDNIGHT SAPPHIRE DARK THEME & PRINT ENGINE
  * File: css/style.css
- * 💡 Features: Luminous Glassmorphism KPI Cards, Neon Icon Glows, Sticky Action Columns,
- *              Enterprise Form Fields, Global Modal Scroll & Dual A4 Print Engine
+ * 💡 Features: Centralized Border Variables, Luminous Glassmorphism KPI Cards,
+ *              Neon Icon Glows, Sticky Action Columns, Enterprise Form Fields,
+ *              Global Modal Scroll & Dual A4 Print Engine
  * ============================================================================== */
 
-/* 💡 Force Browser Elements Dark Scheme */
+/* 💡 Centralized Color & Border Theme Variables */
 :root { 
   color-scheme: dark; 
+
+  /* Border Tokens for Design Consistency & Easy Maintenance */
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(71, 85, 105, 0.45);
+  --border-strong: rgba(71, 85, 105, 0.6);
+  --border-accent: rgba(99, 102, 241, 0.35);
+  --border-accent-hover: rgba(99, 102, 241, 0.5);
+  --border-cyan-accent: rgba(56, 189, 248, 0.3);
 }
 
 /* 💡 စိုပြေနက်ရှိုင်းသော Deep Midnight Sapphire Radiant Background */
@@ -61,7 +71,7 @@ div#erp-workspace {
   background-color: #1e293b !important; 
   color: #f8fafc !important; 
   font-weight: 700 !important; 
-  border-left: 4px solid #6366f1; 
+  border-left: 4px solid #6366f1 !important; 
 }
 
 /* 💡 Soften Sidebar Section Heading Labels */
@@ -74,15 +84,23 @@ div#erp-workspace {
   margin-bottom: 0.5rem !important;
 }
 
+/* Header Height & Alignment */
+aside > div:first-child,
+header,
+#app-header,
+div#erp-workspace header {
+  height: 64px !important;
+  background-color: #0c1426 !important;
+  border-bottom: 1px solid var(--border-medium) !important;
+}
+
 /* ==============================================================================
    💡 1. PROFESSIONAL VIBRANT STATS CARDS (စိုပြေကြည်လင်သော KPI Box များ)
    ============================================================================== */
 .stats-card { 
-  /* ကာလာကို နက်သော်လည်း ကြည်လင်သော Slate Navy သို့ မြှင့်တင်ထားပါသည် */
   background: #0f172a !important; 
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border-default) !important;
   border-radius: 1rem !important;
-  /* Box Shadow ကို အောက်ခံပြာနက်ရောင်နှင့် လိုက်ဖက်အောင် အလင်းအနားသတ် ထည့်သွင်းခြင်း */
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.1) !important;
   min-height: 86px !important;
   padding: 1.1rem 1.3rem !important;
@@ -100,26 +118,22 @@ div#erp-workspace {
   box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.65), 0 0 15px rgba(99, 102, 241, 0.2) !important;
 }
 
-/* 💡 Stats Box တစ်ခုချင်းစီကို Icon အရောင် စိုစိုပြေပြေ ခွဲထုတ်ခြင်း */
-/* Card 1: TOTAL ITEMS (ခရမ်းပြာရောင်) */
+/* 💡 Stats Box အရောင်များ */
 .stats-card:nth-child(1) > div:first-child {
   background: rgba(99, 102, 241, 0.15) !important;
   color: #818cf8 !important;
   border: 1px solid rgba(99, 102, 241, 0.3) !important;
 }
-/* Card 2: TOTAL STOCK QTY (အပြာနုရောင်) */
 .stats-card:nth-child(2) > div:first-child {
   background: rgba(14, 165, 233, 0.15) !important;
   color: #38bdf8 !important;
   border: 1px solid rgba(14, 165, 233, 0.3) !important;
 }
-/* Card 3: VALUATION (စိမ်းစိုရောင် / Emerald) */
 .stats-card:nth-child(3) > div:first-child {
   background: rgba(16, 185, 129, 0.15) !important;
   color: #34d399 !important;
   border: 1px solid rgba(16, 185, 129, 0.3) !important;
 }
-/* Card 4: LOW STOCK ALERTS (ပတ္တမြားနီရောင် / Rose Red) */
 .stats-card:nth-child(4) > div:first-child {
   background: rgba(244, 63, 94, 0.15) !important;
   color: #fb7185 !important;
@@ -139,7 +153,6 @@ div#erp-workspace {
   font-size: 1.35rem !important;
 }
 
-/* Label စာသား - ကြည်လင်သော ငွေပြာရောင် */
 .stats-card > div:last-child p {
   font-size: 0.7rem !important;
   font-weight: 700 !important;
@@ -149,125 +162,45 @@ div#erp-workspace {
   margin-bottom: 0.2rem !important;
 }
 
-/* ဂဏန်းများသည့် Box အတွက် အဆင်ပြေစေမည့် CSS */
 .stats-card > div:last-child h3 {
-  /* clamp ကို အနည်းငယ် လျှော့ချထားပါသည် (အနည်းဆုံး 0.85rem မှ အများဆုံး 1.25rem အထိ) */
-  font-size: clamp(0.85rem, 1.35vw, 1.25rem) !important;
+  font-size: clamp(0.7rem, 1.1vw, 1.05rem) !important;
   font-weight: 800 !important;
   color: #f8fafc !important;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace !important;
-  
-  /* စာလုံးအကွာအဝေးကို ကျဉ်းပေးထားပါသည် */
-  letter-spacing: -0.05em !important; 
+  letter-spacing: -0.06em !important; 
   white-space: nowrap !important;
-  overflow: visible !important; /* အမြီးမပြတ်စေရန် */
+  overflow: visible !important;
 }
 
-/* ဂဏန်းအရမ်းရှည်လာပါက အလိုအလျောက် သေးငယ်သွားစေရန် Class (Optional) */
 .stats-card .long-digit {
-  font-size: clamp(0.75rem, 1.1vw, 1rem) !important;
-  letter-spacing: -0.06em !important;
+  font-size: clamp(0.55rem, 0.85vw, 0.85rem) !important;
+  letter-spacing: -0.07em !important;
 }
 
 /* ==============================================================================
-   💡 2. CRISP TOOLBAR & ELEVATED TABLE (မွဲမနေဘဲ ကြည်လင်သန့်ပြန့်သော စားပွဲဇယား)
-   ============================================================================== */
-/* ရှာဖွေသည့် Toolbar */
-.control-toolbar,
-div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
-  background: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 0.875rem !important;
-  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Table Container - နောက်ခံမမည်းဘဲ သန့်ပြန့်ကြည်လင်အောင် */
-.table-container { 
-  background-color: #0f172a !important;
-  border-radius: 0.875rem !important; 
-  border: 1px solid rgba(255, 255, 255, 0.08) !important; 
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5) !important;
-  overflow: hidden !important;
-}
-
-/* Table Header (ခေါင်းစဉ်တန်း) - ညစ်မနေစေရန် */
-table thead th {
-  position: sticky; 
-  top: 0; 
-  z-index: 20;
-  background-color: #131d33 !important; /* အနည်းငယ် ပိုကြည်သော Slate */
-  padding: 13px 16px !important; 
-  font-size: 0.75rem !important;
-  font-weight: 700 !important;
-  text-transform: uppercase; 
-  letter-spacing: 0.05em; 
-  color: #cbd5e1 !important; /* စာသားကို ပိုမို ကြည်လင်စေသည် */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Table Body Rows */
-table tbody td {
-  padding: 13px 16px !important; 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important; /* လိုင်းကြမ်းမဖြစ်အောင် အနုစိတ်ဖျော့ထားခြင်း */
-  font-size: 0.825rem !important; 
-  color: #e2e8f0 !important;
-}
-
-/* Row Hover ဖြစ်ချိန် စိုပြေသော Indigo-Blue အလင်းပြေးလေးပြခြင်း */
-table tbody tr {
-  transition: background-color 0.15s ease !important;
-}
-table tbody tr:hover { 
-  background-color: rgba(99, 102, 241, 0.06) !important; 
-}
-
-/* Table ရဲ့ ညာဘက်ကပ် Action Column */
-table th.sticky,
-table td.sticky,
-th.right-0,
-td.right-0 {
-  position: sticky !important;
-  right: 0 !important;
-  background-color: #0f172a !important;
-  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
-}
-table tbody tr:hover td.sticky,
-table tbody tr:hover td.right-0 {
-  background-color: #141d36 !important;
-}
-
-/* ==============================================================================
-   💡 2. RADIANT TOOLBAR & TABLE CONTAINER
+   💡 2. RADIANT TOOLBAR & ELEVATED TABLE CONTAINER
    ============================================================================== */
 .control-toolbar,
 div[class*="border-slate-800"][class*="p-4 rounded-xl"] {
   background: linear-gradient(180deg, #0e172c 0%, #0a1120 100%) !important;
-  border: 1.5px solid rgba(71, 85, 105, 0.5) !important;
+  border: 1.5px solid var(--border-medium) !important;
+  border-radius: 0.875rem !important;
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08) !important;
 }
 
 .table-container { 
   background-color: #0b1324 !important;
   border-radius: 0.875rem !important; 
-  border: 1.5px solid rgba(71, 85, 105, 0.45) !important; 
-  box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+  border: 1.5px solid var(--border-medium) !important; 
+  box-shadow: 0 18px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 var(--border-subtle) !important;
+  overflow: hidden !important;
 }
 
 /* Soften Harsh Borders Globally */
 div.border-slate-800, 
 div.border-slate-700,
 div.border-slate-850 {
-  border-color: rgba(71, 85, 105, 0.45) !important;
-}
-
-/* Header Height & Alignment */
-aside > div:first-child,
-header,
-#app-header,
-div#erp-workspace header {
-  height: 64px !important;
-  background-color: #0c1426 !important;
-  border-bottom: 1px solid rgba(71, 85, 105, 0.35) !important;
+  border-color: var(--border-medium) !important;
 }
 
 /* Table Styling */
@@ -278,25 +211,29 @@ table thead th {
   background-color: #0d162a !important;
   padding: 14px 16px !important; 
   font-size: 0.725rem !important;
+  font-weight: 700 !important;
   text-transform: uppercase; 
   letter-spacing: 0.06em; 
-  color: #94a3b8 !important;
-  border-bottom: 1px solid rgba(71, 85, 105, 0.45) !important;
+  color: #cbd5e1 !important;
+  border-bottom: 1px solid var(--border-medium) !important;
 }
 
 table tbody td {
   padding: 12px 16px !important; 
-  border-bottom: 1px solid rgba(51, 65, 85, 0.3) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
   font-size: 0.8125rem !important; 
   white-space: nowrap !important;
   color: #cbd5e1 !important;
 }
 
+table tbody tr {
+  transition: background-color 0.15s ease !important;
+}
 table tbody tr:hover { 
-  background-color: rgba(30, 41, 59, 0.35) !important; 
+  background-color: rgba(99, 102, 241, 0.06) !important; 
 }
 
-/* 💡 Fix Sticky Action Column Background */
+/* Sticky Action Column Background */
 table th.sticky,
 table td.sticky,
 th.right-0,
@@ -306,7 +243,11 @@ td.right-0 {
   background-color: #0b1324 !important;
   opacity: 1 !important;
   z-index: 25 !important;
-  border-left: 1px solid rgba(71, 85, 105, 0.45) !important;
+  border-left: 1px solid var(--border-medium) !important;
+}
+table tbody tr:hover td.sticky,
+table tbody tr:hover td.right-0 {
+  background-color: #141d36 !important;
 }
 
 /* Soften Text Globally */
@@ -314,38 +255,14 @@ td.right-0 {
   color: #f1f5f9 !important;
 }
 
-/* 💡 Debit, Credit & Balance Glowing Colors */
-.text-emerald-400,
-td.text-emerald-400,
-span.text-emerald-400 {
-  color: #34d399 !important; /* Emerald Green */
-}
+/* Debit, Credit & Balance Glowing Colors */
+.text-emerald-400, td.text-emerald-400, span.text-emerald-400 { color: #34d399 !important; }
+.text-rose-400, td.text-rose-400, span.text-rose-400 { color: #fb7185 !important; }
+.text-indigo-400, td.text-indigo-400, span.text-indigo-400 { color: #818cf8 !important; }
+.text-amber-400, td.text-amber-400, span.text-amber-400 { color: #fbbf24 !important; }
+.text-teal-400, td.text-teal-400, span.text-teal-400 { color: #2dd4bf !important; }
 
-.text-rose-400,
-td.text-rose-400,
-span.text-rose-400 {
-  color: #fb7185 !important; /* Vibrant Rose Red */
-}
-
-.text-indigo-400,
-td.text-indigo-400,
-span.text-indigo-400 {
-  color: #818cf8 !important; /* Indigo Blue */
-}
-
-.text-amber-400,
-td.text-amber-400,
-span.text-amber-400 {
-  color: #fbbf24 !important; /* Amber Gold */
-}
-
-.text-teal-400,
-td.text-teal-400,
-span.text-teal-400 {
-  color: #2dd4bf !important;
-}
-
-/* 💡 Action Delete Button Highlight */
+/* Action Delete Button Highlight */
 button[onclick*="delete"] i,
 button[onclick*="Delete"] i,
 .btn-delete i,
@@ -361,13 +278,13 @@ button[onclick*="Delete"]:hover i,
 }
 
 /* ==============================================================================
-   💡 3. ENTERPRISE OPAQUE FORM MODAL SYSTEM (ဖောက်ထွင်းမမြင်နိုင်သော Modal စနစ်)
+   💡 3. ENTERPRISE OPAQUE FORM MODAL SYSTEM
    ============================================================================== */
 div[id$="-modal"] > div {
   background-color: #0c1528 !important;
   opacity: 1 !important;
   box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.95), 0 0 25px rgba(99, 102, 241, 0.15) !important;
-  border: 1.5px solid rgba(99, 102, 241, 0.35) !important;
+  border: 1.5px solid var(--border-accent) !important;
 }
 
 .backdrop-blur-sm,
@@ -381,7 +298,7 @@ div[id$="-modal"] textarea {
   display: block !important;
   width: 100% !important;
   background-color: #070d18 !important;
-  border: 1.5px solid rgba(71, 85, 105, 0.6) !important;
+  border: 1.5px solid var(--border-strong) !important;
   border-radius: 8px !important;
   color: #f1f5f9 !important;
   font-size: 0.8125rem !important;
@@ -414,7 +331,7 @@ div[id$="-modal"] input[type="number"] {
   font-size: 0.875rem !important;
   letter-spacing: 0.04em !important;
   color: #a5f3fc !important;
-  border-color: rgba(56, 189, 248, 0.3) !important;
+  border-color: var(--border-cyan-accent) !important;
 }
 
 div[id$="-modal"] input[type="date"] {
@@ -463,14 +380,14 @@ div[id$="-modal"] .space-y-3 > div {
 div[id$="-modal"] input:not(:focus):hover,
 div[id$="-modal"] select:not(:focus):hover,
 div[id$="-modal"] textarea:not(:focus):hover {
-  border-color: rgba(99, 102, 241, 0.5) !important;
+  border-color: var(--border-accent-hover) !important;
   background-color: #090f1e !important;
 }
 
 /* Global inputs outside modal */
 input, select, textarea {
   background-color: #070d18 !important;
-  border: 1.5px solid rgba(71, 85, 105, 0.6) !important;
+  border: 1.5px solid var(--border-strong) !important;
   color: #e2e8f0 !important;
   font-size: 0.75rem !important;
   font-variant-numeric: lining-nums tabular-nums !important;
@@ -482,7 +399,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
 }
 
-/* Digits styling */
+/* Monospace Digits styling */
 input[type="number"], input.font-mono, td.font-mono, span.font-mono, .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
   font-variant-numeric: lining-nums tabular-nums !important;
@@ -544,7 +461,7 @@ div[id$="-modal"] form > div:last-child {
   padding-top: 1rem !important;
   padding-bottom: 0.5rem !important;
   margin-top: 1rem !important;
-  border-top: 1px solid rgba(71, 85, 105, 0.45) !important;
+  border-top: 1px solid var(--border-medium) !important;
   z-index: 20 !important;
 }
 

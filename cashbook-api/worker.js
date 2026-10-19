@@ -1,7 +1,7 @@
 /**
  * ==============================================================================
  * MYA GABAR SOE SHOP - MAIN ROUTER WORKER
- * File: cashbook-api/worker.js  
+ * File: cashbook-api/worker.js
  * Standard: Imports modular handlers for Store, Yarn, and Cashbook
  * ==============================================================================
  */

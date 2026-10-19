@@ -13,8 +13,8 @@
   /* Border Tokens for Design Consistency & Easy Maintenance */
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(71, 85, 105, 0.45);
-  --border-strong: rgba(71, 85, 105, 0.6);
+  --border-medium: rgba(71, 85, 105, 0.35); /* ပိုမိုဖျော့တော့သော မီးခိုးရောင် */
+  --border-strong: rgba(71, 85, 105, 0.5);
   --border-accent: rgba(99, 102, 241, 0.35);
   --border-accent-hover: rgba(99, 102, 241, 0.5);
   --border-cyan-accent: rgba(56, 189, 248, 0.3);
@@ -76,7 +76,7 @@ div#erp-workspace {
 
 /* 💡 Soften Sidebar Section Heading Labels */
 #sidebar-nav p {
-  font-size: 0.625rem !important; /* 10px */
+  font-size: 0.625rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
   color: #64748b !important;
@@ -84,7 +84,11 @@ div#erp-workspace {
   margin-bottom: 0.5rem !important;
 }
 
-/* Header Height & Alignment */
+/* Header Height & Alignment (Sidebar နှင့် Window View ကြား ဒေါင်လိုက်လိုင်းကို မသိမသာ ဖျော့ခြင်း) */
+aside {
+  border-right: 1px solid rgba(71, 85, 105, 0.25) !important;
+}
+
 aside > div:first-child,
 header,
 #app-header,
@@ -201,6 +205,12 @@ div.border-slate-800,
 div.border-slate-700,
 div.border-slate-850 {
   border-color: var(--border-medium) !important;
+}
+
+/* 💡 Table Category Badges Subdued Border Correction (Category ဘောင်အဖြူ ဖျောက်ရန်) */
+td span[class*="rounded"], 
+td div[class*="rounded"] {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Table Styling */

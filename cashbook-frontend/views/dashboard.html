@@ -1,83 +1,132 @@
-<!DOCTYPE html>
-<html lang="my">
-<head>
-    <meta charset="UTF-8">
-    <title>မြဂမ္ဘား စိုး ဝိုးတည်တိုက် • Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-</head>
-<body class="bg-slate-950 text-slate-100 font-sans antialiased">
+<!-- ==============================================================================
+     MYA GABAR SOE SHOP - LUXURY HOME DASHBOARD VIEW
+     File: views/dashboard.html (သို့မဟုတ် dashboard.html)
+     ============================================================================== -->
 
-    <div class="flex h-screen overflow-hidden">
-        <!-- SIDEBAR -->
-        <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
-            <div class="p-5 border-b border-slate-800">
-                <h1 class="text-lg font-bold text-amber-400">မြဂမ္ဘား စိုး</h1>
-                <p class="text-xs text-slate-400">စိုးတည်တိုက် • CASH BOOK</p>
-            </div>
-            
-            <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
-                <a href="dashboard.html" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-amber-500/10 text-amber-400 font-medium text-sm">
-                    🏠 Home Dashboard
-                </a>
-                <div class="pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Main Books</div>
-                <a href="#" onclick="switchShop('main')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏛️ Main Home Shop</a>
-                <a href="#" onclick="switchShop('shop1')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏬 ဆိုင်ခွဲ (၁)</a>
-                <a href="#" onclick="switchShop('shop2')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏬 ဆိုင်ခွဲ (၂)</a>
-                <a href="#" onclick="switchShop('shop3')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏬 ဆိုင်ခွဲ (၃)</a>
-                <a href="#" onclick="switchShop('shop4')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏬 ဆိုင်ခွဲ (၄)</a>
-                <a href="#" onclick="switchShop('shop5')" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🏬 ဆိုင်ခွဲ (၅)</a>
+<div class="space-y-6" style="padding-top: 10px;">
 
-                <div class="pt-4 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Store & Inventory</div>
-                <a href="store.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">📦 ကုန်ချောစတို (Store)</a>
-                <a href="yarn.html" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-300">🧶 ချည်စတို (Yarn Store)</a>
-            </nav>
+  <!-- ၁။ Welcome Banner -->
+  <div class="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-emerald-500/10 border border-amber-500/20 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl">
+    <div>
+      <h2 class="text-lg font-black text-amber-300 flex items-center gap-2">
+        <span>မြကမ္ဘာစိုး ပိုးထည်တိုက်</span>
+        <span class="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">CASH BOOK</span>
+      </h2>
+      <p id="welcome-subtext" class="text-xs text-slate-300 mt-1">
+        ပင်မဆိုင်နှင့် ဆိုင်ခွဲများ၏ ငွေစာရင်း၊ စတိုလက်ကျန်များကို တစ်စုတစ်စည်းတည်း ကြည့်ရှုနိုင်ပါသည်။
+      </p>
+    </div>
+    <button onclick="DashboardEngine.loadDashboardData()" class="px-3.5 py-2 bg-[#070d18] hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer">
+      <i class="fa-solid fa-rotate text-emerald-400"></i> Refresh Stats
+    </button>
+  </div>
 
-            <div class="p-4 border-t border-slate-800">
-                <button onclick="logout()" class="w-full py-2 bg-rose-600/20 text-rose-400 rounded-lg text-sm font-medium hover:bg-rose-600/30">🚪 ထွက်မည် (Logout)</button>
-            </div>
-        </aside>
-
-        <!-- MAIN CONTENT AREA -->
-        <main class="flex-1 flex flex-col overflow-y-auto">
-            <!-- TOP HEADER -->
-            <header class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50">
-                <h2 id="page-title" class="text-xl font-bold text-white">Home Dashboard</h2>
-                <div class="flex items-center gap-4 text-sm text-slate-300">
-                    <span id="user-info" class="bg-slate-800 px-3 py-1 rounded-full border border-slate-700">User: Loading...</span>
-                </div>
-            </header>
-
-            <!-- DASHBOARD BODY -->
-            <div class="p-6 space-y-6">
-                <!-- TOP 4 KPI BOXES -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-slate-900 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-medium">စုစုပေါင်း ဝင်ငွေ (Total Income)</p>
-                        <h3 id="lbl-income" class="text-2xl font-bold text-emerald-400 mt-2">0 ကျပ်</h3>
-                    </div>
-                    <div class="bg-slate-900 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-medium">စုစုပေါင်း ထွက်ငွေ (Total Expense)</p>
-                        <h3 id="lbl-expense" class="text-2xl font-bold text-rose-400 mt-2">0 ကျပ်</h3>
-                    </div>
-                    <div class="bg-slate-900 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-medium">လက်ဝယ်ငွေ (Cash in Hand)</p>
-                        <h3 id="lbl-cash" class="text-2xl font-bold text-amber-400 mt-2">0 ကျပ်</h3>
-                    </div>
-                    <div class="bg-slate-900 p-5 rounded-xl border border-slate-800">
-                        <p class="text-xs text-slate-400 uppercase font-medium">ဘဏ်လက်ကျန် (Bank Balance)</p>
-                        <h3 id="lbl-bank" class="text-2xl font-bold text-cyan-400 mt-2">0 ကျပ်</h3>
-                    </div>
-                </div>
-
-                <!-- WELCOME BANNER / DYNAMIC INFO -->
-                <div class="bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-amber-500/20 p-6 rounded-xl">
-                    <h3 class="text-lg font-semibold text-amber-300">မြဂမ္ဘား စိုး ဝိုးတည်တိုက် စနစ်သို့ ကြိုဆိုပါတယ်</h3>
-                    <p id="welcome-subtext" class="text-sm text-slate-300 mt-1">လက်ရှိ ဝင်ရောက်ထားသော ဆိုင်နှင့် အချက်အလက်များကို အောက်တွင် ကြည့်ရှုနိုင်ပါသည်။</p>
-                </div>
-            </div>
-        </main>
+  <!-- ၂။ Top 4 Vibrant KPI Stats Cards Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    
+    <!-- Card 1: TOTAL INCOME -->
+    <div class="stats-card">
+      <div><i class="fa-solid fa-arrow-trend-up"></i></div>
+      <div class="min-w-0 flex-1">
+        <p>TOTAL INCOME</p>
+        <h3 id="lbl-income" class="text-emerald-400">0 ကျပ်</h3>
+      </div>
     </div>
 
-    <script src="dashboard.js"></script>
-</body>
-</html>
+    <!-- Card 2: TOTAL EXPENSE -->
+    <div class="stats-card">
+      <div><i class="fa-solid fa-arrow-trend-down"></i></div>
+      <div class="min-w-0 flex-1">
+        <p>TOTAL EXPENSE</p>
+        <h3 id="lbl-expense" class="text-rose-400">0 ကျပ်</h3>
+      </div>
+    </div>
+
+    <!-- Card 3: CASH IN HAND -->
+    <div class="stats-card">
+      <div><i class="fa-solid fa-money-bill-wave"></i></div>
+      <div class="min-w-0 flex-1">
+        <p>CASH IN HAND</p>
+        <h3 id="lbl-cash" class="text-amber-400">0 ကျပ်</h3>
+      </div>
+    </div>
+
+    <!-- Card 4: BANK / KPAY -->
+    <div class="stats-card">
+      <div><i class="fa-solid fa-building-columns"></i></div>
+      <div class="min-w-0 flex-1">
+        <p>BANK / KPAY</p>
+        <h3 id="lbl-bank" class="text-sky-400">0 ကျပ်</h3>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ၃။ Quick Branch Navigation Cards -->
+  <div class="control-toolbar p-5 rounded-2xl border border-slate-800 bg-[#0e172a]">
+    <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+      <i class="fa-solid fa-shop text-amber-400"></i> ဆိုင်ခွဲများသို့ အမြန်သွားရောက်ရန် (Quick Switch)
+    </h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <button onclick="switchTab('main')" class="p-3 bg-[#070d18] hover:bg-indigo-600/20 border border-slate-800 hover:border-indigo-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-building-columns text-amber-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Main Shop</span>
+        <span class="text-[10px] text-slate-500 font-mono">ပင်မဆိုင်</span>
+      </button>
+
+      <button onclick="switchTab('shop1')" class="p-3 bg-[#070d18] hover:bg-emerald-600/20 border border-slate-800 hover:border-emerald-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-shop text-emerald-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Shop 1</span>
+        <span class="text-[10px] text-slate-500 font-mono">ဆိုင်ခွဲ (၁)</span>
+      </button>
+
+      <button onclick="switchTab('shop2')" class="p-3 bg-[#070d18] hover:bg-sky-600/20 border border-slate-800 hover:border-sky-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-shop text-sky-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Shop 2</span>
+        <span class="text-[10px] text-slate-500 font-mono">ဆိုင်ခွဲ (၂)</span>
+      </button>
+
+      <button onclick="switchTab('shop3')" class="p-3 bg-[#070d18] hover:bg-cyan-600/20 border border-slate-800 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-shop text-cyan-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Shop 3</span>
+        <span class="text-[10px] text-slate-500 font-mono">ဆိုင်ခွဲ (၃)</span>
+      </button>
+
+      <button onclick="switchTab('shop4')" class="p-3 bg-[#070d18] hover:bg-purple-600/20 border border-slate-800 hover:border-purple-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-shop text-purple-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Shop 4</span>
+        <span class="text-[10px] text-slate-500 font-mono">ဆိုင်ခွဲ (၄)</span>
+      </button>
+
+      <button onclick="switchTab('shop5')" class="p-3 bg-[#070d18] hover:bg-rose-600/20 border border-slate-800 hover:border-rose-500/50 rounded-xl flex flex-col items-center justify-center text-center transition-all group">
+        <i class="fa-solid fa-shop text-rose-400 text-lg mb-1.5 group-hover:scale-110 transition-transform"></i>
+        <span class="text-xs font-bold text-slate-200">Shop 5</span>
+        <span class="text-[10px] text-slate-500 font-mono">ဆိုင်ခွဲ (၅)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ၄။ Inventory Shortcuts -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div onclick="switchTab('store')" class="p-5 rounded-2xl border border-slate-800 bg-[#0e172a] hover:border-amber-500/40 transition-all cursor-pointer flex items-center gap-4 group">
+      <div class="w-12 h-12 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-boxes-stacked"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-white">ကုန်ချောစတို (Store & Inventory)</h4>
+        <p class="text-xs text-slate-400 mt-0.5">ပုဆိုး၊ လုံချည်၊ အင်္ကျီ ကုန်ချောလက်ကျန်များ ကြည့်ရှုရန်</p>
+      </div>
+    </div>
+
+    <div onclick="switchTab('yarn')" class="p-5 rounded-2xl border border-slate-800 bg-[#0e172a] hover:border-sky-500/40 transition-all cursor-pointer flex items-center gap-4 group">
+      <div class="w-12 h-12 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+        <i class="fa-solid fa-scroll"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-white">ချည်စတို (Yarn Store)</h4>
+        <p class="text-xs text-slate-400 mt-0.5">ယုံချည်၊ ၂/၈၀ ချည်၊ ၂/၁၀၀ ချည် အရောင်လိုင်းများ ကြည့်ရှုရန်</p>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -590,20 +590,28 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
   }
 }
 
-/* 💡 Refresh, Export ခလုတ်များနှင့် Pagination ဘောက်စ်များ၏ အဖြူရောင်ဘောင်များကို မသိမသာ ဖျော့ခြင်း */
-.control-toolbar button,
-div.flex.justify-between.items-center.gap-4.bg-\[\#0a1120\],
-#store-btn-prev,
-#store-btn-next {
+/* 💡 Refresh နှင့် Export CSV ကဲ့သို့သော Secondary ခလုတ်များကိုသာ မသိမသာ ဖျော့ခြင်း (+ Add New Entry ကို ချန်လှပ်ရန်) */
+.control-toolbar button:not(.bg-indigo-600) {
   border: 1px solid rgba(71, 85, 105, 0.3) !important;
   background-color: #070d18 !important;
+  color: #cbd5e1 !important;
 }
 
-/* Hover လုပ်ချိန်တွင် ညင်သာသော Indigo အရောင်ပြောင်းရန် */
-.control-toolbar button:hover,
-#store-btn-prev:hover,
-#store-btn-next:hover {
+.control-toolbar button:not(.bg-indigo-600):hover {
   border-color: rgba(99, 102, 241, 0.5) !important;
   background-color: #0d162a !important;
+  color: #f1f5f9 !important;
+}
+
+/* Primary Button (+ Add New Entry) အတွက် မူလ Indigo ဇိမ်ခံဒီဇိုင်းကို ပြန်ဖော်ခြင်း */
+.control-toolbar button.bg-indigo-600 {
+  background-color: #4f46e5 !important;
+  border: 1px solid rgba(99, 102, 241, 0.5) !important;
+  color: #ffffff !important;
+}
+
+.control-toolbar button.bg-indigo-600:hover {
+  background-color: #4338ca !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4) !important;
 }
 

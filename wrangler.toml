@@ -6,7 +6,7 @@
 # ==============================================================================
 
 name = "shop"
-main = "worker.js"
+main = "cashbook-api/worker.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 

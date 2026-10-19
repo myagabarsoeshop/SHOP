@@ -630,13 +630,14 @@ function exportCsvStore() {
     return;
   }
 
-  var csv = "NO,CODE,ITEM NAME,CATEGORY,UNIT,CURRENT STOCK,COST PRICE,RETAIL PRICE,WHOLESALE PRICE,SHOP\n";
+  var csv = "NO,CODE,ITEM NAME,CATEGORY,SUB CATEGORY,UNIT,CURRENT STOCK,COST PRICE,RETAIL PRICE,WHOLESALE PRICE,SHOP\n";
   storeActiveData.forEach(function (r, idx) {
     var wholesale = r.wholesale_price || r.default_price || 0;
     csv += (idx + 1) + ',' +
             window.safeCsvCell(r.item_code || '') + ',' +
             window.safeCsvCell(r.item_name || '') + ',' +
             window.safeCsvCell(r.category || '') + ',' +
+            window.safeCsvCell(r.sub_category || '') + ',' + // 💡 Sub-category ပါဝင်အောင် ဖြည့်စွက်ထားသည်
             window.safeCsvCell(r.unit || 'ထည်') + ',' +
             (r.current_stock || 0) + ',' +
             (r.cost_price || 0) + ',' +

@@ -193,7 +193,6 @@ function renderStatsStore() {
 
   if (elItems) elItems.textContent = Number(filtered.length).toLocaleString('en-US');
   if (elStock) elStock.textContent = Number(totalStock).toLocaleString('en-US');
-  // 💡 MMK စာလုံးကို ဖြုတ်ပြီး ဂဏန်းသီးသန့် မပြတ်တောက်အောင် ပြသခြင်း
   if (elVal) elVal.textContent = Number(totalValuation).toLocaleString('en-US');
   if (elLow) elLow.textContent = Number(lowStockCount).toLocaleString('en-US');
 }
@@ -254,6 +253,10 @@ function renderTableStore() {
             '<!-- ✏️ Edit Item -->' +
             '<button onclick="StoreEngine.openEditModal(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-indigo-400 hover:text-indigo-300 transition" title="Edit Item">' +
               '<i class="fa-solid fa-pen-to-square"></i>' +
+            '</button>' +
+            '<!-- 🗑️ Delete Item -->' +
+            '<button onclick="StoreEngine.deleteItem(\'' + window.escapeJsAttr(row.item_code) + '\')" class="text-rose-400 hover:text-rose-300 transition" title="Delete Item">' +
+              '<i class="fa-solid fa-trash-can"></i>' +
             '</button>' +
           '</div>' +
         '</td>' +
@@ -443,6 +446,26 @@ async function saveItemSubmitStore(e) {
   }
 }
 
+async function deleteItemStore(itemCode) {
+  if (!confirm(`⚠️ အမှန်တကယ် ဖျက်မှာ သေချာပါသလား (${itemCode})?`)) return;
+
+  try {
+    if (typeof toggleLoading === 'function') toggleLoading(true);
+    var res = await callApi('deleteItem', { shop_id: currentStoreShop, item_code: itemCode });
+    if (res && res.success) {
+      if (typeof showToast === 'function') showToast("SUCCESS", "ပစ္စည်း စာရင်း ဖျက်ပြီးပါပြီ။");
+      if (typeof window.clearAllApiCache === 'function') window.clearAllApiCache();
+      await loadStoreInventoryData(true, true);
+    } else {
+      throw new Error(res?.message || "ဖျက်ဆီးမှု မအောင်မြင်ပါ။");
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') showToast("ERROR", "ဖျက်၍မရပါ: " + err.message);
+  } finally {
+    if (typeof toggleLoading === 'function') toggleLoading(false);
+  }
+}
+
 // ==============================================================================
 // 💡 INTER-BRANCH STOCK TRANSFER ENGINE
 // ==============================================================================
@@ -513,12 +536,24 @@ async function saveTransferSubmitStore(e) {
     closeTransferModalStore();
     if (typeof toggleLoading === 'function') toggleLoading(true);
 
+    // 💡 D1 ဇယားဘက်တွင် transferred_at နှင့် transferred_by ကို မှတ်တမ်းတင်ရန် လက်ရှိအချိန်နှင့် User ကို ပေးပို့ခြင်း
+    var currentUser = "Admin";
+    try {
+      var storedUser = localStorage.getItem('golden_user');
+      if (storedUser) {
+        var parsed = JSON.parse(storedUser);
+        currentUser = parsed.name || parsed.username || "Admin";
+      }
+    } catch (e) {}
+
     var res = await callApi('transferStock', {
       item_code: itemCode,
       from_shop: fromShop,
       to_shop: toShop,
       quantity: qty,
-      remark: remark
+      remark: remark,
+      transferred_by: currentUser,
+      transferred_at: new Date().toISOString()
     });
 
     if (res && res.success) {
@@ -600,15 +635,15 @@ function exportCsvStore() {
   storeActiveData.forEach(function (r, idx) {
     var wholesale = r.wholesale_price || r.default_price || 0;
     csv += (idx + 1) + ',' +
-           window.safeCsvCell(r.item_code || '') + ',' +
-           window.safeCsvCell(r.item_name || '') + ',' +
-           window.safeCsvCell(r.category || '') + ',' +
-           window.safeCsvCell(r.unit || 'ထည်') + ',' +
-           (r.current_stock || 0) + ',' +
-           (r.cost_price || 0) + ',' +
-           (r.retail_price || 0) + ',' +
-           wholesale + ',' +
-           window.safeCsvCell(currentStoreShop.toUpperCase()) + '\n';
+            window.safeCsvCell(r.item_code || '') + ',' +
+            window.safeCsvCell(r.item_name || '') + ',' +
+            window.safeCsvCell(r.category || '') + ',' +
+            window.safeCsvCell(r.unit || 'ထည်') + ',' +
+            (r.current_stock || 0) + ',' +
+            (r.cost_price || 0) + ',' +
+            (r.retail_price || 0) + ',' +
+            wholesale + ',' +
+            window.safeCsvCell(currentStoreShop.toUpperCase()) + '\n';
   });
 
   var blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
@@ -665,6 +700,7 @@ window.StoreEngine = {
   openEditModal: openEditModalStore,
   closeItemModal: closeItemModalStore,
   saveItemSubmit: saveItemSubmitStore,
+  deleteItem: deleteItemStore,
   openStockModal: openStockModalStore,
   closeStockModal: closeStockModalStore,
   saveStockSubmit: saveStockSubmitStore,

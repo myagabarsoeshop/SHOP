@@ -1,12 +1,35 @@
+# ==============================================================================
+# MYA GABAR SOE SHOP - CLOUDFLARE WORKER CONFIGURATION
+# File: wrangler.toml  
+# 💡 Features: Strict Production CORS Whitelist, D1 Database Binding, 
+#              Automated Cron Triggers for Database Maintenance
+# ==============================================================================
+
 name = "shop"
-main = "cashbook-api/worker.js"
+main = "worker.js"
 compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
 
-[assets]
-directory = "cashbook-frontend"
-binding = "ASSETS"
-
+# 💡 1. CLOUDFLARE D1 DATABASE BINDING
 [[d1_databases]]
 binding = "DB"
 database_name = "shop-db"
 database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
+
+# 💡 2. ENVIRONMENT VARIABLES (Strict Production CORS Protection)
+[vars]
+# Localhost များကို ဖြုတ်ထားပြီး Production Domain ကိုသာ ခွင့်ပြုထားပါသည် (Enterprise Security Standard)
+ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
+
+# 💡 3. AUTOMATED CRON TRIGGERS (Database Maintenance)
+# ညစဉ် သန်းခေါင်ယံ (0 0 * * *) အချိန်တိုင်း ၆ လကျော်သော Audit Logs များကို အလိုအလျောက် ရှင်းလင်းပေးမည်
+[triggers]
+crons = ["0 0 * * *"]
+
+# ==============================================================================
+# 💡 4. REQUIRED WORKER SECRETS (Set via Cloudflare Dashboard or CLI)
+# ------------------------------------------------------------------------------
+# 1. AUTH_SECRET      -> JWT Cryptographic Secret (e.g., npx wrangler secret put AUTH_SECRET)
+# 2. RESEND_API_KEY   -> Resend Email API Key (e.g., npx wrangler secret put RESEND_API_KEY)
+# 3. CF_API_TOKEN     -> Cloudflare API Token for D1 Quota Telemetry
+# ==============================================================================

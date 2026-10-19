@@ -2,7 +2,8 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - CENTRAL API BRIDGE & DATA ENGINE (D1 EDITION)
  * File: js/api.js (Location: cashbook-frontend/js/api.js)
- * 💡 Features: 🛡️ Quota-Safe In-Memory & LocalStorage Cache (Zero QuotaExceededError),
+ * 💡 Features: 🛡️ Resilient Dual-Token Authentication (token + golden_auth_token),
+ *              Quota-Safe In-Memory & LocalStorage Cache (Zero QuotaExceededError),
  *              Dynamic Calendar FY Integration (Jan 1 - Dec 31 Standard),
  *              Clean 401 Session Revocation & Complete Storage Purge,
  *              Pre-fetched Shop & Core Views for 0ms Instant Navigation,
@@ -19,11 +20,53 @@ function getApiBaseUrl() {
   return "https://shop.myagabarsoeshop.workers.dev/api";
 }
 
+// 💡 Helper Functions: Token နှင့် User Data များကို မည်သည့် Key ဖြင့် သိမ်းထားသည်ဖြစ်စေ အမှားအယွင်းမရှိ ရယူပေးခြင်း
+function getAuthTokenFromStorage() {
+  let token = localStorage.getItem('token') || 
+              localStorage.getItem('golden_auth_token') || 
+              localStorage.getItem('auth_token') || '';
+  
+  // အကယ်၍ user object ထဲတွင် token ထည့်ထားပါက ထပ်မံရယူခြင်း
+  if (!token) {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || localStorage.getItem('golden_user') || '{}');
+      if (u && (u.token || u.authToken || u.access_token)) {
+        token = u.token || u.authToken || u.access_token;
+      }
+    } catch (e) {}
+  }
+  return token || '';
+}
+
+function getAuthUserFromStorage() {
+  const userStr = localStorage.getItem('user') || localStorage.getItem('golden_user');
+  if (userStr) {
+    try {
+      return JSON.parse(userStr);
+    } catch (e) {}
+  }
+  return null;
+}
+
+function getAuthRoleFromStorage() {
+  const directRole = localStorage.getItem('user_role') || localStorage.getItem('golden_user_role');
+  if (directRole) return directRole;
+  const u = getAuthUserFromStorage();
+  return u ? (u.role || u.user_role || 'viewer') : 'viewer';
+}
+
+function getAuthNameFromStorage() {
+  const directName = localStorage.getItem('user_name') || localStorage.getItem('golden_user_name');
+  if (directName) return directName;
+  const u = getAuthUserFromStorage();
+  return u ? (u.username || u.name || 'Admin') : 'Admin';
+}
+
 // 💡 Global AppState
 window.AppState = window.AppState || {
-  currentUser: localStorage.getItem('golden_user_name') || null,
-  currentUserRole: localStorage.getItem('golden_user_role') || null,
-  authToken: localStorage.getItem('golden_auth_token') || null,
+  currentUser: getAuthNameFromStorage() || null,
+  currentUserRole: getAuthRoleFromStorage() || null,
+  authToken: getAuthTokenFromStorage() || null,
   currentModule: 'dashboard'
 };
 
@@ -94,9 +137,6 @@ window.parseCleanIntId = function(val) {
   return isNaN(n) ? 0 : n;
 };
 
-/**
- * ⚡ FIX: 2026-2027 ဟု ထွက်နေမှုကို ဖျက်သိမ်းပြီး Jan-Dec စံနှုန်းအရ ၂၀၂၆ ဟုသာ တိကျစွာ ပြန်ပေးသည်
- */
 window.getCurrentAcademicYear = function(dateInput) {
   if (window.FY && typeof window.FY.getCurrentFY === 'function') {
     return String(window.FY.getCurrentFY('number'));
@@ -252,8 +292,9 @@ window.ErrorLogger = {
   }
 };
 
+// 💡 Fresh Token ရယူခြင်း (အသစ်ရော အဟောင်းပါ နှစ်မျိုးလုံးကို ဦးစားပေး ထောက်လှမ်းပေးသည်)
 function getFreshAuthToken() {
-  const token = localStorage.getItem('golden_auth_token') || (window.AppState ? window.AppState.authToken : null) || '';
+  const token = getAuthTokenFromStorage() || (window.AppState ? window.AppState.authToken : null) || '';
   if (window.AppState) window.AppState.authToken = token;
   return token;
 }
@@ -267,7 +308,7 @@ window.toggleLoading = function(show) {
 };
 
 // ==============================================================================
-// 💡 5. CENTRAL D1 API FETCH ENGINE
+// 💡 5. CENTRAL D1 API FETCH ENGINE (RESILIENT AUTH)
 // ==============================================================================
 
 window.callApi = async function(action, payload = {}, method = 'POST') {
@@ -288,7 +329,7 @@ window.callApi = async function(action, payload = {}, method = 'POST') {
 
   try {
     const currentToken = getFreshAuthToken();
-    const currentRole = localStorage.getItem('golden_user_role') || (window.AppState ? window.AppState.currentUserRole : '') || '';
+    const currentRole = getAuthRoleFromStorage() || (window.AppState ? window.AppState.currentUserRole : '') || '';
 
     if (isReadAction && !forceRefresh) {
       const cachedRes = window.getApiCache(cacheKey);
@@ -301,6 +342,7 @@ window.callApi = async function(action, payload = {}, method = 'POST') {
       'Content-Type': 'application/json'
     };
 
+    // 💡 Token ရှိမှသာ Authorization Header ထည့်မည် (Bearer undefined/null မဖြစ်စေရန်)
     if (currentToken) {
       headers['Authorization'] = `Bearer ${currentToken}`;
     }
@@ -327,9 +369,15 @@ window.callApi = async function(action, payload = {}, method = 'POST') {
 
     const response = await fetch(url, options);
 
+    // 🛑 401 Unauthorized (Session Expired) ဖြစ်ပေါ်လာပါက သန့်ရှင်းစွာ ရှင်းထုတ်ခြင်း
     if (response.status === 401) {
       console.warn(`[API 401] Unauthorized access for action: ${action}`);
 
+      // Token Key နာမည် အားလုံးကို ပြေပြစ်စွာ ရှင်းလင်းပေးသည်
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user_name');
       localStorage.removeItem('golden_auth_token');
       localStorage.removeItem('golden_user_name');
       localStorage.removeItem('golden_user_role');
@@ -401,10 +449,9 @@ window.callApi = async function(action, payload = {}, method = 'POST') {
 window.prefetchCoreModules = function() {
   window.viewCache = window.viewCache || {};
   
-  // 💡 ပိုးထည်တိုက်၏ မော်ဂျူးစစ်စစ်များသာ ကြိုတင်ဆွဲတင်မည်
   const views = [
-    'dashboard', 'bank', 'shop1', 'shop2', 'shop3', 'shop4', 'shop5',
-    'reports', 'settings'
+    'dashboard', 'main', 'bank', 'shop1', 'shop2', 'shop3', 'shop4', 'shop5',
+    'store', 'yarn', 'reports', 'settings'
   ];
 
   views.forEach(v => {

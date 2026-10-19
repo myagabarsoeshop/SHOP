@@ -589,3 +589,21 @@ div[id$="-modal"] form::-webkit-scrollbar-thumb:hover {
     margin: 0;
   }
 }
+
+/* 💡 Refresh, Export ခလုတ်များနှင့် Pagination ဘောက်စ်များ၏ အဖြူရောင်ဘောင်များကို မသိမသာ ဖျော့ခြင်း */
+.control-toolbar button,
+div.flex.justify-between.items-center.gap-4.bg-\[\#0a1120\],
+#store-btn-prev,
+#store-btn-next {
+  border: 1px solid rgba(71, 85, 105, 0.3) !important;
+  background-color: #070d18 !important;
+}
+
+/* Hover လုပ်ချိန်တွင် ညင်သာသော Indigo အရောင်ပြောင်းရန် */
+.control-toolbar button:hover,
+#store-btn-prev:hover,
+#store-btn-next:hover {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  background-color: #0d162a !important;
+}
+

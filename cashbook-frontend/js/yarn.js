@@ -442,10 +442,24 @@ function openTransferModalYarn(itemCode) {
   document.getElementById("yarn-transfer-from").value = currentYarnShop;
   document.getElementById("yarn-transfer-current-stock").value = `${currentStock} ${item.unit || "ထုပ်"}`;
 
+  // 💡 ယက်ကန်းလုပ်ငန်း ကို ထိပ်ဆုံး နံပါတ် (၁) ဦးစားပေး အဖြစ် ထားရှိခြင်း
   var toShopSelect = document.getElementById("yarn-transfer-to");
-  var otherShops = ALL_YARN_SHOPS.filter(s => s.id !== currentYarnShop);
-  toShopSelect.innerHTML = otherShops.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  var destinations = [];
 
+  // ၁။ ယက်ကန်းလုပ်ငန်း ကို ပထမဆုံး ထည့်မည်
+  destinations.push({ id: "weaving", name: "🧵 ယက်ကန်းလုပ်ငန်း (Weaving Workshop)" });
+
+  // ၂။ အခြား ဆိုင်ခွဲများကို နောက်မှ ထည့်မည်
+  ALL_YARN_SHOPS.forEach(function(s) {
+    if (s.id !== currentYarnShop) {
+      destinations.push(s);
+    }
+  });
+
+  toShopSelect.innerHTML = destinations.map(function(s) {
+    return `<option value="${s.id}" class="bg-[#0c1424]">${s.name}</option>`;
+  }).join("");
+  
   var qtyInput = document.getElementById("yarn-transfer-qty");
   qtyInput.value = "";
   qtyInput.max = currentStock;

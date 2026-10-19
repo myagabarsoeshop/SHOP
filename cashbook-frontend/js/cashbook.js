@@ -2,7 +2,7 @@
  * ==============================================================================
  * MYA GABAR SOE SHOP - MULTI-BRANCH CASHBOOK & INVOICING ENGINE
  * File: cashbook-frontend/js/cashbook.js
- * Standard: Split Payment (Cash + Bank), Discount, Stock Guard & Twin Slip Print
+ * Standard: Split Payment (Cash + Bank), Discount, Subcategory & Auto MY
  * ==============================================================================
  */
 
@@ -28,6 +28,17 @@ var ALL_CB_SHOPS = [
   { id: "shop4", name: "ဆိုင်ခွဲ (၄)" },
   { id: "shop5", name: "ဆိုင်ခွဲ (၅)" }
 ];
+
+// 💡 နေ့စွဲမှ Month-Year (ဥပမာ - Oct 26) အလိုအလျောက် ထုတ်ပေးသည့် ဖန်ရှင်
+function getMonthYearString(dateString) {
+  if (!dateString) return "";
+  var date = new Date(dateString);
+  if (isNaN(date.getTime())) return "";
+  var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var m = months[date.getMonth()];
+  var y = String(date.getFullYear()).slice(-2);
+  return m + " " + y;
+}
 
 function parseCleanNumber(val) {
   if (val === undefined || val === null || val === "") return 0;
@@ -100,8 +111,10 @@ function filterCashbookData(list, searchVal) {
     var descMatch = String(row.description || "").toLowerCase().includes(q);
     var vrMatch = String(row.voucher_no || "").toLowerCase().includes(q);
     var catMatch = String(row.category || "").toLowerCase().includes(q);
+    var subCatMatch = String(row.sub_category || "").toLowerCase().includes(q);
+    var myMatch = String(row.my || "").toLowerCase().includes(q);
     var methodMatch = String(row.bank_name || "").toLowerCase().includes(q);
-    return descMatch || vrMatch || catMatch || methodMatch;
+    return descMatch || vrMatch || catMatch || subCatMatch || myMatch || methodMatch;
   });
 }
 
@@ -123,7 +136,7 @@ function renderTableCashbook() {
 
   if (!filteredRows || totalEntries === 0) {
     var shopName = (ALL_CB_SHOPS.find(s => s.id === currentCashbookShop)?.name) || currentCashbookShop.toUpperCase();
-    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-10 text-slate-500 font-bold">${shopName} တွင် ငွေစာရင်း မရှိသေးပါ။</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-slate-500 font-bold">${shopName} တွင် ငွေစာရင်း မရှိသေးပါ။</td></tr>`;
     updatePaginationUICashbook(0);
     return;
   }
@@ -148,8 +161,10 @@ function renderTableCashbook() {
 
     return '<tr class="hover:bg-slate-800/30 text-slate-300">' +
         '<td class="text-center font-semibold text-slate-500 py-3 px-2">' + (startIndex + idx + 1) + '</td>' +
+        '<td class="font-mono text-xs font-bold text-amber-400 text-center py-3 px-2">' + (window.escapeHtml(row.my) || "-") + '</td>' +
         '<td class="font-mono text-xs text-slate-300 py-3 px-2">' + (row.tx_date || "-") + '</td>' +
         '<td class="py-3 px-2">' + catBadge + '</td>' +
+        '<td class="font-semibold text-slate-300 py-3 px-2">' + (window.escapeHtml(row.sub_category) || "-") + '</td>' +
         '<td class="font-bold text-slate-100 max-w-sm truncate py-3 px-2" title="' + window.escapeHtml(row.description) + '">' + (window.escapeHtml(row.description) || "-") + '</td>' +
         '<td class="text-center text-xs font-semibold text-slate-400 py-3 px-2">' + window.escapeHtml(payMethod) + '</td>' +
         '<td class="text-right text-emerald-400 font-mono font-bold py-3 px-2">' + (Number(row.debit) > 0 ? formatMoney(row.debit) : "-") + '</td>' +
@@ -222,6 +237,7 @@ function setModeCashbook(mode) {
 
   var itemSection = document.getElementById("cb-item-section");
   var transferSection = document.getElementById("cb-transfer-section");
+  var expenseSubcatSection = document.getElementById("cb-expense-subcat-section");
   var purchaseRow = document.getElementById("cb-purchase-pricing-row");
   var labelPriceType = document.getElementById("cb-label-price-type");
   var labelDesc = document.getElementById("cb-label-desc");
@@ -229,6 +245,7 @@ function setModeCashbook(mode) {
   if (mode === "sale" || mode === "purchase") {
     if (itemSection) itemSection.classList.remove("hidden");
     if (transferSection) transferSection.classList.add("hidden");
+    if (expenseSubcatSection) expenseSubcatSection.classList.add("hidden");
     if (purchaseRow) {
       if (mode === "purchase") purchaseRow.classList.remove("hidden");
       else purchaseRow.classList.add("hidden");
@@ -238,10 +255,12 @@ function setModeCashbook(mode) {
   } else if (mode === "transfer") {
     if (itemSection) itemSection.classList.add("hidden");
     if (transferSection) transferSection.classList.remove("hidden");
+    if (expenseSubcatSection) expenseSubcatSection.classList.add("hidden");
     if (labelDesc) labelDesc.textContent = "ငွေလွှဲအကြောင်းအရာ *";
-  } else {
+  } else { // expense
     if (itemSection) itemSection.classList.add("hidden");
     if (transferSection) transferSection.classList.add("hidden");
+    if (expenseSubcatSection) expenseSubcatSection.classList.remove("hidden");
     if (labelDesc) labelDesc.textContent = "အသုံးစရိတ် အကြောင်းအရာ *";
   }
 }
@@ -432,7 +451,10 @@ function openEntryModalCashbook() {
   setModeCashbook("sale");
 
   var d = new Date();
-  document.getElementById("cb-form-date").value = d.toISOString().slice(0, 10);
+  var dateStr = d.toISOString().slice(0, 10);
+  document.getElementById("cb-form-date").value = dateStr;
+  
+  // 💡 Auto MY preview if needed
   document.getElementById("cb-form-shop-display").value = (ALL_CB_SHOPS.find(s => s.id === currentCashbookShop)?.name) || currentCashbookShop.toUpperCase();
 
   var prefix = currentCashbookShop === "main" ? "MVR" : `VR-${currentCashbookShop.toUpperCase()}`;
@@ -466,10 +488,16 @@ async function saveEntrySubmitCashbook(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (isCbSubmitting) return;
 
+  var txDate = document.getElementById("cb-form-date")?.value;
+  var myVal = getMonthYearString(txDate); // 💡 "Oct 26" အလိုအလျောက် တွက်ထုတ်ခြင်း
+  var subCategoryVal = currentMode === "expense" ? (document.getElementById("cb-expense-subcat")?.value || "အထွေထွေ အသုံးစရိတ်") : "";
+
   var payload = {
     shop_id: currentCashbookShop,
-    tx_date: document.getElementById("cb-form-date")?.value,
+    tx_date: txDate,
+    my: myVal, // 👈 D1 သို့ ပို့မည့် MY တန်ဖိုး
     category: currentMode === "sale" ? "အရောင်း" : currentMode === "purchase" ? "အဝယ်" : currentMode === "expense" ? "အသုံးစရိတ်" : "ငွေလွှဲ",
+    sub_category: subCategoryVal, // 👈 D1 သို့ ပို့မည့် Subcategory တန်ဖိုး
     description: document.getElementById("cb-form-desc")?.value.trim(),
     voucher_no: document.getElementById("cb-form-vrno")?.value,
     subtotal: parseCleanNumber(document.getElementById("cb-bill-subtotal")?.value),
@@ -527,19 +555,20 @@ async function deleteEntryCashbook(id) {
   }
 }
 
-// 💡 Export CSV: လက်ရှိ FY 2026 အတွင်းရှိ စာရင်းအားလုံးကို အလိုအလျောက် ဆွဲထုတ်ပေးခြင်း
 function exportCsvCashbook() {
   if (!cbActiveData || cbActiveData.length === 0) {
     if (typeof showToast === "function") showToast("ERROR", "ထုတ်ယူရန် စာရင်း မရှိပါ။");
     return;
   }
 
-  var csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,DEBIT,CREDIT,BALANCE,TRANSFER,VR NO,SHOP\n";
+  var csv = "NO,MY,DATE,CATEGORY,SUB CATEGORY,DESCRIPTION,METHOD,DEBIT,CREDIT,BALANCE,TRANSFER,VR NO,SHOP\n";
   cbActiveData.forEach(function (r, idx) {
     var method = Number(r.bank_amount) > 0 ? (r.bank_name || "Bank") : "Cash";
     csv += (idx + 1) + "," +
+           window.safeCsvCell(r.my || "") + "," +
            window.safeCsvCell(r.tx_date || "") + "," +
            window.safeCsvCell(r.category || "") + "," +
+           window.safeCsvCell(r.sub_category || "") + "," +
            window.safeCsvCell(r.description || "") + "," +
            window.safeCsvCell(method) + "," +
            (r.debit || 0) + "," +

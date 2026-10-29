@@ -1,86 +1,86 @@
 <!-- cashbook-frontend/views/login.html -->
-<div class="min-h-screen w-full flex items-center justify-center bg-slate-950 px-4 py-12 relative overflow-hidden">
-    <!-- Subtle Background Ambient Light -->
-    <div class="absolute -top-40 -left-40 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="absolute -bottom-40 -right-40 w-96 h-96 bg-teal-600/15 rounded-full blur-3xl pointer-events-none"></div>
+<div class="min-h-screen w-full flex items-center justify-center bg-slate-950 px-4 py-8 relative overflow-hidden">
+    <!-- Background Glow -->
+    <div class="absolute -top-32 -left-32 w-80 h-80 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-32 -right-32 w-80 h-80 bg-teal-600/15 rounded-full blur-3xl pointer-events-none"></div>
 
-    <!-- Main Login Card -->
-    <div class="w-full max-w-[420px] bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl p-8 relative z-10 transition-all">
+    <!-- Login Card Box (Width ချဲ့ထားပြီး စာလုံးကြီးထားသည်) -->
+    <div class="w-full max-w-[460px] bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl p-8 relative z-10">
         
         <!-- Brand Header -->
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mb-4 shadow-inner">
-                <i class="fa-solid fa-shirt text-2xl"></i>
+        <div class="text-center mb-7">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mb-3 shadow-inner">
+                <i class="fa-solid fa-shirt text-3xl"></i>
             </div>
-            <h1 class="text-xl font-bold text-white tracking-tight">အထည်ဆိုင် POS & စာရင်းကိုင်</h1>
-            <p class="text-xs text-slate-400 mt-1">Multi-Store Enterprise System</p>
+            <h1 class="text-2xl font-bold text-white tracking-wide">အထည်ဆိုင် POS & စာရင်းကိုင်</h1>
+            <p class="text-sm text-slate-400 mt-1 font-medium">Multi-Store Enterprise System</p>
         </div>
 
-        <!-- Error Notification -->
-        <div id="login-error" class="hidden mb-5 p-3.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-xl flex items-center gap-2.5">
-            <i class="fa-solid fa-circle-exclamation shrink-0 text-rose-400"></i>
-            <span id="login-error-text">စကားဝှက် မှားယွင်းနေပါသည်</span>
+        <!-- Error Notification Alert -->
+        <div id="login-error" class="hidden mb-5 p-4 bg-rose-500/15 border border-rose-500/30 text-rose-300 text-sm rounded-2xl flex items-center gap-3">
+            <i class="fa-solid fa-circle-exclamation shrink-0 text-rose-400 text-base"></i>
+            <span id="login-error-text" class="leading-relaxed">စကားဝှက် မှားယွင်းနေပါသည်</span>
         </div>
 
         <!-- Login Form -->
         <form id="login-form" class="space-y-5">
             <!-- User Dropdown Selection -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 mb-2">အသုံးပြုသူ ရွေးချယ်ပါ (Select User)</label>
+                <label class="block text-sm font-semibold text-slate-200 mb-2">အသုံးပြုသူ ရွေးချယ်ပါ (Select User)</label>
                 <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-                        <i class="fa-solid fa-circle-user text-base"></i>
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-emerald-400 pointer-events-none">
+                        <i class="fa-solid fa-user-circle text-lg"></i>
                     </span>
                     <select id="login-user-select" required
-                        class="w-full pl-10 pr-10 py-3 text-xs font-medium bg-slate-800/80 border border-slate-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition cursor-pointer appearance-none">
+                        class="w-full pl-12 pr-10 py-3.5 text-sm font-semibold bg-slate-800 border border-slate-700 text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition cursor-pointer appearance-none">
                         <option value="" disabled selected>အသုံးပြုသူအမည် ရွေးချယ်ပါ ▼</option>
-                        <optgroup label="ဗဟိုစီမံခန့်ခွဲမှု (Head Office)">
-                            <option value="admin">စနစ်ပိုင်ရှင် (Admin)</option>
-                            <option value="finance">စာရင်းကိုင်/စာရင်းစစ် (Finance)</option>
+                        <optgroup label="🏢 ဗဟိုစီမံခန့်ခွဲမှု (Head Office)" class="bg-slate-900 text-slate-400">
+                            <option value="admin" class="text-white py-1">စနစ်ပိုင်ရှင် (Admin)</option>
+                            <option value="finance" class="text-white py-1">စာရင်းကိုင်/စာရင်းစစ် (Finance)</option>
                         </optgroup>
-                        <optgroup label="ဆိုင်ခွဲ ကောင်တာများ (Branch Cashiers)">
-                            <option value="cashier_main">Main Home Shop (အိမ်ဆိုင်/စက်ရုံ)</option>
-                            <option value="cashier_sh1">Shop 1 (ဆိုင်ခွဲ ၁)</option>
-                            <option value="cashier_sh2">Shop 2 (ဆိုင်ခွဲ ၂)</option>
-                            <option value="cashier_sh3">Shop 3 (ဆိုင်ခွဲ ၃)</option>
-                            <option value="cashier_sh4">Shop 4 (ဆိုင်ခွဲ ၄)</option>
+                        <optgroup label="🏬 ဆိုင်ခွဲ ကောင်တာများ (Branch Cashiers)" class="bg-slate-900 text-slate-400">
+                            <option value="cashier_main" class="text-white py-1">Main Home Shop (အိမ်ဆိုင်/စက်ရုံ)</option>
+                            <option value="cashier_sh1" class="text-white py-1">Shop 1 (ဆိုင်ခွဲ ၁)</option>
+                            <option value="cashier_sh2" class="text-white py-1">Shop 2 (ဆိုင်ခွဲ ၂)</option>
+                            <option value="cashier_sh3" class="text-white py-1">Shop 3 (ဆိုင်ခွဲ ၃)</option>
+                            <option value="cashier_sh4" class="text-white py-1">Shop 4 (ဆိုင်ခွဲ ၄)</option>
                         </optgroup>
                     </select>
-                    <span class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 pointer-events-none">
-                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    <span class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 pointer-events-none">
+                        <i class="fa-solid fa-chevron-down text-sm"></i>
                     </span>
                 </div>
             </div>
 
             <!-- Password Input -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 mb-2">စကားဝှက် (Password)</label>
+                <label class="block text-sm font-semibold text-slate-200 mb-2">စကားဝှက် (Password)</label>
                 <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-                        <i class="fa-solid fa-lock text-sm"></i>
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 pointer-events-none">
+                        <i class="fa-solid fa-lock text-base"></i>
                     </span>
                     <input type="password" id="login-password" required placeholder="စကားဝှက် ရိုက်ထည့်ပါ"
-                        class="w-full pl-10 pr-10 py-3 text-xs bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition" />
-                    <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-200">
-                        <i class="fa-regular fa-eye text-sm" id="toggle-password-icon"></i>
+                        class="w-full pl-12 pr-12 py-3.5 text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition" />
+                    <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-200">
+                        <i class="fa-regular fa-eye text-base" id="toggle-password-icon"></i>
                     </button>
                 </div>
             </div>
 
             <!-- Submit Button -->
             <button type="submit" id="btn-login-submit"
-                class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 mt-2">
+                class="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white text-base font-bold rounded-2xl shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2.5 mt-3 cursor-pointer">
                 <span>စနစ်ထဲသို့ ဝင်ရောက်မည်</span>
-                <i class="fa-solid fa-arrow-right text-xs"></i>
+                <i class="fa-solid fa-arrow-right text-sm"></i>
             </button>
         </form>
 
         <!-- System Footer -->
-        <div class="mt-8 pt-5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+        <div class="mt-8 pt-5 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
             <span>Version 2.1.0</span>
-            <span class="flex items-center gap-1.5 text-emerald-400 font-medium">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Cloudflare D1
+            <span class="flex items-center gap-2 text-emerald-400 font-medium">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Cloudflare D1 Online
             </span>
         </div>
     </div>

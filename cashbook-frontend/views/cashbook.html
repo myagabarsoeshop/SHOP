@@ -1,66 +1,118 @@
 <!-- cashbook-frontend/views/cashbook.html -->
 <div class="h-full w-full flex flex-col p-6 overflow-y-auto bg-slate-100 dark:bg-slate-950">
     
-    <!-- Top Action Bar -->
-    <div class="flex items-center justify-between mb-6 shrink-0">
+    <!-- Top Action & Filter Bar -->
+    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 shrink-0">
         <div>
             <h1 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
                 <i class="fa-solid fa-book-journal-whills text-emerald-600"></i>
-                <span>နေ့စဉ် ငွေစာရင်း (Cashbook & Daily Closing)</span>
+                <span>နေ့စဉ် ငွေစာရင်း (Cashbook)</span>
             </h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">အထွေထွေစရိတ်များ၊ ဝင်ငွေများနှင့် နေ့ချုပ်စာရင်း</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">အထွေထွေစရိတ်များ၊ ဝင်ငွေများနှင့် နေ့ချုပ်စာရင်း</p>
         </div>
 
-        <div class="flex items-center gap-3">
-            <button id="btn-open-expense-modal" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
-                <i class="fa-solid fa-minus-circle"></i>
-                <span>အသုံးစရိတ် ထည့်မည်</span>
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Search & Date Filter (JS က ရှာနေသော အကွက်များ) -->
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="text" id="cb-search" placeholder="ရှာဖွေရန်..." class="pl-10 pr-4 py-2.5 text-sm font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 dark:text-white">
+            </div>
+            <input type="date" id="cb-date-filter" class="px-4 py-2.5 text-sm font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 dark:text-white cursor-pointer">
+            
+            <button id="btn-export-csv" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl transition flex items-center gap-2">
+                <i class="fa-solid fa-file-export"></i> <span>Export</span>
             </button>
-            <button id="btn-open-income-modal" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
-                <i class="fa-solid fa-plus-circle"></i>
-                <span>အခြားဝင်ငွေ ထည့်မည်</span>
+            <button id="btn-add-expense" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center gap-2">
+                <i class="fa-solid fa-minus-circle"></i> <span>စရိတ်ထွက်မည်</span>
+            </button>
+            <button id="btn-add-income" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle"></i> <span>အခြားငွေဝင်မည်</span>
             </button>
         </div>
     </div>
 
     <!-- Summary Balance Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ကျန် ငွေသား (Cash Net)</div>
-            <div id="cb-cash-net" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0 Ks</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6 shrink-0">
+        <div class="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-center">
+            <div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2">လက်ကျန် ငွေသား (Cash Net)</div>
+            <div id="cb-cash-net" class="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0</div>
         </div>
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ကျန် ဘဏ်ငွေ (Bank Net)</div>
-            <div id="cb-bank-net" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">0 Ks</div>
+        <div class="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-center">
+            <div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2">လက်ကျန် ဘဏ်ငွေ (Bank Net)</div>
+            <div id="cb-bank-net" class="text-3xl font-black text-blue-600 dark:text-blue-400 font-mono">0</div>
         </div>
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ စုစုပေါင်း အသားတင် (Total Net)</div>
-            <div id="cb-total-net" class="text-2xl font-black text-slate-900 dark:text-white font-mono">0 Ks</div>
+        <div class="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-center">
+            <div class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2">ယနေ့ စုစုပေါင်း အသားတင် (Total Net)</div>
+            <div id="cb-total-net" class="text-3xl font-black text-slate-900 dark:text-white font-mono">0</div>
         </div>
     </div>
 
-    <!-- Entries Table -->
+    <!-- Data Table -->
     <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
-        <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-sm text-slate-800 dark:text-white">
-            ယနေ့ ငွေဝင်/ငွေထွက် မှတ်တမ်းများ
-        </div>
         <div class="flex-1 overflow-y-auto">
-            <table class="w-full text-left text-xs">
-                <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold uppercase sticky top-0">
+            <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-bold sticky top-0 border-b border-slate-200 dark:border-slate-700">
                     <tr>
-                        <th class="p-3.5">အချိန်</th>
-                        <th class="p-3.5">ခေါင်းစဉ်</th>
-                        <th class="p-3.5">အသေးစိတ်ဖော်ပြချက်</th>
-                        <th class="p-3.5">လိုင်း</th>
-                        <th class="p-3.5 text-right">ငွေပမာဏ</th>
+                        <th class="p-4">အချိန် / ရက်စွဲ</th>
+                        <th class="p-4">ခေါင်းစဉ်</th>
+                        <th class="p-4">အသေးစိတ် ဖော်ပြချက်</th>
+                        <th class="p-4">ငွေပေးချေမှု</th>
+                        <th class="p-4 text-right">ငွေပမာဏ</th>
+                        <th class="p-4 text-center">Action</th>
                     </tr>
                 </thead>
-                <tbody id="cashbook-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                <tbody id="cashbook-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
                     <tr>
-                        <td colspan="5" class="p-8 text-center text-slate-400">စာရင်းမှတ်တမ်း မရှိသေးပါ</td>
+                        <td colspan="6" class="p-10 text-center text-slate-400 text-base">ယနေ့အတွက် မှတ်တမ်း မရှိသေးပါ</td>
                     </tr>
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- Entry Modal -->
+<div id="entry-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+        <div id="entry-modal-header" class="p-5 bg-slate-800 text-white flex items-center justify-between">
+            <div class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square"></i>
+                <span id="entry-modal-title">ငွေစာရင်း ထည့်မည်</span>
+            </div>
+            <button id="btn-close-entry-modal" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="entry-form" class="p-6 space-y-4">
+            <input type="hidden" id="entry-type" value="EXPENSE">
+            
+            <div>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေစာရင်း ခေါင်းစဉ် (Category)</label>
+                <select id="entry-category" required class="w-full text-sm font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                    <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ ▼</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပေးချေမှု (Payment Method)</label>
+                <select id="entry-payment-method" required class="w-full text-sm font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                    <option value="cash">💵 ငွေသား (Cash)</option>
+                    <option value="bank">🏦 ဘဏ် / Mobile Pay (Bank)</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပမာဏ (Amount)</label>
+                <input type="number" id="entry-amount" required min="1" class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 dark:text-white focus:ring-2 focus:ring-emerald-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">အသေးစိတ် (Description) <span class="text-slate-400 text-xs font-normal">- ရွေးချယ်နိုင်သည်</span></label>
+                <textarea id="entry-desc" rows="2" class="w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl px-4 py-3 dark:text-white focus:ring-2 focus:ring-emerald-500"></textarea>
+            </div>
+
+            <button type="submit" id="btn-submit-entry" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base rounded-xl shadow-lg transition mt-2">
+                အတည်ပြု ထည့်သွင်းမည်
+            </button>
+        </form>
     </div>
 </div>

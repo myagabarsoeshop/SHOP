@@ -3,6 +3,13 @@ import { corsHeaders, errorResponse } from "./utils/response.js";
 import { handleLogin, handleGetProfile } from "./controllers/auth.controller.js";
 import { handleGetBranches, handleGetBranchById, handleCreateBranch } from "./controllers/branch.controller.js";
 import { handleGetProducts, handleScanProduct, handleCreateProduct, handleUpdateProduct } from "./controllers/product.controller.js";
+import { 
+    handleGetCategories, 
+    handleGetEntries, 
+    handleCreateEntry, 
+    handleDeleteEntry, 
+    handleCloseDay 
+} from "./controllers/cashbook.controller.js";
 
 export default {
     async fetch(request, env, ctx) {
@@ -35,6 +42,16 @@ export default {
                 const productId = path.split("/")[3];
                 return await handleUpdateProduct(request, env, productId);
             }
+
+            // 4. Cashbook Routes (Phase 2)
+            if (path === "/api/cashbook/categories" && method === "GET") return await handleGetCategories(request, env);
+            if (path === "/api/cashbook/entries" && method === "GET") return await handleGetEntries(request, env);
+            if (path === "/api/cashbook/entries" && method === "POST") return await handleCreateEntry(request, env);
+            if (path.startsWith("/api/cashbook/entries/") && method === "DELETE") {
+                const entryId = path.split("/")[4];
+                return await handleDeleteEntry(request, env, entryId);
+            }
+            if (path === "/api/cashbook/close-day" && method === "POST") return await handleCloseDay(request, env);
 
             // Health Check
             if (path === "/api/health" || path === "/") {

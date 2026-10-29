@@ -105,3 +105,21 @@ function startClock() {
         if (clock) clock.textContent = now.toLocaleTimeString();
     }, 1000);
 }
+
+// Dark Mode Toggle Logic
+const themeBtn = document.getElementById("theme-toggle");
+const themeIcon = document.getElementById("theme-icon");
+
+if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+        const isDark = document.documentElement.classList.toggle("dark");
+        themeIcon.className = isDark ? "fa-solid fa-sun text-base" : "fa-solid fa-moon text-base";
+        localStorage.setItem("pos_theme", isDark ? "dark" : "light");
+    });
+
+    if (localStorage.getItem("pos_theme") === "dark") {
+        document.documentElement.classList.add("dark");
+        themeIcon.className = "fa-solid fa-sun text-base";
+    }
+}
+

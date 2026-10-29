@@ -2,17 +2,19 @@
 import { state } from "./core/state.js";
 import { initAuth } from "./modules/auth.js";
 import { initPOS } from "./modules/pos.js";
+import { initCashbook } from "./modules/cashbook.js"; // <--- ဖြည့်စွက်ထားသည်
 import { api } from "./core/api.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
     startClock();
+    initTheme(); // Dark Mode လိုဂျစ်ကို သီးသန့်ခွဲထုတ်ထားသည်
 
     if (!state.isLoggedIn()) {
         await showLoginView();
     } else {
         showAppLayout();
         await loadBranches();
-        await navigateTo("pos");
+        await navigateTo("pos"); // မူလအားဖြင့် POS ကို အရင်ဖွင့်မည်
     }
 
     // Logout Event
@@ -22,13 +24,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    // Navigation Menu Events
+    // Sidebar Navigation Menu Events (Active State နှင့် View ပြောင်းခြင်း)
     document.querySelectorAll(".nav-item").forEach(btn => {
         btn.addEventListener("click", () => {
+            // Remove active style from all
             document.querySelectorAll(".nav-item").forEach(b => {
-                b.className = "nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white";
+                b.className = "nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white font-semibold";
             });
-            btn.className = "nav-item active flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-300 hover:bg-slate-800 hover:text-white bg-slate-800 text-white font-bold";
+            // Add active style to clicked button
+            btn.className = "nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-slate-800 text-white shadow-sm font-semibold";
+            
+            // Navigate to view
             navigateTo(btn.dataset.view);
         });
     });
@@ -39,9 +45,13 @@ async function showLoginView() {
     const container = document.getElementById("login-container");
     container.classList.remove("hidden");
 
-    const html = await fetch("views/login.html").then(r => r.text());
-    container.innerHTML = html;
-    initAuth();
+    try {
+        const html = await fetch("views/login.html").then(r => r.text());
+        container.innerHTML = html;
+        initAuth();
+    } catch (err) {
+        container.innerHTML = `<div class="p-8 text-center text-rose-500">Login မျက်နှာပြင် ဖွင့်၍မရပါ</div>`;
+    }
 }
 
 function showAppLayout() {
@@ -77,24 +87,41 @@ async function loadBranches() {
         select.addEventListener("change", (e) => {
             const b = res.data.find(item => item.id === parseInt(e.target.value));
             state.setBranch(b);
-            navigateTo("pos"); // Refresh view
+            
+            // Active ဖြစ်နေသော View ကို ပြန်လည် Refresh လုပ်မည်
+            const activeView = document.querySelector(".nav-item.active")?.dataset.view || "pos";
+            navigateTo(activeView); 
         });
     } catch (err) {
         console.error("Failed to load branches:", err);
     }
 }
 
+/**
+ * မျက်နှာပြင် (View) များကို ဖလှယ်ပေးသည့် Router
+ */
 async function navigateTo(viewName) {
     const container = document.getElementById("view-container");
     try {
+        container.innerHTML = `<div class="flex items-center justify-center h-full text-slate-400"><i class="fa-solid fa-spinner fa-spin text-3xl"></i></div>`;
+        
         const html = await fetch(`views/${viewName}.html`).then(r => r.text());
         container.innerHTML = html;
 
+        // View အလိုက် သက်ဆိုင်ရာ JS ကို လှမ်းခေါ်မည်
         if (viewName === "pos") {
             initPOS();
+        } else if (viewName === "cashbook") {
+            initCashbook(); // <--- Cashbook ချိတ်ဆက်ထားသည်
         }
+        
     } catch (err) {
-        container.innerHTML = `<div class="p-8 text-center text-rose-500 font-bold">စာမျက်နှာ ဖွင့်၍ မရပါ: ${viewName}</div>`;
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full text-slate-500">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-rose-500 mb-3"></i>
+                <div class="font-bold text-lg">စာမျက်နှာ ဖွင့်၍ မရပါ</div>
+                <div class="text-xs mt-1">ဖိုင်အမည်: views/${viewName}.html</div>
+            </div>`;
     }
 }
 
@@ -106,20 +133,20 @@ function startClock() {
     }, 1000);
 }
 
-// Dark Mode Toggle Logic
-const themeBtn = document.getElementById("theme-toggle");
-const themeIcon = document.getElementById("theme-icon");
+function initTheme() {
+    const themeBtn = document.getElementById("theme-toggle");
+    const themeIcon = document.getElementById("theme-icon");
 
-if (themeBtn) {
-    themeBtn.addEventListener("click", () => {
-        const isDark = document.documentElement.classList.toggle("dark");
-        themeIcon.className = isDark ? "fa-solid fa-sun text-base" : "fa-solid fa-moon text-base";
-        localStorage.setItem("pos_theme", isDark ? "dark" : "light");
-    });
+    if (themeBtn && themeIcon) {
+        themeBtn.addEventListener("click", () => {
+            const isDark = document.documentElement.classList.toggle("dark");
+            themeIcon.className = isDark ? "fa-solid fa-sun text-base" : "fa-solid fa-moon text-base";
+            localStorage.setItem("pos_theme", isDark ? "dark" : "light");
+        });
 
-    if (localStorage.getItem("pos_theme") === "dark") {
-        document.documentElement.classList.add("dark");
-        themeIcon.className = "fa-solid fa-sun text-base";
+        if (localStorage.getItem("pos_theme") === "dark") {
+            document.documentElement.classList.add("dark");
+            themeIcon.className = "fa-solid fa-sun text-base";
+        }
     }
 }
-

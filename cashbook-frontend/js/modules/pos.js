@@ -6,7 +6,7 @@ let productsList = [];
 let cart = [];
 let currentSaleType = "retail";
 let selectedPaymentMethod = "cash";
-let currentCategory = ""; // ရွေးချယ်ထားသော Category ကို မှတ်သားရန်
+let currentCategory = "";
 
 export async function initPOS() {
     bindEvents();
@@ -15,9 +15,6 @@ export async function initPOS() {
     renderCart();
 }
 
-/**
- * ၁။ အထည်ပစ္စည်းများ API မှ ခေါ်ယူခြင်း
- */
 async function loadProducts(search = "", category = "") {
     const grid = document.getElementById("pos-product-grid");
     const loading = document.getElementById("pos-loading");
@@ -39,9 +36,6 @@ async function loadProducts(search = "", category = "") {
     }
 }
 
-/**
- * ၂။ ပစ္စည်းကတ်များ Grid ပုံစံဖြင့် Render လုပ်ခြင်း
- */
 function renderProductsGrid(products) {
     const grid = document.getElementById("pos-product-grid");
     const empty = document.getElementById("pos-empty");
@@ -58,34 +52,34 @@ function renderProductsGrid(products) {
         const stock = p.current_stock || 0;
         const isOutOfStock = stock <= 0;
 
+        // active:scale-95 ဖြင့် နှိပ်လိုက်တိုင်း ကတ်လေး ကျုံ့သွားစေရန် ထည့်ထားသည်
         const card = document.createElement("div");
-        card.className = `bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-500 transition cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-50' : ''}`;
+        card.className = `bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-500 active:scale-95 transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-50 pointer-events-none' : ''}`;
         
         card.innerHTML = `
             <div>
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${p.category}</span>
-                    <span class="text-xs font-mono font-bold ${stock < 5 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}">လက်ကျန်: ${stock}</span>
+                <!-- Text အချင်းချင်း မပိစေရန် flex-wrap သုံးထားသည် -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">${p.category}</span>
+                    <span class="text-[11px] font-mono font-bold ${stock < 5 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}">လက်ကျန်: ${stock}</span>
                 </div>
-                <div class="text-sm font-bold text-slate-800 dark:text-white line-clamp-2">${p.item_name} ${p.pattern ? `(${p.pattern})` : ''}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">${p.color || ''} • ${p.size}</div>
+                <div class="text-sm font-bold text-slate-800 dark:text-white leading-snug line-clamp-2">${p.item_name} ${p.pattern ? `(${p.pattern})` : ''}</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">${p.color || ''} • ${p.size}</div>
             </div>
-            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">${Number(price).toLocaleString()} Ks</span>
-                <button class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition">
-                    <i class="fa-solid fa-plus text-xs"></i>
+                <button class="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center transition pointer-events-none">
+                    <i class="fa-solid fa-plus text-sm"></i>
                 </button>
             </div>
         `;
 
+        // Card တစ်ခုလုံးကို နှိပ်လျှင် Cart ထဲဝင်မည်
         card.addEventListener("click", () => addToCart(p));
         grid.appendChild(card);
     });
 }
 
-/**
- * ၃။ ခြင်းတောင်းထဲသို့ ထည့်သွင်းခြင်း
- */
 function addToCart(product) {
     const existing = cart.find(item => item.product.id === product.id);
     if (existing) {
@@ -99,12 +93,9 @@ function addToCart(product) {
             costPrice: product.cost_price
         });
     }
-    renderCart();
+    renderCart(); // အသံမြည်ခြင်း သို့မဟုတ် Cart Refresh လုပ်ခြင်း
 }
 
-/**
- * ၄။ ခြင်းတောင်း စာရင်းတွက်ချက်ခြင်းနှင့် ပြသခြင်း
- */
 function renderCart() {
     const container = document.getElementById("pos-cart-items");
     const subtotalEl = document.getElementById("pos-subtotal");
@@ -117,9 +108,10 @@ function renderCart() {
     container.innerHTML = "";
 
     if (cart.length === 0) {
+        // Empty State အရောင်ကို ရှင်းလင်းစွာ ပြင်ဆင်ထားသည်
         container.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-56 text-slate-400">
-                <i class="fa-solid fa-cart-shopping text-4xl mb-3 text-slate-300 dark:text-slate-700"></i>
+            <div class="flex flex-col items-center justify-center h-56 text-slate-400 dark:text-slate-500">
+                <i class="fa-solid fa-cart-shopping text-4xl mb-3 opacity-50"></i>
                 <span class="text-sm font-medium">ခြင်းတောင်းထဲတွင် ပစ္စည်းမရှိသေးပါ</span>
             </div>
         `;
@@ -139,16 +131,16 @@ function renderCart() {
         row.innerHTML = `
             <div class="flex-1 min-w-0">
                 <div class="text-sm font-bold text-slate-800 dark:text-white truncate">${item.product.item_name}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${Number(item.unitPrice).toLocaleString()} Ks</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">${Number(item.unitPrice).toLocaleString()} Ks</div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-                <button data-idx="${index}" class="btn-qty-minus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-sm font-bold">-</button>
+                <button data-idx="${index}" class="btn-qty-minus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 active:scale-95 text-sm font-bold transition">-</button>
                 <span class="w-7 text-center text-sm font-bold font-mono dark:text-white">${item.quantity}</span>
-                <button data-idx="${index}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 text-sm font-bold">+</button>
+                <button data-idx="${index}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 active:scale-95 text-sm font-bold transition">+</button>
             </div>
             <div class="text-right shrink-0 w-24">
                 <div class="text-sm font-bold text-slate-800 dark:text-white font-mono">${Number(lineTotal).toLocaleString()} Ks</div>
-                <button data-idx="${index}" class="btn-remove-item text-xs text-rose-500 hover:text-rose-700 font-medium">ဖယ်မည်</button>
+                <button data-idx="${index}" class="btn-remove-item text-xs text-rose-500 hover:text-rose-600 font-bold mt-1 uppercase transition">ဖယ်မည်</button>
             </div>
         `;
         container.appendChild(row);
@@ -178,9 +170,6 @@ function renderCart() {
     });
 }
 
-/**
- * ၅။ Button Events များ ချိတ်ဆက်ခြင်း
- */
 function bindEvents() {
     const searchInput = document.getElementById("pos-search-input");
     const retailBtn = document.getElementById("btn-type-retail");
@@ -191,22 +180,18 @@ function bindEvents() {
     const closeModalBtn = document.getElementById("btn-close-modal");
     const confirmSaleBtn = document.getElementById("btn-confirm-sale");
 
-    // ၅.၁ Category Tabs နှိပ်၍ စစ်ထုတ်ခြင်း
     document.querySelectorAll(".cat-pill").forEach(btn => {
         btn.addEventListener("click", () => {
-            // ခလုတ်အားလုံးကို မူလအရောင်ပြောင်းမည်
             document.querySelectorAll(".cat-pill").forEach(b => {
-                b.className = "cat-pill px-4 py-3 text-sm font-bold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition";
+                b.className = "cat-pill px-4 py-3 text-sm font-bold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition shadow-sm";
             });
-            // နှိပ်လိုက်သော ခလုတ်ကို Active အရောင်ပြောင်းမည်
-            btn.className = "cat-pill active px-4 py-3 text-sm font-bold rounded-xl bg-slate-900 dark:bg-emerald-600 text-white transition shadow-sm";
+            btn.className = "cat-pill active px-4 py-3 text-sm font-bold rounded-xl bg-slate-900 dark:bg-emerald-600 text-white transition shadow-md scale-105";
             
             currentCategory = btn.dataset.cat;
             loadProducts(searchInput?.value.trim() || "", currentCategory);
         });
     });
 
-    // ၅.၂ Search Box ဖြင့် ရှာဖွေခြင်း
     let debounceTimer;
     searchInput?.addEventListener("input", (e) => {
         clearTimeout(debounceTimer);
@@ -215,7 +200,6 @@ function bindEvents() {
         }, 300);
     });
 
-    // Scanner 'Enter' ဖြင့် အမြန်ထည့်ခြင်း
     searchInput?.addEventListener("keypress", async (e) => {
         if (e.key === "Enter") {
             const code = searchInput.value.trim();
@@ -231,7 +215,6 @@ function bindEvents() {
         }
     });
 
-    // ၅.၃ Retail / Wholesale ပြောင်းလဲခြင်း
     retailBtn?.addEventListener("click", () => {
         currentSaleType = "retail";
         retailBtn.className = "px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-900 dark:text-white shadow-sm transition";
@@ -249,13 +232,12 @@ function bindEvents() {
     checkoutBtn?.addEventListener("click", openCheckoutModal);
     closeModalBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
 
-    // ၅.၄ Payment Methods ရွေးချယ်ခြင်း
     document.querySelectorAll(".method-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".method-btn").forEach(b => {
                 b.className = "method-btn p-4 rounded-2xl border-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-2 hover:border-slate-400 transition cursor-pointer";
             });
-            btn.className = "method-btn active p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-2 transition cursor-pointer";
+            btn.className = "method-btn active p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-2 transition cursor-pointer scale-105 shadow-md";
             
             selectedPaymentMethod = btn.dataset.method;
             const bankGroup = document.getElementById("bank-input-group");
@@ -308,17 +290,14 @@ function calculateChange() {
     const changeText = document.getElementById("modal-change-text");
 
     if (paid >= finalTotal) {
-        changeBox.className = "p-4 rounded-xl text-sm flex justify-between font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300";
+        changeBox.className = "p-4 rounded-xl text-sm flex justify-between font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300";
         changeText.textContent = `+${(paid - finalTotal).toLocaleString()} Ks`;
     } else {
-        changeBox.className = "p-4 rounded-xl text-sm flex justify-between font-bold bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300";
+        changeBox.className = "p-4 rounded-xl text-sm flex justify-between font-bold bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300";
         changeText.textContent = `အကြွေးကျန်: ${(finalTotal - paid).toLocaleString()} Ks`;
     }
 }
 
-/**
- * ၆။ အရောင်းဘောင်ချာ အတည်ပြု သိမ်းဆည်းခြင်း
- */
 async function submitSale() {
     const btn = document.getElementById("btn-confirm-sale");
     btn.disabled = true;
@@ -358,7 +337,7 @@ async function submitSale() {
             document.getElementById("pos-discount").value = 0;
             document.getElementById("checkout-modal")?.classList.add("hidden");
             renderCart();
-            await loadProducts(); // Update latest inventory count
+            await loadProducts();
         }
     } catch (err) {
         alert(`ချို့ယွင်းချက်ဖြစ်ပေါ်ပါသည်: ${err.message}`);
@@ -368,6 +347,4 @@ async function submitSale() {
     }
 }
 
-async function loadCustomers() {
-    // ဤနေရာတွင် Customer များ ခေါ်ယူမည့် API ကို ထည့်သွင်းနိုင်ပါသည်
-}
+async function loadCustomers() {}

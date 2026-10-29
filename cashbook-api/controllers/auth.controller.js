@@ -1,4 +1,4 @@
-// cashbook-api/controllers/auth.controller.js
+// cashbook-api/controllers/auth.controller.js 
 
 import { successResponse, errorResponse } from "../utils/response.js";
 

@@ -10,6 +10,11 @@ import {
     handleDeleteEntry, 
     handleCloseDay 
 } from "./controllers/cashbook.controller.js";
+import { 
+    handleCreateSale, 
+    handleGetSales, 
+    handleGetSaleDetails 
+} from "./controllers/pos.controller.js";
 
 export default {
     async fetch(request, env, ctx) {
@@ -43,7 +48,7 @@ export default {
                 return await handleUpdateProduct(request, env, productId);
             }
 
-            // 4. Cashbook Routes (Phase 2)
+            // 4. Cashbook Routes
             if (path === "/api/cashbook/categories" && method === "GET") return await handleGetCategories(request, env);
             if (path === "/api/cashbook/entries" && method === "GET") return await handleGetEntries(request, env);
             if (path === "/api/cashbook/entries" && method === "POST") return await handleCreateEntry(request, env);
@@ -52,6 +57,14 @@ export default {
                 return await handleDeleteEntry(request, env, entryId);
             }
             if (path === "/api/cashbook/close-day" && method === "POST") return await handleCloseDay(request, env);
+
+            // 5. POS & Sales Routes
+            if (path === "/api/pos/sales" && method === "POST") return await handleCreateSale(request, env);
+            if (path === "/api/pos/sales" && method === "GET") return await handleGetSales(request, env);
+            if (path.startsWith("/api/pos/sales/") && method === "GET") {
+                const saleId = path.split("/")[4];
+                return await handleGetSaleDetails(request, env, saleId);
+            }
 
             // Health Check
             if (path === "/api/health" || path === "/") {

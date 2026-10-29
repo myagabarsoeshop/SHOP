@@ -1,4 +1,4 @@
-// cashbook-api/utils/response.js
+// cashbook-api/utils/response.js 
 
 export const corsHeaders = {
     "Access-Control-Allow-Origin": "*",

@@ -1,366 +1,173 @@
-// cashbook-frontend/js/modules/pos.js
-import { api } from "../core/api.js";
-import { state } from "../core/state.js";
-
-let productsList = [];
-let cart = [];
-let currentSaleType = "retail"; // 'retail' သို့မဟုတ် 'wholesale'
-let selectedPaymentMethod = "cash";
-
-export async function initPOS() {
-    bindEvents();
-    await loadProducts();
-    await loadCustomers();
-    renderCart();
-}
-
-/**
- * ၁။ အထည်ပစ္စည်းများ API မှ ခေါ်ယူခြင်း
- */
-async function loadProducts(search = "", category = "") {
-    const grid = document.getElementById("pos-product-grid");
-    const loading = document.getElementById("pos-loading");
-    const empty = document.getElementById("pos-empty");
-
-    loading?.classList.remove("hidden");
-    empty?.classList.add("hidden");
-
-    try {
-        const branchId = state.currentBranch?.id || 1;
-        const res = await api.get("/products", { branch_id: branchId, search, category });
-        productsList = res.data || [];
-
-        renderProductsGrid(productsList);
-    } catch (err) {
-        console.error("Failed to load products:", err);
-    } finally {
-        loading?.classList.add("hidden");
-    }
-}
-
-/**
- * ၂။ ပစ္စည်းကတ်များ Grid ပုံစံဖြင့် Render လုပ်ခြင်း
- */
-function renderProductsGrid(products) {
-    const grid = document.getElementById("pos-product-grid");
-    const empty = document.getElementById("pos-empty");
-    if (!grid) return;
-
-    grid.innerHTML = "";
-    if (products.length === 0) {
-        empty?.classList.remove("hidden");
-        return;
-    }
-
-    products.forEach(p => {
-        const price = currentSaleType === "retail" ? p.retail_price : p.wholesale_price;
-        const stock = p.current_stock || 0;
-        const isOutOfStock = stock <= 0;
-
-        const card = document.createElement("div");
-        card.className = `bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:border-emerald-500/50 transition cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-50' : ''}`;
+<!-- cashbook-frontend/views/pos.html -->
+<div class="flex h-full w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
+    
+    <!-- Left Section: အထည်ပစ္စည်းများ ရှာဖွေမှုနှင့် ပစ္စည်းကတ်များ (62%) -->
+    <div class="flex-1 flex flex-col h-full border-r border-slate-200 dark:border-slate-800 overflow-hidden">
         
-        card.innerHTML = `
-            <div>
-                <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">${p.category}</span>
-                    <span class="text-[10px] font-mono font-medium ${stock < 5 ? 'text-rose-500 font-bold' : 'text-slate-400'}">လက်ကျန်: ${stock}</span>
+        <!-- Search & Category Filter Header -->
+        <div class="p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-4 shrink-0 shadow-sm">
+            <!-- Barcode & Search Input (စာလုံးကြီး) -->
+            <div class="relative flex-1">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-emerald-600 dark:text-emerald-400">
+                    <i class="fa-solid fa-barcode text-xl"></i>
+                </span>
+                <input type="text" id="pos-search-input" autofocus
+                    placeholder="Barcode စကင်ဖတ်ပါ သို့မဟုတ် အထည်ကုတ် / အမည် ရိုက်ရှာပါ..."
+                    class="w-full pl-12 pr-10 py-3.5 text-base font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-2xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition shadow-inner placeholder:text-slate-400" />
+            </div>
+
+            <!-- Category Pills -->
+            <div class="flex items-center gap-2 overflow-x-auto" id="pos-category-filters">
+                <button data-cat="" class="cat-pill active px-4 py-3 text-sm font-bold rounded-xl bg-slate-900 dark:bg-emerald-600 text-white transition shadow-sm">အားလုံး</button>
+                <button data-cat="ပုဆိုး" class="cat-pill px-4 py-3 text-sm font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition">ပုဆိုး</button>
+                <button data-cat="လုံချည်" class="cat-pill px-4 py-3 text-sm font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition">လုံချည်</button>
+                <button data-cat="အင်္ကျီ" class="cat-pill px-4 py-3 text-sm font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition">အင်္ကျီ</button>
+            </div>
+        </div>
+
+        <!-- Products Grid Container -->
+        <div class="flex-1 overflow-y-auto p-5">
+            <div id="pos-product-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <!-- Products will be loaded dynamically -->
+            </div>
+
+            <div id="pos-loading" class="hidden flex flex-col items-center justify-center h-64 text-slate-400">
+                <i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-emerald-600"></i>
+                <span class="text-base font-semibold">ပစ္စည်းများ ရှာဖွေနေပါသည်...</span>
+            </div>
+            <div id="pos-empty" class="hidden flex flex-col items-center justify-center h-64 text-slate-400">
+                <i class="fa-solid fa-box-open text-4xl mb-3 text-slate-300"></i>
+                <span class="text-base font-semibold">ပစ္စည်းစာရင်း မတွေ့ရှိပါ</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Section: Cart / အရောင်းဘောင်ချာ ကောင်တာ Panel (38%) -->
+    <div class="w-[450px] bg-white dark:bg-slate-900 flex flex-col h-full shadow-2xl shrink-0 z-10 border-l border-slate-200 dark:border-slate-800">
+        
+        <!-- Cart Top Header: Type Switch & Customer -->
+        <div class="p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 space-y-3.5 shrink-0">
+            <div class="flex items-center justify-between">
+                <span class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2.5">
+                    <i class="fa-solid fa-bag-shopping text-emerald-600 dark:text-emerald-400 text-lg"></i>
+                    <span>အရောင်းဘောင်ချာ</span>
+                </span>
+                <!-- Retail vs Wholesale Switch -->
+                <div class="inline-flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                    <button id="btn-type-retail" class="px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-800 dark:text-white shadow-sm transition">လက်လီ</button>
+                    <button id="btn-type-wholesale" class="px-4 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 transition">လက်ကား</button>
                 </div>
-                <div class="text-xs font-bold text-slate-800 line-clamp-2">${p.item_name} ${p.pattern ? `(${p.pattern})` : ''}</div>
-                <div class="text-[11px] text-slate-400 mt-0.5">${p.color || ''} • ${p.size}</div>
             </div>
-            <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span class="text-xs font-black text-emerald-600 font-mono">${Number(price).toLocaleString()} Ks</span>
-                <button class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition">
-                    <i class="fa-solid fa-plus text-[10px]"></i>
-                </button>
+
+            <!-- Customer Selection -->
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                    <select id="pos-customer-select" class="w-full text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="">👤 အမည်မဖော်ပြထားသော ဖောက်သည် (Walk-in)</option>
+                    </select>
+                </div>
             </div>
-        `;
+        </div>
 
-        card.addEventListener("click", () => addToCart(p));
-        grid.appendChild(card);
-    });
-}
+        <!-- Cart Items List (Scrollable) -->
+        <div id="pos-cart-items" class="flex-1 overflow-y-auto p-4 divide-y divide-slate-100 dark:divide-slate-800"></div>
 
-/**
- * ၃။ ခြင်းတောင်းထဲသို့ အထည်ထည့်သွင်းခြင်း
- */
-function addToCart(product) {
-    const existing = cart.find(item => item.product.id === product.id);
-    if (existing) {
-        existing.quantity += 1;
-    } else {
-        const price = currentSaleType === "retail" ? product.retail_price : product.wholesale_price;
-        cart.push({
-            product,
-            quantity: 1,
-            unitPrice: price,
-            costPrice: product.cost_price
-        });
-    }
-    renderCart();
-}
-
-/**
- * ၄။ ခြင်းတောင်းစာရင်း တွက်ချက်ခြင်းနှင့် Render လုပ်ခြင်း
- */
-function renderCart() {
-    const container = document.getElementById("pos-cart-items");
-    const subtotalEl = document.getElementById("pos-subtotal");
-    const finalTotalEl = document.getElementById("pos-final-total");
-    const checkoutBtn = document.getElementById("btn-pos-checkout");
-    const discountInput = document.getElementById("pos-discount");
-    const discountDisplay = document.getElementById("pos-discount-display");
-
-    if (!container) return;
-    container.innerHTML = "";
-
-    if (cart.length === 0) {
-        container.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-48 text-slate-300">
-                <i class="fa-solid fa-cart-shopping text-3xl mb-2"></i>
-                <span class="text-xs">ခြင်းတောင်းထဲတွင် ပစ္စည်းမရှိသေးပါ</span>
+        <!-- Cart Summary & Big Totals (စာလုံးအကြီးကြီးများ) -->
+        <div class="p-5 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 space-y-3 shrink-0">
+            <div class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
+                <span class="font-medium">ကျသင့်ငွေ စုစုပေါင်း:</span>
+                <span id="pos-subtotal" class="font-bold text-slate-800 dark:text-white font-mono text-base">0 Ks</span>
             </div>
-        `;
-        if (subtotalEl) subtotalEl.textContent = "0 Ks";
-        if (finalTotalEl) finalTotalEl.textContent = "0 Ks";
-        if (checkoutBtn) checkoutBtn.disabled = true;
-        return;
-    }
-
-    let subtotal = 0;
-    cart.forEach((item, index) => {
-        const lineTotal = item.quantity * item.unitPrice;
-        subtotal += lineTotal;
-
-        const row = document.createElement("div");
-        row.className = "py-3 flex items-center justify-between gap-2";
-        row.innerHTML = `
-            <div class="flex-1 min-w-0">
-                <div class="text-xs font-bold text-slate-800 truncate">${item.product.item_name} ${item.product.category}</div>
-                <div class="text-[11px] text-slate-400 font-mono">${Number(item.unitPrice).toLocaleString()} Ks</div>
+            <div class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
+                <span class="flex items-center gap-2">
+                    <span>လျှော့ငွေ:</span>
+                    <input type="number" id="pos-discount" value="0" min="0" class="w-24 text-right text-sm font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-600 font-mono">
+                </span>
+                <span id="pos-discount-display" class="font-mono text-rose-600 font-bold">-0 Ks</span>
             </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-                <button data-idx="${index}" class="btn-qty-minus w-6 h-6 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold">-</button>
-                <span class="w-6 text-center text-xs font-bold font-mono">${item.quantity}</span>
-                <button data-idx="${index}" class="btn-qty-plus w-6 h-6 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold">+</button>
-            </div>
-            <div class="text-right shrink-0 w-20">
-                <div class="text-xs font-bold text-slate-800 font-mono">${Number(lineTotal).toLocaleString()} Ks</div>
-                <button data-idx="${index}" class="btn-remove-item text-[10px] text-rose-500 hover:text-rose-700">ဖယ်မည်</button>
-            </div>
-        `;
-        container.appendChild(row);
-    });
-
-    const discount = parseFloat(discountInput?.value) || 0;
-    const finalTotal = Math.max(0, subtotal - discount);
-
-    if (subtotalEl) subtotalEl.textContent = `${subtotal.toLocaleString()} Ks`;
-    if (discountDisplay) discountDisplay.textContent = `-${discount.toLocaleString()} Ks`;
-    if (finalTotalEl) finalTotalEl.textContent = `${finalTotal.toLocaleString()} Ks`;
-    if (checkoutBtn) checkoutBtn.disabled = false;
-
-    // Cart Quantity Buttons Event Listeners
-    container.querySelectorAll(".btn-qty-plus").forEach(btn => {
-        btn.onclick = () => { cart[btn.dataset.idx].quantity += 1; renderCart(); };
-    });
-    container.querySelectorAll(".btn-qty-minus").forEach(btn => {
-        btn.onclick = () => {
-            const idx = btn.dataset.idx;
-            if (cart[idx].quantity > 1) cart[idx].quantity -= 1;
-            else cart.splice(idx, 1);
-            renderCart();
-        };
-    });
-    container.querySelectorAll(".btn-remove-item").forEach(btn => {
-        btn.onclick = () => { cart.splice(btn.dataset.idx, 1); renderCart(); };
-    });
-}
-
-/**
- * ၅။ Barcode Scanner Input နှင့် Button Events များ ချိတ်ဆက်ခြင်း
- */
-function bindEvents() {
-    const searchInput = document.getElementById("pos-search-input");
-    const retailBtn = document.getElementById("btn-type-retail");
-    const wholesaleBtn = document.getElementById("btn-type-wholesale");
-    const discountInput = document.getElementById("pos-discount");
-    const checkoutBtn = document.getElementById("btn-pos-checkout");
-    const modal = document.getElementById("checkout-modal");
-    const closeModalBtn = document.getElementById("btn-close-modal");
-    const confirmSaleBtn = document.getElementById("btn-confirm-sale");
-
-    // Scanner / Manual Search Event
-    let debounceTimer;
-    searchInput?.addEventListener("input", (e) => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            loadProducts(e.target.value.trim());
-        }, 300);
-    });
-
-    // Barcode Scanner 'Enter' ခေါက်သည့်အခါ ပစ္စည်းတိုက်ရိုက်ပေါင်းထည့်ခြင်း
-    searchInput?.addEventListener("keypress", async (e) => {
-        if (e.key === "Enter") {
-            const code = searchInput.value.trim();
-            if (!code) return;
-            try {
-                const branchId = state.currentBranch?.id || 1;
-                const res = await api.get("/products/scan", { code, branch_id: branchId });
-                if (res.data) {
-                    addToCart(res.data);
-                    searchInput.value = "";
-                }
-            } catch (err) {
-                // Not found via direct barcode, standard search results will show
-            }
-        }
-    });
-
-    // Retail vs Wholesale ပြောင်းလဲခြင်း
-    retailBtn?.addEventListener("click", () => {
-        currentSaleType = "retail";
-        retailBtn.className = "px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-sm transition";
-        wholesaleBtn.className = "px-2.5 py-1 rounded-md text-slate-500 hover:text-slate-800 transition";
-        updatePricesForSaleType();
-    });
-    wholesaleBtn?.addEventListener("click", () => {
-        currentSaleType = "wholesale";
-        wholesaleBtn.className = "px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-sm transition";
-        retailBtn.className = "px-2.5 py-1 rounded-md text-slate-500 hover:text-slate-800 transition";
-        updatePricesForSaleType();
-    });
-
-    discountInput?.addEventListener("input", renderCart);
-
-    // Modal Events
-    checkoutBtn?.addEventListener("click", openCheckoutModal);
-    closeModalBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
-
-    // Payment Method Buttons
-    document.querySelectorAll(".method-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".method-btn").forEach(b => {
-                b.className = "method-btn p-3 rounded-xl border-2 border-slate-200 text-slate-600 text-xs font-bold flex flex-col items-center gap-1.5 hover:border-slate-300 transition";
-            });
-            btn.className = "method-btn active p-3 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-xs font-bold flex flex-col items-center gap-1.5 transition";
             
-            selectedPaymentMethod = btn.dataset.method;
-            const bankGroup = document.getElementById("bank-input-group");
-            if (selectedPaymentMethod === "bank") bankGroup?.classList.remove("hidden");
-            else bankGroup?.classList.add("hidden");
+            <!-- Final Big Total Display -->
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span class="text-sm font-black text-slate-900 dark:text-white uppercase">ပေးချေရမည့်ငွေ:</span>
+                <span id="pos-final-total" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0 Ks</span>
+            </div>
 
-            const paidInput = document.getElementById("modal-paid-amount");
-            const dueAmount = getFinalTotal();
-            if (selectedPaymentMethod === "credit") paidInput.value = 0;
-            else paidInput.value = dueAmount;
-            calculateChange();
-        });
-    });
+            <!-- Big Pay Now Button -->
+            <button id="btn-pos-checkout" disabled
+                class="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed active:scale-[0.99] text-white font-bold text-base rounded-2xl shadow-xl shadow-emerald-600/25 transition flex items-center justify-center gap-3 cursor-pointer">
+                <i class="fa-solid fa-money-bill-wave text-xl"></i>
+                <span>ငွေရှင်းမည် (Pay Now)</span>
+            </button>
+        </div>
+    </div>
+</div>
 
-    document.getElementById("modal-paid-amount")?.addEventListener("input", calculateChange);
+<!-- Payment Modal Popup -->
+<div id="checkout-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
+        <div class="p-6 bg-slate-900 dark:bg-slate-950 text-white flex items-center justify-between">
+            <div class="text-base font-bold flex items-center gap-2.5">
+                <i class="fa-solid fa-receipt text-emerald-400 text-lg"></i>
+                <span>ငွေပေးချေမှု နည်းလမ်း ရွေးချယ်ခြင်း</span>
+            </div>
+            <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
 
-    // အရောင်း အတည်ပြုခြင်း (Checkout Submit)
-    confirmSaleBtn?.addEventListener("click", submitSale);
-}
+        <div class="p-6 space-y-5">
+            <!-- Big Total Due -->
+            <div class="text-center p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+                <div class="text-xs text-emerald-700 dark:text-emerald-300 font-semibold mb-1">ကျသင့်ငွေ စုစုပေါင်း</div>
+                <div id="modal-due-amount" class="text-3xl font-black text-emerald-700 dark:text-emerald-400 font-mono">0 Ks</div>
+            </div>
 
-function updatePricesForSaleType() {
-    cart.forEach(item => {
-        item.unitPrice = currentSaleType === "retail" ? item.product.retail_price : item.product.wholesale_price;
-    });
-    renderCart();
-    renderProductsGrid(productsList);
-}
+            <!-- Payment Method Radio Buttons -->
+            <div>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">ငွေပေးချေသည့် နည်းလမ်း ရွေးပါ</label>
+                <div class="grid grid-cols-3 gap-3" id="payment-method-selector">
+                    <button type="button" data-method="cash" class="method-btn active p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-2 transition cursor-pointer">
+                        <i class="fa-solid fa-money-bill-1-wave text-xl"></i>
+                        <span>ငွေသား (Cash)</span>
+                    </button>
+                    <button type="button" data-method="bank" class="method-btn p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-2 hover:border-slate-300 transition cursor-pointer">
+                        <i class="fa-solid fa-building-columns text-xl"></i>
+                        <span>Bank / KPay</span>
+                    </button>
+                    <button type="button" data-method="credit" class="method-btn p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-2 hover:border-slate-300 transition cursor-pointer">
+                        <i class="fa-solid fa-hand-holding-dollar text-xl"></i>
+                        <span>အကြွေး (Credit)</span>
+                    </button>
+                </div>
+            </div>
 
-function getFinalTotal() {
-    let subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-    let discount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
-    return Math.max(0, subtotal - discount);
-}
+            <!-- Bank Selection -->
+            <div id="bank-input-group" class="hidden">
+                <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">ဘဏ် / Mobile Pay ရွေးပါ</label>
+                <select id="modal-bank-name" class="w-full text-sm font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl px-4 py-3">
+                    <option value="KBZPay">KBZPay (KPay)</option>
+                    <option value="WavePay">WavePay</option>
+                    <option value="KBZ Bank">KBZ Bank</option>
+                    <option value="CB Bank">CB Bank</option>
+                    <option value="AYA Bank">AYA Bank</option>
+                </select>
+            </div>
 
-function openCheckoutModal() {
-    const modal = document.getElementById("checkout-modal");
-    const dueEl = document.getElementById("modal-due-amount");
-    const paidInput = document.getElementById("modal-paid-amount");
-    const finalTotal = getFinalTotal();
+            <!-- Paid Amount Input -->
+            <div>
+                <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">လက်ခံရရှိငွေ (Paid Amount)</label>
+                <input type="number" id="modal-paid-amount" class="w-full text-lg font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-600">
+            </div>
 
-    if (dueEl) dueEl.textContent = `${finalTotal.toLocaleString()} Ks`;
-    if (paidInput) paidInput.value = finalTotal;
+            <!-- Debt / Change Box -->
+            <div id="modal-debt-change-box" class="p-4 rounded-xl text-sm flex justify-between font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                <span>ပြန်အမ်းငွေ / အကြွေးကျန်:</span>
+                <span id="modal-change-text" class="font-mono text-base">0 Ks</span>
+            </div>
 
-    calculateChange();
-    modal?.classList.remove("hidden");
-}
-
-function calculateChange() {
-    const finalTotal = getFinalTotal();
-    const paid = parseFloat(document.getElementById("modal-paid-amount")?.value) || 0;
-    const changeBox = document.getElementById("modal-debt-change-box");
-    const changeText = document.getElementById("modal-change-text");
-
-    if (paid >= finalTotal) {
-        changeBox.className = "p-3 rounded-xl text-xs flex justify-between font-bold bg-emerald-50 text-emerald-800";
-        changeText.textContent = `+${(paid - finalTotal).toLocaleString()} Ks`;
-    } else {
-        changeBox.className = "p-3 rounded-xl text-xs flex justify-between font-bold bg-rose-50 text-rose-700";
-        changeText.textContent = `အကြွေးကျန်: ${(finalTotal - paid).toLocaleString()} Ks`;
-    }
-}
-
-/**
- * ၆။ အရောင်းဘောင်ချာ အတည်ပြုပြီး API သို့ ပေးပို့ခြင်း
- */
-async function submitSale() {
-    const btn = document.getElementById("btn-confirm-sale");
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>သိမ်းဆည်းနေပါသည်...</span>`;
-
-    try {
-        const finalTotal = getFinalTotal();
-        const paidAmount = parseFloat(document.getElementById("modal-paid-amount")?.value) || 0;
-        const customerId = document.getElementById("pos-customer-select")?.value || null;
-        const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
-        const bankName = document.getElementById("modal-bank-name")?.value;
-
-        const payload = {
-            branchId: state.currentBranch?.id || 1,
-            customerId: customerId ? parseInt(customerId) : null,
-            saleType: currentSaleType,
-            items: cart.map(i => ({
-                productId: i.product.id,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                costPrice: i.costPrice
-            })),
-            discountAmount,
-            paidAmount,
-            paymentMethod: selectedPaymentMethod,
-            cashAmount: selectedPaymentMethod === "cash" ? paidAmount : 0,
-            bankAmount: selectedPaymentMethod === "bank" ? paidAmount : 0,
-            bankAccountName: selectedPaymentMethod === "bank" ? bankName : null,
-            createdBy: state.user?.id || 1
-        };
-
-        const res = await api.post("/pos/sales", payload);
-
-        if (res.success) {
-            alert(`အရောင်းဘောင်ချာ အောင်မြင်စွာ ဖွင့်ပြီးပါပြီ!\nဘောင်ချာအမှတ်: ${res.data.invoiceNo}`);
-            
-            // Reset Cart & Close Modal
-            cart = [];
-            document.getElementById("pos-discount").value = 0;
-            document.getElementById("checkout-modal")?.classList.add("hidden");
-            renderCart();
-            await loadProducts(); // Update stock count
-        }
-    } catch (err) {
-        alert(`ချို့ယွင်းချက်ဖြစ်ပေါ်ပါသည်: ${err.message}`);
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = `<i class="fa-solid fa-check"></i> <span>အရောင်း အတည်ပြုမည်</span>`;
-    }
-}
-
-async function loadCustomers() {
-    // Optional: Load regular customers list
-}
+            <!-- Confirm Button -->
+            <button id="btn-confirm-sale" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-base rounded-2xl shadow-xl shadow-emerald-600/30 transition flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-check text-lg"></i>
+                <span>အရောင်း အတည်ပြုမည်</span>
+            </button>
+        </div>
+    </div>
+</div>

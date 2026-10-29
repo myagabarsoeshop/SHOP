@@ -6,6 +6,7 @@ let productsList = [];
 let cart = [];
 let currentSaleType = "retail";
 let selectedPaymentMethod = "cash";
+let currentCategory = ""; // ရွေးချယ်ထားသော Category ကို မှတ်သားရန်
 
 export async function initPOS() {
     bindEvents();
@@ -24,6 +25,7 @@ async function loadProducts(search = "", category = "") {
 
     loading?.classList.remove("hidden");
     empty?.classList.add("hidden");
+    if (grid) grid.innerHTML = "";
 
     try {
         const branchId = state.currentBranch?.id || 1;
@@ -189,16 +191,31 @@ function bindEvents() {
     const closeModalBtn = document.getElementById("btn-close-modal");
     const confirmSaleBtn = document.getElementById("btn-confirm-sale");
 
-    // Search Box
+    // ၅.၁ Category Tabs နှိပ်၍ စစ်ထုတ်ခြင်း
+    document.querySelectorAll(".cat-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+            // ခလုတ်အားလုံးကို မူလအရောင်ပြောင်းမည်
+            document.querySelectorAll(".cat-pill").forEach(b => {
+                b.className = "cat-pill px-4 py-3 text-sm font-bold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition";
+            });
+            // နှိပ်လိုက်သော ခလုတ်ကို Active အရောင်ပြောင်းမည်
+            btn.className = "cat-pill active px-4 py-3 text-sm font-bold rounded-xl bg-slate-900 dark:bg-emerald-600 text-white transition shadow-sm";
+            
+            currentCategory = btn.dataset.cat;
+            loadProducts(searchInput?.value.trim() || "", currentCategory);
+        });
+    });
+
+    // ၅.၂ Search Box ဖြင့် ရှာဖွေခြင်း
     let debounceTimer;
     searchInput?.addEventListener("input", (e) => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
-            loadProducts(e.target.value.trim());
+            loadProducts(e.target.value.trim(), currentCategory);
         }, 300);
     });
 
-    // Scanner 'Enter'
+    // Scanner 'Enter' ဖြင့် အမြန်ထည့်ခြင်း
     searchInput?.addEventListener("keypress", async (e) => {
         if (e.key === "Enter") {
             const code = searchInput.value.trim();
@@ -214,17 +231,17 @@ function bindEvents() {
         }
     });
 
-    // Retail / Wholesale
+    // ၅.၃ Retail / Wholesale ပြောင်းလဲခြင်း
     retailBtn?.addEventListener("click", () => {
         currentSaleType = "retail";
-        retailBtn.className = "px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-800 dark:text-white shadow-sm transition";
-        wholesaleBtn.className = "px-4 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 transition";
+        retailBtn.className = "px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-900 dark:text-white shadow-sm transition";
+        wholesaleBtn.className = "px-4 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 transition";
         updatePricesForSaleType();
     });
     wholesaleBtn?.addEventListener("click", () => {
         currentSaleType = "wholesale";
-        wholesaleBtn.className = "px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-800 dark:text-white shadow-sm transition";
-        retailBtn.className = "px-4 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 transition";
+        wholesaleBtn.className = "px-4 py-1.5 rounded-lg bg-white dark:bg-emerald-600 text-slate-900 dark:text-white shadow-sm transition";
+        retailBtn.className = "px-4 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 transition";
         updatePricesForSaleType();
     });
 
@@ -232,13 +249,13 @@ function bindEvents() {
     checkoutBtn?.addEventListener("click", openCheckoutModal);
     closeModalBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
 
-    // Payment Methods
+    // ၅.၄ Payment Methods ရွေးချယ်ခြင်း
     document.querySelectorAll(".method-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".method-btn").forEach(b => {
-                b.className = "method-btn p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-2 hover:border-slate-300 transition cursor-pointer";
+                b.className = "method-btn p-4 rounded-2xl border-2 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-2 hover:border-slate-400 transition cursor-pointer";
             });
-            btn.className = "method-btn active p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-2 transition cursor-pointer";
+            btn.className = "method-btn active p-4 rounded-2xl border-2 border-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-2 transition cursor-pointer";
             
             selectedPaymentMethod = btn.dataset.method;
             const bankGroup = document.getElementById("bank-input-group");
@@ -341,7 +358,7 @@ async function submitSale() {
             document.getElementById("pos-discount").value = 0;
             document.getElementById("checkout-modal")?.classList.add("hidden");
             renderCart();
-            await loadProducts();
+            await loadProducts(); // Update latest inventory count
         }
     } catch (err) {
         alert(`ချို့ယွင်းချက်ဖြစ်ပေါ်ပါသည်: ${err.message}`);
@@ -351,4 +368,6 @@ async function submitSale() {
     }
 }
 
-async function loadCustomers() {}
+async function loadCustomers() {
+    // ဤနေရာတွင် Customer များ ခေါ်ယူမည့် API ကို ထည့်သွင်းနိုင်ပါသည်
+}

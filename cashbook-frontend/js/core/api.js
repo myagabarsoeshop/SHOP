@@ -2,7 +2,7 @@
 
 export const API_BASE_URL = window.location.hostname === "localhost" 
     ? "http://localhost:8787/api" 
-    : "https://shop-api.myagabarsoeshop.workers.dev/api"; // သင်၏ Worker URL
+    : "https://shop.myagabarsoeshop.workers.dev/api";
 
 export const api = {
     async request(endpoint, options = {}) {

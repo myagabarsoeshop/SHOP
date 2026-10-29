@@ -1,0 +1,66 @@
+<!-- cashbook-frontend/views/cashbook.html -->
+<div class="h-full w-full flex flex-col p-6 overflow-y-auto bg-slate-100 dark:bg-slate-950">
+    
+    <!-- Top Action Bar -->
+    <div class="flex items-center justify-between mb-6 shrink-0">
+        <div>
+            <h1 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2.5">
+                <i class="fa-solid fa-book-journal-whills text-emerald-600"></i>
+                <span>နေ့စဉ် ငွေစာရင်း (Cashbook & Daily Closing)</span>
+            </h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">အထွေထွေစရိတ်များ၊ ဝင်ငွေများနှင့် နေ့ချုပ်စာရင်း</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button id="btn-open-expense-modal" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-minus-circle"></i>
+                <span>အသုံးစရိတ် ထည့်မည်</span>
+            </button>
+            <button id="btn-open-income-modal" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-plus-circle"></i>
+                <span>အခြားဝင်ငွေ ထည့်မည်</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Balance Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
+        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ကျန် ငွေသား (Cash Net)</div>
+            <div id="cb-cash-net" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0 Ks</div>
+        </div>
+        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ကျန် ဘဏ်ငွေ (Bank Net)</div>
+            <div id="cb-bank-net" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">0 Ks</div>
+        </div>
+        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ စုစုပေါင်း အသားတင် (Total Net)</div>
+            <div id="cb-total-net" class="text-2xl font-black text-slate-900 dark:text-white font-mono">0 Ks</div>
+        </div>
+    </div>
+
+    <!-- Entries Table -->
+    <div class="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-sm text-slate-800 dark:text-white">
+            ယနေ့ ငွေဝင်/ငွေထွက် မှတ်တမ်းများ
+        </div>
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-bold uppercase sticky top-0">
+                    <tr>
+                        <th class="p-3.5">အချိန်</th>
+                        <th class="p-3.5">ခေါင်းစဉ်</th>
+                        <th class="p-3.5">အသေးစိတ်ဖော်ပြချက်</th>
+                        <th class="p-3.5">လိုင်း</th>
+                        <th class="p-3.5 text-right">ငွေပမာဏ</th>
+                    </tr>
+                </thead>
+                <tbody id="cashbook-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                    <tr>
+                        <td colspan="5" class="p-8 text-center text-slate-400">စာရင်းမှတ်တမ်း မရှိသေးပါ</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

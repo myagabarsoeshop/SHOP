@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>အထည်ဆိုင် POS & စာရင်းကိုင်စနစ်</title>
 
-    <!-- Tailwind CSS (Official CDN) -->
+    <!-- Tailwind CSS (Official CDN with Dark Mode Config) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -32,30 +33,33 @@
     <!-- Typography: Inter & Padauk (Burmese) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- FontAwesome 6 Icons (CDN) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
     <style>
-        /* Custom Scrollbar for POS Cart & Product Grid */
+        body {
+            font-family: 'Inter', 'Padauk', sans-serif;
+        }
+        /* Custom Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+            width: 7px;
+            height: 7px;
         }
         ::-webkit-scrollbar-track {
-            background: #f1f5f9;
+            background: rgba(148, 163, 184, 0.1);
         }
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
+            background: #94a3b8;
+            border-radius: 6px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
+            background: #64748b;
         }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased font-sans select-none overflow-hidden h-screen w-screen">
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased font-sans select-none overflow-hidden h-screen w-screen transition-colors duration-200">
 
     <!-- Login Container (Login မဝင်ရသေးမီ ပေါ်မည့် နေရာ) -->
     <div id="login-container" class="min-h-screen w-full"></div>
@@ -64,58 +68,58 @@
     <div id="app-layout" class="hidden flex h-screen w-screen overflow-hidden">
         
         <!-- Sidebar Navigation -->
-        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 shadow-2xl z-20 border-r border-slate-800">
+        <aside class="w-68 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 shadow-2xl z-20 border-r border-slate-800">
             <div>
                 <!-- Brand Header -->
-                <div class="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800/80">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
-                        <i class="fa-solid fa-shirt text-sm"></i>
+                <div class="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
+                        <i class="fa-solid fa-shirt text-lg"></i>
                     </div>
                     <div>
                         <div class="text-sm font-bold text-white tracking-wide">GARMENT ERP</div>
-                        <div class="text-[10px] text-emerald-400 font-medium">POS + Cashbook</div>
+                        <div class="text-xs text-emerald-400 font-semibold">POS + Cashbook</div>
                     </div>
                 </div>
 
-                <!-- Navigation Links -->
-                <nav class="p-4 space-y-1.5 text-xs font-medium">
-                    <button data-view="pos" class="nav-item active flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition bg-slate-800 text-white font-semibold shadow-sm">
-                        <i class="fa-solid fa-cash-register w-5 text-center text-sm text-emerald-400"></i>
+                <!-- Navigation Links (စာလုံးအရွယ်အစား text-sm သို့ ကြီးထားသည်) -->
+                <nav class="p-4 space-y-2 text-sm font-semibold">
+                    <button data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-slate-800 text-white shadow-sm">
+                        <i class="fa-solid fa-cash-register w-6 text-center text-base text-emerald-400"></i>
                         <span>အရောင်းကောင်တာ (POS)</span>
                     </button>
-                    <button data-view="cashbook" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/60 hover:text-white">
-                        <i class="fa-solid fa-book-journal-whills w-5 text-center text-sm"></i>
+                    <button data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
+                        <i class="fa-solid fa-book-journal-whills w-6 text-center text-base"></i>
                         <span>နေ့စဉ်ငွေစာရင်း (Cashbook)</span>
                     </button>
-                    <button data-view="inventory" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/60 hover:text-white">
-                        <i class="fa-solid fa-boxes-stacked w-5 text-center text-sm"></i>
+                    <button data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
+                        <i class="fa-solid fa-boxes-stacked w-6 text-center text-base"></i>
                         <span>အထည်လက်ကျန် (Stock)</span>
                     </button>
-                    <button data-view="yarn" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/60 hover:text-white">
-                        <i class="fa-solid fa-scroll w-5 text-center text-sm"></i>
+                    <button data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
+                        <i class="fa-solid fa-scroll w-6 text-center text-base"></i>
                         <span>ချည်စတိုနှင့် ရက်ကန်း</span>
                     </button>
-                    <button data-view="customers" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/60 hover:text-white">
-                        <i class="fa-solid fa-users w-5 text-center text-sm"></i>
+                    <button data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
+                        <i class="fa-solid fa-users w-6 text-center text-base"></i>
                         <span>ဖောက်သည်နှင့် အကြွေးစာရင်း</span>
                     </button>
                 </nav>
             </div>
 
-            <!-- User Info & Logout -->
-            <div class="p-4 border-t border-slate-800/80 bg-slate-950/60">
+            <!-- User Info & Logout (စာလုံးအရွယ်အစား text-sm) -->
+            <div class="p-4 border-t border-slate-800 bg-slate-950/70">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0">
                             <span id="user-initial">U</span>
                         </div>
                         <div class="truncate">
-                            <div id="user-name" class="text-xs font-semibold text-white truncate">User</div>
-                            <div id="user-role" class="text-[10px] text-slate-400 capitalize truncate">Role</div>
+                            <div id="user-name" class="text-sm font-bold text-white truncate">User</div>
+                            <div id="user-role" class="text-xs text-slate-400 capitalize truncate">Role</div>
                         </div>
                     </div>
-                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-xl transition">
-                        <i class="fa-solid fa-arrow-right-from-bracket text-sm"></i>
+                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2.5 rounded-xl transition">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-base"></i>
                     </button>
                 </div>
             </div>
@@ -123,38 +127,47 @@
 
         <!-- Main Workspace Area -->
         <div class="flex-1 flex flex-col h-screen overflow-hidden">
-            <!-- Topbar Header -->
-            <header class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-10">
+            <!-- Topbar Header (Dark Mode ပံ့ပိုးမှုနှင့် စာလုံးကြီးများ) -->
+            <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 shadow-sm z-10 transition-colors">
                 <div class="flex items-center gap-4">
                     <div class="flex items-center gap-2.5">
-                        <span class="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                            <i class="fa-solid fa-store text-emerald-600"></i>
+                        <span class="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                            <i class="fa-solid fa-store text-emerald-600 dark:text-emerald-400 text-base"></i>
                             <span>တာဝန်ကျရာ ဆိုင်ခွဲ:</span>
                         </span>
                         <!-- Branch Selector Dropdown -->
                         <div class="relative">
-                            <select id="global-branch-select" class="text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 cursor-pointer transition">
+                            <select id="global-branch-select" class="text-sm font-bold text-slate-800 dark:text-white bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer transition">
                                 <!-- Loaded dynamically via app.js -->
                             </select>
                         </div>
                     </div>
                 </div>
 
-                <!-- Live Status & Clock -->
-                <div class="flex items-center gap-4 text-xs">
-                    <div class="flex items-center gap-2 text-slate-600 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200">
-                        <i class="fa-regular fa-clock text-emerald-600"></i>
-                        <span id="live-clock" class="font-mono font-semibold">--:--:--</span>
+                <!-- Dark Mode Switcher, Clock & Status -->
+                <div class="flex items-center gap-3 text-sm">
+                    <!-- Light / Dark Mode Toggle Button -->
+                    <button id="theme-toggle" type="button" title="Light / Dark Mode ပြောင်းရန်"
+                        class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition border border-slate-200 dark:border-slate-700 cursor-pointer">
+                        <i class="fa-solid fa-moon text-base" id="theme-icon"></i>
+                    </button>
+
+                    <!-- Real-time Clock -->
+                    <div class="flex items-center gap-2 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium">
+                        <i class="fa-regular fa-clock text-emerald-600 dark:text-emerald-400"></i>
+                        <span id="live-clock" class="font-mono font-bold text-sm">--:--:--</span>
                     </div>
-                    <div class="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl font-semibold border border-emerald-200/80">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>D1 Connected</span>
+
+                    <!-- Database Status Indicator -->
+                    <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-2 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800 text-xs">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>D1 Online</span>
                     </div>
                 </div>
             </header>
 
             <!-- Dynamic View Container (POS, Cashbook စသည်တို့ ဖလှယ်မည့်နေရာ) -->
-            <main id="view-container" class="flex-1 bg-slate-100 overflow-hidden relative"></main>
+            <main id="view-container" class="flex-1 bg-slate-100 dark:bg-slate-950 overflow-hidden relative"></main>
         </div>
     </div>
 

@@ -1,395 +1,118 @@
 <!DOCTYPE html>
-<html lang="my" class="dark">
-
+<html lang="my">
 <head>
-  <meta charset="UTF-8">
-  <!-- 💡 Browser Tab Icon (Favicon) - Emerald & Gold "မြ" Logo -->
-  <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%230c1b26'/><stop offset='100%25' stop-color='%23040911'/></linearGradient><linearGradient id='mya' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%236ee7b7'/><stop offset='50%25' stop-color='%2310b981'/><stop offset='100%25' stop-color='%23fbbf24'/></linearGradient><linearGradient id='bd' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%2334d399'/><stop offset='100%25' stop-color='%23f59e0b'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23bg)'/><rect x='2' y='2' width='96' height='96' rx='20' fill='none' stroke='url(%23bd)' stroke-width='2.5'/><circle cx='50' cy='50' r='30' fill='%2310b981' fill-opacity='0.12'/><text x='50' y='63' text-anchor='middle' font-family='sans-serif' font-size='46' font-weight='900' fill='url(%23mya)'>မြ</text></svg>">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#090d16">
-  <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - CASH BOOK SYSTEM</title>
-
-  <!-- 💡 Immediate Auth Check: token ကို Standard အဖြစ် စစ်ဆေးပြီး golden_auth_token အဟောင်းပါ ကျန်ခဲ့လျှင် အလုပ်လုပ်စေရန် ထည့်သွင်းထားသည် -->
-  <script>
-    (function () {
-      var token = localStorage.getItem('token') || localStorage.getItem('golden_auth_token');
-      if (token) {
-        document.documentElement.className = 'dark is-authed';
-      } else {
-        document.documentElement.className = 'dark not-authed';
-      }
-    })();
-  </script>
-
-  <style>
-    html.is-authed #login-overlay {
-      display: none;
-    }
-
-    html.is-authed #erp-workspace {
-      display: flex;
-    }
-
-    html.not-authed #login-overlay {
-      display: flex;
-    }
-
-    html.not-authed #erp-workspace {
-      display: none;
-    }
-
-    #invoice-print-area,
-    #payslip-print-area {
-      display: none;
-    }
-
-    /* 💡 Autofill ဝါကျင့်ကျင့်ဖြစ်နေမှုကို Luxury Dark ဖြစ်အောင် ကာကွယ်ခြင်း */
-    input:-webkit-autofill,
-    input:-webkit-autofill:hover, 
-    input:-webkit-autofill:focus {
-      -webkit-text-fill-color: #f1f5f9;
-      -webkit-box-shadow: 0 0 0px 1000px #070a12 inset;
-      transition: background-color 5000s ease-in-out 0s;
-    }
-  </style>
-
-  <!-- 🎯 Cache-Busting Version -->
-  <link rel="stylesheet" href="css/tailwind.min.css?v=20261008">
-  <link rel="stylesheet" href="css/fontawesome.min.css?v=20261008">
-  <link rel="stylesheet" href="css/style.css?v=20261008">
-
-  <!-- 💡 SheetJS Library for Multi-Tab Excel Export -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>အထည်ဆိုင် POS & စာရင်းကိုင်စနစ်</title>
+    <!-- Tailwind CSS & FontAwesome -->
+    <link rel="stylesheet" href="css/tailwind.min.css">
+    <link rel="stylesheet" href="css/fontawesome.min.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
+<body class="bg-slate-100 text-slate-800 antialiased font-sans select-none overflow-hidden">
 
-<body class="bg-[#090d16] font-sans flex h-screen overflow-hidden text-slate-300">
+    <!-- Login Container (Login မဝင်ရသေးပါက ဤနေရာတွင် ပေါ်မည်) -->
+    <div id="login-container" class="hidden"></div>
 
-  <!-- ==================== 1. LOGIN OVERLAY ==================== -->
-  <div id="login-overlay" class="fixed inset-0 bg-[#090d16] z-[100] flex items-center justify-center p-4">
-    <div
-      class="relative w-full max-w-md bg-[#0e131f]/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center overflow-hidden space-y-6 text-slate-300">
-
-      <div
-        class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
-      </div>
-
-      <div class="text-center">
-        <!-- 💎 Luxury Royal Emerald & Gold "မြ" Seal -->
-        <div class="flex items-center justify-center mb-3">
-          <svg class="w-20 h-20 filter drop-shadow-[0_0_25px_rgba(16,185,129,0.55)] hover:scale-105 transition-transform duration-300 cursor-pointer select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <radialGradient id="gemBg" cx="50%" cy="30%" r="70%">
-                <stop offset="0%" stop-color="#10b981"/>
-                <stop offset="45%" stop-color="#064e3b"/>
-                <stop offset="100%" stop-color="#022c22"/>
-              </radialGradient>
-              <linearGradient id="goldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#fef08a"/>
-                <stop offset="35%" stop-color="#f59e0b"/>
-                <stop offset="70%" stop-color="#d97706"/>
-                <stop offset="100%" stop-color="#fef08a"/>
-              </linearGradient>
-              <linearGradient id="goldText" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="#ffffff"/>
-                <stop offset="30%" stop-color="#fef08a"/>
-                <stop offset="70%" stop-color="#f59e0b"/>
-                <stop offset="100%" stop-color="#b45309"/>
-              </linearGradient>
-            </defs>
-            <circle cx="50" cy="50" r="46" fill="url(#gemBg)" stroke="url(#goldBorder)" stroke-width="2.5"/>
-            <circle cx="50" cy="50" r="41" fill="none" stroke="url(#goldBorder)" stroke-width="1" stroke-dasharray="2 3" opacity="0.8"/>
-            <polygon points="50,6 52,10 50,14 48,10" fill="#fef08a"/>
-            <polygon points="50,86 52,90 50,94 48,90" fill="#fef08a"/>
-            <polygon points="6,50 10,52 14,50 10,48" fill="#fef08a"/>
-            <polygon points="86,50 90,52 94,50 90,48" fill="#fef08a"/>
-            <text x="51" y="66" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="42" font-weight="900" fill="#011b15" opacity="0.8">မြ</text>
-            <text x="50" y="65" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="42" font-weight="900" fill="url(#goldText)">မြ</text>
-          </svg>
-        </div>
-
-        <h2
-          class="text-xl font-black tracking-tight mb-1 text-gold-gradient filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-          မြကမ္ဘာစိုး ပိုးထည်တိုက်
-        </h2>
-
-        <p
-          class="text-[11px] font-extrabold uppercase tracking-[0.25em] text-amber-200/80 pb-3 border-b border-slate-800">
-          CASH BOOK SYSTEM
-        </p>
-      </div>
-
-      <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4 text-xs text-left">
-        <div>
-          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Select Username / Role</label>
-          <select id="login-username" required
-            class="w-full p-3 bg-[#070a12]/80 border border-slate-800 rounded-xl text-xs text-slate-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300 font-bold">
-            <option value="">-- Select Username --</option>
-            <option value="Admin">Admin</option>
-            <option value="Finance">Finance</option>
-            <option value="Shop1">Shop1</option>
-            <option value="Shop2">Shop2</option>
-            <option value="Shop3">Shop3</option>
-            <option value="Shop4">Shop4</option>
-            <option value="Shop5">Shop5</option>
-            <option value="Staff">Staff</option>
-            <option value="Viewer">Viewer</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block font-bold text-[11px] text-slate-300 uppercase tracking-widest mb-1.5">Password</label>
-          <input type="password" id="login-password" required placeholder="Type password..."
-            class="w-full p-3 bg-[#070a12]/80 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-300">
-        </div>
-
-        <div id="login-error"
-          class="hidden text-rose-400 font-semibold text-[11px] bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-center">
-        </div>
-
-        <button type="submit"
-          class="w-full py-3.5 mt-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 flex items-center justify-center gap-2 text-xs tracking-wider active:scale-[0.99] cursor-pointer">
-          <span>Enter System</span>
-          <i class="fa-solid fa-arrow-right-to-bracket text-sm"></i>
-        </button>
-      </form>
-
-      <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="font-medium text-slate-400">System Ready</span>
-        </div>
-        <span class="font-mono text-slate-500">v2.4 Secured</span>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ==================== 2. MAIN WORKSPACE ==================== -->
-  <div id="erp-workspace" class="hidden h-full w-full">
-    <!-- Sidebar Navigation -->
-    <aside class="w-64 bg-[#0c1322] border-r border-slate-800/40 flex flex-col h-full shadow-2xl shrink-0">
-      
-      <!-- 💎 PRO SIDEBAR HEADER -->
-      <div class="h-[68px] px-3.5 border-b border-slate-800/60 flex items-center justify-between text-slate-200 bg-[#0e172a] shrink-0">
-        <div class="flex items-center gap-2.5 min-w-0">
-          <svg class="w-8 h-8 shrink-0 filter drop-shadow-[0_0_8px_rgba(16,185,129,0.45)] select-none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="miniGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#fef08a"/>
-                <stop offset="50%" stop-color="#f59e0b"/>
-                <stop offset="100%" stop-color="#d97706"/>
-              </linearGradient>
-            </defs>
-            <circle cx="50" cy="50" r="46" fill="#064e3b" stroke="url(#miniGold)" stroke-width="4"/>
-            <text x="50.5" y="66" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="46" font-weight="900" fill="#022c22" opacity="0.6">မြ</text>
-            <text x="50" y="65" text-anchor="middle" font-family="'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="46" font-weight="900" fill="#fef08a">မြ</text>
-          </svg>
-          
-          <div class="flex flex-col min-w-0 leading-tight">
-            <span class="text-slate-100 font-extrabold text-[13px] tracking-tight truncate">မြကမ္ဘာစိုး</span>
-            <span class="text-[9.5px] font-bold text-amber-400/90 tracking-wider uppercase truncate">ပိုးထည်တိုက် • CASH BOOK</span>
-          </div>
-        </div>
-
-        <button onclick="handleLogout()" class="shrink-0 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-xl transition duration-200" title="Logout">
-          <i class="fa-solid fa-power-off text-xs"></i>
-        </button>
-      </div>
-
-      <!-- Left sidebar Menu --> 
-      <nav class="flex-1 px-2.5 py-2.5 space-y-0.5 overflow-y-auto" id="sidebar-nav">
-        <button onclick="switchTab('dashboard')" id="btn-dashboard"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-gauge-high w-4 text-center text-indigo-400"></i> Home Dashboard
-        </button>
-
-        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Main Books</p>
+    <!-- Main App Layout (Login ဝင်ပြီးမှ ပေါ်မည်) -->
+    <div id="app-layout" class="hidden flex h-screen w-screen overflow-hidden">
         
-        <!-- 💡 Main Home Shop: switchTab('main') နှင့် id='btn-main' အဖြစ် ညှိထားသည် -->
-        <button onclick="switchTab('main')" id="btn-main"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-building-columns text-amber-400 w-4 text-center"></i> Main Home Shop
-        </button>
-        <button onclick="switchTab('shop1')" id="btn-shop1"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-shop text-emerald-400 w-4 text-center"></i> ဆိုင်ခွဲ (၁)
-        </button>
-        <button onclick="switchTab('shop2')" id="btn-shop2"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-shop text-sky-400 w-4 text-center"></i> ဆိုင်ခွဲ (၂)
-        </button>
-        <button onclick="switchTab('shop3')" id="btn-shop3"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-shop text-cyan-400 w-4 text-center"></i> ဆိုင်ခွဲ (၃)
-        </button>
-        <button onclick="switchTab('shop4')" id="btn-shop4"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-shop text-purple-400 w-4 text-center"></i> ဆိုင်ခွဲ (၄)
-        </button>
-        <button onclick="switchTab('shop5')" id="btn-shop5"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-shop text-rose-400 w-4 text-center"></i> ဆိုင်ခွဲ (၅)
-        </button>
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 shadow-xl z-20">
+            <div>
+                <!-- Brand Header -->
+                <div class="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800/80">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+                        <i class="fa-solid fa-shirt text-sm"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm font-bold text-white tracking-wide">GARMENT ERP</div>
+                        <div class="text-[10px] text-emerald-400 font-medium">POS + Cashbook</div>
+                    </div>
+                </div>
 
-        <!-- 💡 STORE & INVENTORY MODULE -->
-        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Store & Inventory</p>
-        <button onclick="switchTab('store')" id="btn-store"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-boxes-stacked text-amber-400 w-4 text-center"></i> ကုန်ချောစတို (Store)
-        </button>
-        <!-- 🧶 ချည်စတို (Yarn Store) MODULE -->
-        <button onclick="switchTab('yarn')" id="btn-yarn"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold cursor-pointer">
-          <i class="fa-solid fa-scroll text-sky-400 w-4 text-center"></i> ချည်စတို (Yarn Store)
-        </button>
-        
-        <p class="text-[9px] font-bold text-slate-500 px-3 uppercase tracking-wider mt-2.5 mb-1">Reporting & System</p>
-        <button onclick="switchTab('report-financial')" id="btn-report-financial"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-chart-pie text-emerald-400 w-4 text-center"></i> Financial Reports
-        </button>
+                <!-- Navigation Links -->
+                <nav class="p-4 space-y-1 text-xs font-medium">
+                    <button data-view="pos" class="nav-item active flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-300 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-cash-register w-5 text-center text-sm"></i>
+                        <span>အရောင်းကောင်တာ (POS)</span>
+                    </button>
+                    <button data-view="cashbook" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-book-journal-whills w-5 text-center text-sm"></i>
+                        <span>နေ့စဉ်ငွေစာရင်း (Cashbook)</span>
+                    </button>
+                    <button data-view="inventory" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-boxes-stacked w-5 text-center text-sm"></i>
+                        <span>အထည်လက်ကျန် (Stock)</span>
+                    </button>
+                    <button data-view="yarn" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-scroll w-5 text-center text-sm"></i>
+                        <span>ချည်စတိုနှင့် ရက်ကန်း</span>
+                    </button>
+                    <button data-view="customers" class="nav-item flex items-center gap-3 w-full px-3.5 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
+                        <i class="fa-solid fa-users w-5 text-center text-sm"></i>
+                        <span>ဖောက်သည်နှင့် အကြွေးစာရင်း</span>
+                    </button>
+                </nav>
+            </div>
 
-        <button onclick="switchTab('settings')" id="btn-settings"
-          class="nav-btn w-full text-left px-3.5 py-2 rounded-lg text-slate-300 hover:text-white flex items-center gap-2.5 text-xs font-semibold">
-          <i class="fa-solid fa-gears text-indigo-400 w-4 text-center"></i> System Settings
-        </button>
-      </nav>
-    </aside>
+            <!-- User Info & Logout -->
+            <div class="p-4 border-t border-slate-800/80 bg-slate-950/50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+                            <span id="user-initial">U</span>
+                        </div>
+                        <div class="truncate">
+                            <div id="user-name" class="text-xs font-semibold text-white truncate">User</div>
+                            <div id="user-role" class="text-[10px] text-slate-400 capitalize truncate">Role</div>
+                        </div>
+                    </div>
+                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 p-2 rounded-lg transition">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-sm"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
 
-    <!-- Main Workspace View Container -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-      <header
-        class="bg-[#0c1322] border-b border-slate-800/60 h-[68px] px-6 flex justify-between items-center z-10 shrink-0">
-        <h1 id="page-title" class="text-base md:text-lg font-extrabold text-slate-100 tracking-wide">Home Dashboard</h1>
+        <!-- Main Workspace Area -->
+        <div class="flex-1 flex flex-col h-screen overflow-hidden">
+            <!-- Topbar Header -->
+            <header class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-10">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-medium text-slate-500">တာဝန်ကျရာ ဆိုင်ခွဲ:</span>
+                        <!-- Branch Selector Dropdown (Admin အတွက် ဆိုင်အားလုံး ရွေးချယ်နိုင်သည်) -->
+                        <div class="relative">
+                            <select id="global-branch-select" class="text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer">
+                                <!-- Options will be loaded dynamically -->
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
-        <!-- 💡 Symmetrical Capsule Header -->
-        <div class="inline-flex items-center text-xs font-bold bg-[#111c44] border border-slate-800 px-3.5 py-1.5 rounded-full shadow-inner gap-2.5">
-          <!-- Left: Real-Time Wifi Status -->
-          <span id="network-status" class="flex items-center justify-center text-emerald-400 transition-colors duration-300 cursor-pointer" title="Internet Connected (Online)">
-            <i id="network-icon" class="fa-solid fa-wifi text-[11px]"></i>
-          </span>
+                <!-- Clock & Status Indicator -->
+                <div class="flex items-center gap-4 text-xs">
+                    <div class="flex items-center gap-2 text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/60">
+                        <i class="fa-regular fa-clock text-emerald-600"></i>
+                        <span id="live-clock" class="font-mono">--:--:--</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg font-medium border border-emerald-200/60">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>D1 Online</span>
+                    </div>
+                </div>
+            </header>
 
-          <span class="text-slate-600/70 font-normal select-none">|</span>
-
-          <!-- Right: Dynamic Metadata -->
-          <span id="live-metadata" class="text-emerald-400 font-bold tracking-wide">
-            FY 2026 | -- | --:-- | User: Admin
-          </span>
+            <!-- Dynamic View Container (POS, Cashbook စသည့် စာမျက်နှာများ ဤနေရာတွင် ပေါ်မည်) -->
+            <main id="view-container" class="flex-1 bg-slate-100 overflow-hidden relative"></main>
         </div>
-      </header>
-
-      <main id="main-content" style="padding-top: 10px;" class="px-6 pb-6 overflow-y-auto flex-1 bg-[#090d16] relative">
-        <div id="view-container"></div>
-      </main>
     </div>
-  </div>
 
-  <!-- ==================== 3. GLOBAL UTILITIES & NOTIFICATIONS ==================== -->
-  <div id="loading-overlay"
-    class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[150] flex flex-col items-center justify-center hidden">
-    <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-3"></div>
-    <p class="text-xs font-bold text-slate-200 tracking-wide">Processing, please wait...</p>
-  </div>
+    <!-- Modals Container (ဘောင်ချာ Print ထုတ်ခြင်းနှင့် ငွေရှင်း Modal များအတွက်) -->
+    <div id="modal-container"></div>
 
-  <div id="toast-container" class="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none"></div>
-
-  <!-- ==================== 4. GLOBAL SETTINGS MODAL ==================== -->
-  <div id="grade-modal"
-    class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div
-      class="bg-[#0c1322] border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
-      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0e172a] shrink-0">
-        <h3 class="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
-          <i class="fa-solid fa-sliders"></i> Edit System Matrix Settings (Cloudflare D1 Database)
-        </h3>
-        <button onclick="closeGradeModal()" class="text-slate-500 hover:text-white transition"><i
-            class="fa-solid fa-xmark text-sm"></i></button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== 5. CORE APPLICATION SCRIPTS ==================== -->
-  <script src="js/fy.js?v=20261008" defer></script>
-  <script src="js/config.js?v=20261008" defer></script>
-  <script src="js/api.js?v=20261008" defer></script>
-  <script src="js/offline.js?v=20261008" defer></script>
-  <script src="js/dashboard.js?v=20261008" defer></script>
-  <script src="js/cashbook.js?v=20261008" defer></script>
-  <script src="js/store.js?v=20261008" defer></script>
-  <script src="js/yarn.js?v=20261008" defer></script>
-  <script src="js/auth.js?v=20261008" defer></script>
-  <script src="js/app.js?v=20261008" defer></script>
-
-  <!-- 💡 Unified Network, Metadata & Logout Controllers -->
-  <script>
-    // 💡 Logout Handler (token နှင့် user အားလုံးကို ပြေပြစ်စွာ ရှင်းလင်းပေးသည်)
-    function handleLogout() {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('golden_auth_token');
-      localStorage.removeItem('golden_user');
-      window.location.reload();
-    }
-
-    // 💡 Network & Wifi Status Check
-    function updateNetworkStatus() {
-      const netStatus = document.getElementById('network-status');
-      const netIcon = document.getElementById('network-icon');
-
-      if (!netStatus || !netIcon) return;
-
-      if (navigator.onLine) {
-        netStatus.className = 'flex items-center justify-center text-emerald-400 transition-colors duration-300 cursor-pointer';
-        netStatus.title = 'Internet Connected (Online)';
-        netIcon.className = 'fa-solid fa-wifi text-[11px]';
-      } else {
-        netStatus.className = 'flex items-center justify-center text-rose-400 transition-colors duration-300 cursor-pointer animate-pulse';
-        netStatus.title = 'No Internet Connection (Offline)';
-        netIcon.className = 'fa-solid fa-triangle-exclamation text-[11px]';
-      }
-    }
-
-    // 💡 Dynamic Header Date & Time Indicator (user သို့မဟုတ် golden_user နှစ်မျိုးလုံး ထောက်ပံ့သည်)
-    function renderLiveHeaderMetadata() {
-      const metaEl = document.getElementById('live-metadata');
-      if (!metaEl) return;
-
-      const now = new Date();
-      const currentYear = now.getFullYear(); 
-      const fyLabel = window.FY ? window.FY.getCurrentFY() : `FY ${currentYear}`;
-
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const dayName = days[now.getDay()];
-
-      let hours = now.getHours();
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      const formattedHours = String(hours).padStart(2, '0');
-      const timeStr = `${formattedHours}:${minutes} ${ampm}`;
-
-      let userName = 'Admin';
-      try {
-        const storedUser = localStorage.getItem('user') || localStorage.getItem('golden_user');
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          userName = parsed.name || parsed.username || 'Admin';
-        }
-      } catch (e) {}
-
-      metaEl.textContent = `${fyLabel} | ${dayName} | ${timeStr} | User: ${userName}`;
-    }
-
-    window.addEventListener('online', updateNetworkStatus);
-    window.addEventListener('offline', updateNetworkStatus);
-
-    document.addEventListener('DOMContentLoaded', () => {
-      updateNetworkStatus();
-      renderLiveHeaderMetadata();
-      setInterval(renderLiveHeaderMetadata, 10000);
-    });
-  </script>
+    <!-- Scripts -->
+    <script type="module" src="js/app.js"></script>
 </body>
-
 </html>

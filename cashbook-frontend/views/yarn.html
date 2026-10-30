@@ -1,0 +1,139 @@
+<!-- cashbook-frontend/views/yarn.html -->
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm overflow-hidden">
+    
+    <!-- Top Toolbar -->
+    <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="relative flex-1 max-w-md">
+            <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
+            <input type="text" id="yarn-search" placeholder="ချည်ကုတ် / ချည်အမည် / အရောင် ရှာဖွေရန်..."
+                class="w-full pl-10 pr-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
+        </div>
+
+        <div class="flex items-center gap-2.5">
+            <button type="button" id="btn-issue-yarn" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm rounded-xl shadow-md shadow-amber-600/20 transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-hand-holding-hand"></i>
+                <span>ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်</span>
+            </button>
+            <button type="button" id="btn-add-yarn" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-plus-circle"></i>
+                <span>ချည်အသစ် သွင်းမည်</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Yarn Table -->
+    <div class="flex-1 overflow-y-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                    <th class="p-4">ချည်ကုတ်</th>
+                    <th class="p-4">ချည်အမျိုးအမည်</th>
+                    <th class="p-4">အရောင်</th>
+                    <th class="p-4">ယူနစ် (Unit)</th>
+                    <th class="p-4 text-center">လက်ကျန်ပမာဏ</th>
+                    <th class="p-4 text-center">သတိပေးပမာဏ</th>
+                    <th class="p-4 text-center">အခြေအနေ</th>
+                </tr>
+            </thead>
+            <tbody id="yarn-table-body" class="divide-y divide-slate-200/60 dark:divide-slate-700/60 font-semibold text-slate-800 dark:text-slate-200">
+                <tr>
+                    <td colspan="7" class="p-12 text-center text-slate-400 text-base">ချည်စာရင်း ဆွဲယူနေပါသည်...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 1. Add Yarn Modal -->
+<div id="yarn-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+        <div class="p-5 bg-emerald-600 text-white flex items-center justify-between">
+            <div class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-scroll"></i>
+                <span>ချည်အမျိုးအစား အသစ်ထည့်မည်</span>
+            </div>
+            <button type="button" id="btn-close-yarn-modal" class="text-white/80 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="yarn-form" class="p-6 space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ချည်ကုတ် (Code) *</label>
+                    <input type="text" id="yarn-code" required placeholder="YN-001" class="w-full text-sm font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ယူနစ် (Unit)</label>
+                    <select id="yarn-unit" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+                        <option value="ပေါင် (lb)">ပေါင် (lb)</option>
+                        <option value="ထုပ် (Bundle)">ထုပ် (Bundle)</option>
+                        <option value="လိပ် (Roll)">လိပ် (Roll)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ချည်အမျိုးအမည် *</label>
+                <input type="text" id="yarn-name" required placeholder="ဥပမာ - ပိုးချည်အစစ် / ချည်နီလွန်း" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">အရောင်</label>
+                <input type="text" id="yarn-color" placeholder="အနီ / အနက် / ရွှေဝါ" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">လက်ရှိလက်ကျန် *</label>
+                    <input type="number" id="yarn-stock" required min="0" step="any" value="0" class="w-full text-base font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">အနည်းဆုံးသတိပေးပမာဏ</label>
+                    <input type="number" id="yarn-alert" min="0" step="any" value="10" class="w-full text-base font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+                </div>
+            </div>
+
+            <button type="submit" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition cursor-pointer">
+                သိမ်းဆည်းမည်
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 2. Issue Yarn to Weaver Modal -->
+<div id="yarn-issue-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+        <div class="p-5 bg-amber-600 text-white flex items-center justify-between">
+            <div class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-hand-holding-hand"></i>
+                <span>ရက်ကန်းသို့ ချည်ထုတ်ပေးခြင်း</span>
+            </div>
+            <button type="button" id="btn-close-issue-modal" class="text-white/80 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <form id="yarn-issue-form" class="p-6 space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ထုတ်ပေးမည့် ချည်အမျိုးအစား *</label>
+                <select id="issue-yarn-id" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-3 text-slate-900 dark:text-white"></select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ရက်ကန်းသမား / စင်တာဝန်ခံ အမည် *</label>
+                <input type="text" id="issue-weaver" required placeholder="ဥပမာ - ဒေါ်အေးမြ (စင် - ၄)" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ထုတ်ပေးသည့် ပမာဏ *</label>
+                <input type="number" id="issue-qty" required min="0.1" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">မှတ်ချက် (အထည်အဆင် / စင်အမှတ်)</label>
+                <input type="text" id="issue-notes" placeholder="မှတ်ချက်..." class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white">
+            </div>
+
+            <button type="submit" class="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-base rounded-xl shadow-lg transition cursor-pointer">
+                ချည်ထုတ်ပေးမှု အတည်ပြုမည်
+            </button>
+        </form>
+    </div>
+</div>

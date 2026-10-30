@@ -4,7 +4,7 @@
     <div class="absolute -top-32 -left-32 w-80 h-80 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute -bottom-32 -right-32 w-80 h-80 bg-teal-600/15 rounded-full blur-3xl pointer-events-none"></div>
 
-    <!-- Login Card Box (Width ချဲ့ထားပြီး စာလုံးကြီးထားသည်) -->
+    <!-- Login Card Box -->
     <div class="w-full max-w-[460px] bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl p-8 relative z-10">
         
         <!-- Brand Header -->
@@ -12,21 +12,21 @@
             <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mb-3 shadow-inner">
                 <i class="fa-solid fa-shirt text-3xl"></i>
             </div>
-            <h1 class="text-2xl font-bold text-white tracking-wide">အထည်ဆိုင် POS & စာရင်းကိုင်</h1>
-            <p class="text-sm text-slate-400 mt-1 font-medium">Multi-Store Enterprise System</p>
+            <h1 class="text-2xl font-extrabold text-white tracking-wide">မြကမ္ဘာစိုး ပိုးထည်တိုက်</h1>
+            <p class="text-sm text-emerald-400/90 mt-1 font-bold">POS & Multi-Store Garment ERP</p>
         </div>
 
         <!-- Error Notification Alert -->
         <div id="login-error" class="hidden mb-5 p-4 bg-rose-500/15 border border-rose-500/30 text-rose-300 text-sm rounded-2xl flex items-center gap-3">
             <i class="fa-solid fa-circle-exclamation shrink-0 text-rose-400 text-base"></i>
-            <span id="login-error-text" class="leading-relaxed">စကားဝှက် မှားယွင်းနေပါသည်</span>
+            <span id="login-error-text" class="leading-relaxed font-semibold">စကားဝှက် မှားယွင်းနေပါသည်</span>
         </div>
 
         <!-- Login Form -->
         <form id="login-form" class="space-y-5">
             <!-- User Dropdown Selection -->
             <div>
-                <label class="block text-sm font-semibold text-slate-200 mb-2">အသုံးပြုသူ ရွေးချယ်ပါ (Select User)</label>
+                <label for="login-user-select" class="block text-sm font-semibold text-slate-200 mb-2">အသုံးပြုသူ ရွေးချယ်ပါ (Select User)</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-emerald-400 pointer-events-none">
                         <i class="fa-solid fa-user-circle text-lg"></i>
@@ -54,14 +54,14 @@
 
             <!-- Password Input -->
             <div>
-                <label class="block text-sm font-semibold text-slate-200 mb-2">စကားဝှက် (Password)</label>
+                <label for="login-password" class="block text-sm font-semibold text-slate-200 mb-2">စကားဝှက် (Password)</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 pointer-events-none">
                         <i class="fa-solid fa-lock text-base"></i>
                     </span>
-                    <input type="password" id="login-password" required placeholder="စကားဝှက် ရိုက်ထည့်ပါ"
+                    <input type="password" id="login-password" required autocomplete="current-password" placeholder="စကားဝှက် ရိုက်ထည့်ပါ"
                         class="w-full pl-12 pr-12 py-3.5 text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition" />
-                    <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-200">
+                    <button type="button" id="toggle-password" title="စကားဝှက် ကြည့်ရန်/ဖျောက်ရန်" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-200 cursor-pointer">
                         <i class="fa-regular fa-eye text-base" id="toggle-password-icon"></i>
                     </button>
                 </div>

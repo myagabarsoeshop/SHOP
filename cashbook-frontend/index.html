@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="my">
+<html lang="my" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>အထည်ဆိုင် POS & စာရင်းကိုင်စနစ်</title>
 
-    <!-- Tailwind CSS (Official CDN with Dark Mode Config) -->
+    <!-- Tailwind CSS (Official CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -14,103 +14,115 @@
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'Padauk', 'sans-serif'],
-                    },
-                    colors: {
-                        brand: {
-                            50: '#ecfdf5',
-                            100: '#d1fae5',
-                            500: '#10b981',
-                            600: '#059669',
-                            700: '#047857',
-                            900: '#064e3b',
-                        }
                     }
                 }
             }
         }
     </script>
 
-    <!-- Typography: Inter & Padauk (Burmese) -->
+    <!-- Google Fonts: Inter & Padauk -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
 
-    <!-- FontAwesome 6 Icons (CDN) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- FontAwesome 6 Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
         body {
             font-family: 'Inter', 'Padauk', sans-serif;
         }
-        /* Custom Scrollbar */
         ::-webkit-scrollbar {
-            width: 7px;
-            height: 7px;
+            width: 6px;
+            height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: rgba(148, 163, 184, 0.1);
+            background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: #94a3b8;
+            background: rgba(148, 163, 184, 0.3);
             border-radius: 6px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
+            background: rgba(148, 163, 184, 0.5);
+        }
+
+        /* Thermal Receipt Printer (80mm) Styles */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #receipt-print-area, #receipt-print-area * {
+                visibility: visible;
+            }
+            #receipt-print-area {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 80mm;
+                padding: 4mm;
+                background: #fff !important;
+                color: #000 !important;
+                box-shadow: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
         }
     </style>
 </head>
-<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased font-sans select-none overflow-hidden h-screen w-screen transition-colors duration-200">
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen">
 
-    <!-- Login Container (Login မဝင်ရသေးမီ ပေါ်မည့် နေရာ) -->
-    <div id="login-container" class="min-h-screen w-full"></div>
+    <!-- Login Container -->
+    <div id="login-container" class="hidden min-h-screen w-full"></div>
 
-    <!-- Main App Layout (Login ဝင်ပြီးမှ ပေါ်မည့် ပင်မ မျက်နှာပြင်) -->
+    <!-- Main Unified App Layout -->
     <div id="app-layout" class="hidden flex h-screen w-screen overflow-hidden">
         
-        <!-- Sidebar Navigation -->
-        <aside class="w-68 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 shadow-2xl z-20 border-r border-slate-800">
+        <!-- Left Sidebar (Deep Slate-950 for Clean Hierarchy) -->
+        <aside class="w-64 bg-slate-950 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800/80 z-20">
             <div>
-                <!-- Brand Header -->
-                <div class="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
-                        <i class="fa-solid fa-shirt text-lg"></i>
+                <!-- Brand Logo -->
+                <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
+                        <i class="fa-solid fa-shirt text-base"></i>
                     </div>
                     <div>
-                        <div class="text-sm font-bold text-white tracking-wide">GARMENT ERP</div>
-                        <div class="text-xs text-emerald-400 font-semibold">POS + Cashbook</div>
+                        <div class="text-base font-extrabold text-white tracking-wide leading-tight">GARMENT ERP</div>
+                        <div class="text-xs text-emerald-400 font-semibold">Enterprise System</div>
                     </div>
                 </div>
 
-                <!-- Navigation Links (စာလုံးအရွယ်အစား text-sm သို့ ကြီးထားသည်) -->
-                <nav class="p-4 space-y-2 text-sm font-semibold">
-                    <button data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-slate-800 text-white shadow-sm">
-                        <i class="fa-solid fa-cash-register w-6 text-center text-base text-emerald-400"></i>
+                <!-- Navigation Menu -->
+                <nav class="p-3.5 space-y-1.5 text-sm font-bold">
+                    <button data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
+                        <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
                         <span>အရောင်းကောင်တာ (POS)</span>
                     </button>
-                    <button data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
-                        <i class="fa-solid fa-book-journal-whills w-6 text-center text-base"></i>
+                    <button data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
                         <span>နေ့စဉ်ငွေစာရင်း (Cashbook)</span>
                     </button>
-                    <button data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
-                        <i class="fa-solid fa-boxes-stacked w-6 text-center text-base"></i>
+                    <button data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
                         <span>အထည်လက်ကျန် (Stock)</span>
                     </button>
-                    <button data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
-                        <i class="fa-solid fa-scroll w-6 text-center text-base"></i>
+                    <button data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
                         <span>ချည်စတိုနှင့် ရက်ကန်း</span>
                     </button>
-                    <button data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800/70 hover:text-white">
-                        <i class="fa-solid fa-users w-6 text-center text-base"></i>
-                        <span>ဖောက်သည်နှင့် အကြွေးစာရင်း</span>
+                    <button data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-users w-5 text-center text-base"></i>
+                        <span>ဖောက်သည်နှင့် အကြွေး</span>
                     </button>
                 </nav>
             </div>
 
-            <!-- User Info & Logout (စာလုံးအရွယ်အစား text-sm) -->
-            <div class="p-4 border-t border-slate-800 bg-slate-950/70">
+            <!-- User Profile & Logout -->
+            <div class="p-4 border-t border-slate-800/80 bg-slate-900/40">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-extrabold text-sm shrink-0">
                             <span id="user-initial">U</span>
                         </div>
                         <div class="truncate">
@@ -118,63 +130,110 @@
                             <div id="user-role" class="text-xs text-slate-400 capitalize truncate">Role</div>
                         </div>
                     </div>
-                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2.5 rounded-xl transition">
-                        <i class="fa-solid fa-arrow-right-from-bracket text-base"></i>
+                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2.5 rounded-xl transition cursor-pointer">
+                        <i class="fa-solid fa-power-off text-base"></i>
                     </button>
                 </div>
             </div>
         </aside>
 
-        <!-- Main Workspace Area -->
-        <div class="flex-1 flex flex-col h-screen overflow-hidden">
-            <!-- Topbar Header (Dark Mode ပံ့ပိုးမှုနှင့် စာလုံးကြီးများ) -->
-            <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 shadow-sm z-10 transition-colors">
+        <!-- Main Workspace Column -->
+        <div class="flex-1 flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
+            
+            <!-- 1. Topbar Header (Fixed 64px) -->
+            <header class="h-16 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800/80 px-6 flex items-center justify-between shrink-0 z-10">
+                <!-- Left: Dynamic Page Title & Compact Store Pill -->
                 <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-2.5">
-                        <span class="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                            <i class="fa-solid fa-store text-emerald-600 dark:text-emerald-400 text-base"></i>
-                            <span>တာဝန်ကျရာ ဆိုင်ခွဲ:</span>
-                        </span>
-                        <!-- Branch Selector Dropdown -->
-                        <div class="relative">
-                            <select id="global-branch-select" class="text-sm font-bold text-slate-800 dark:text-white bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 cursor-pointer transition">
-                                <!-- Loaded dynamically via app.js -->
-                            </select>
-                        </div>
+                    <h2 id="topbar-page-title" class="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+                        အရောင်းကောင်တာ (POS)
+                    </h2>
+
+                    <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
+
+                    <!-- Modern Store Selector Badge -->
+                    <div class="relative inline-flex items-center">
+                        <i class="fa-solid fa-store text-emerald-500 text-sm absolute left-3.5 pointer-events-none"></i>
+                        <select id="global-branch-select" class="pl-9 pr-8 py-2 text-sm font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer appearance-none transition">
+                            <!-- Dynamically loaded -->
+                        </select>
+                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3 pointer-events-none"></i>
                     </div>
                 </div>
 
-                <!-- Dark Mode Switcher, Clock & Status -->
-                <div class="flex items-center gap-3 text-sm">
-                    <!-- Light / Dark Mode Toggle Button -->
+                <!-- Right: Theme Switcher, Clock & D1 Status -->
+                <div class="flex items-center gap-3">
                     <button id="theme-toggle" type="button" title="Light / Dark Mode ပြောင်းရန်"
-                        class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition border border-slate-200 dark:border-slate-700 cursor-pointer">
-                        <i class="fa-solid fa-moon text-base" id="theme-icon"></i>
+                        class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center transition border border-slate-200 dark:border-slate-800 cursor-pointer">
+                        <i class="fa-solid fa-sun text-base" id="theme-icon"></i>
                     </button>
 
-                    <!-- Real-time Clock -->
-                    <div class="flex items-center gap-2 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-medium">
-                        <i class="fa-regular fa-clock text-emerald-600 dark:text-emerald-400"></i>
+                    <div class="flex items-center gap-2 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                        <i class="fa-regular fa-clock text-emerald-500 text-sm"></i>
                         <span id="live-clock" class="font-mono font-bold text-sm">--:--:--</span>
                     </div>
 
-                    <!-- Database Status Indicator -->
-                    <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-3.5 py-2 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800 text-xs">
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3.5 py-2 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800/60 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>D1 Online</span>
                     </div>
                 </div>
             </header>
 
-            <!-- Dynamic View Container (POS, Cashbook စသည်တို့ ဖလှယ်မည့်နေရာ) -->
-            <main id="view-container" class="flex-1 bg-slate-100 dark:bg-slate-950 overflow-hidden relative"></main>
+            <!-- 2. Unified 4-Box KPI Summary Bar (Fixed across ALL views - Never jumps!) -->
+            <section id="global-kpi-bar" class="px-6 pt-4 pb-2 shrink-0">
+                <div class="grid grid-cols-4 gap-4">
+                    <!-- KPI Box 1 -->
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                        <div>
+                            <div id="kpi-1-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ ငွေသားရောင်းရငွေ</div>
+                            <div id="kpi-1-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0">
+                            <i id="kpi-1-icon" class="fa-solid fa-money-bill-wave"></i>
+                        </div>
+                    </div>
+
+                    <!-- KPI Box 2 -->
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                        <div>
+                            <div id="kpi-2-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ KPay / ဘဏ်ရောင်းရငွေ</div>
+                            <div id="kpi-2-value" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">0</div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0">
+                            <i id="kpi-2-icon" class="fa-solid fa-building-columns"></i>
+                        </div>
+                    </div>
+
+                    <!-- KPI Box 3 -->
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                        <div>
+                            <div id="kpi-3-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ အသုံးစရိတ်စုစုပေါင်း</div>
+                            <div id="kpi-3-value" class="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight">0</div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg shrink-0">
+                            <i id="kpi-3-icon" class="fa-solid fa-arrow-trend-down"></i>
+                        </div>
+                    </div>
+
+                    <!-- KPI Box 4 -->
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                        <div>
+                            <div id="kpi-4-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ရှိ အသားတင်လက်ကျန်</div>
+                            <div id="kpi-4-value" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0</div>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0">
+                            <i id="kpi-4-icon" class="fa-solid fa-vault"></i>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Dynamic View Workspace -->
+            <main id="view-container" class="flex-1 overflow-hidden px-6 pb-5 pt-2 relative"></main>
         </div>
     </div>
 
-    <!-- Modals Container (ဘောင်ချာ Print ထုတ်ခြင်းနှင့် ငွေရှင်း Popup များအတွက်) -->
-    <div id="modal-container"></div>
-
-    <!-- Main JavaScript Entrypoint -->
+    <!-- Main Entrypoint -->
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

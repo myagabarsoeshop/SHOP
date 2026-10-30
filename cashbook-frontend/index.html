@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>အထည်ဆိုင် POS & စာရင်းကိုင်စနစ်</title>
+    <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - POS & စာရင်းကိုင်စနစ်</title>
 
     <!-- Tailwind CSS (Official CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -79,41 +79,41 @@
     <!-- Main Unified App Layout -->
     <div id="app-layout" class="hidden flex h-screen w-screen overflow-hidden">
         
-        <!-- Left Sidebar (Deep Slate-950 for Clean Hierarchy) -->
-        <aside class="w-64 bg-slate-950 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800/80 z-20">
+        <!-- Left Sidebar (English Labels & Clean Hierarchy) -->
+        <aside class="w-68 bg-slate-950 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800/80 z-20">
             <div>
-                <!-- Brand Logo -->
+                <!-- Brand Logo & Shop Name -->
                 <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
                         <i class="fa-solid fa-shirt text-base"></i>
                     </div>
-                    <div>
-                        <div class="text-base font-extrabold text-white tracking-wide leading-tight">GARMENT ERP</div>
-                        <div class="text-xs text-emerald-400 font-semibold">Enterprise System</div>
+                    <div class="overflow-hidden">
+                        <div class="text-xs font-bold text-emerald-400 truncate">မြကမ္ဘာစိုး ပိုးထည်တိုက်</div>
+                        <div class="text-sm font-extrabold text-white tracking-wide truncate">GARMENT ERP</div>
                     </div>
                 </div>
 
-                <!-- Navigation Menu -->
+                <!-- Navigation Menu (English Labels) -->
                 <nav class="p-3.5 space-y-1.5 text-sm font-bold">
                     <button data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
                         <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
-                        <span>အရောင်းကောင်တာ (POS)</span>
+                        <span>Sale Counter</span>
                     </button>
                     <button data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
-                        <span>နေ့စဉ်ငွေစာရင်း (Cashbook)</span>
+                        <span>Cash Book</span>
                     </button>
                     <button data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
-                        <span>အထည်လက်ကျန် (Stock)</span>
+                        <span>Stock Balances</span>
                     </button>
                     <button data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
-                        <span>ချည်စတိုနှင့် ရက်ကန်း</span>
+                        <span>Yarn Balances</span>
                     </button>
                     <button data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-users w-5 text-center text-base"></i>
-                        <span>ဖောက်သည်နှင့် အကြွေး</span>
+                        <span>Customers & Liabilities</span>
                     </button>
                 </nav>
             </div>
@@ -142,10 +142,10 @@
             
             <!-- 1. Topbar Header (Fixed 64px) -->
             <header class="h-16 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800/80 px-6 flex items-center justify-between shrink-0 z-10">
-                <!-- Left: Dynamic Page Title & Compact Store Pill -->
+                <!-- Left: Dynamic Page Title & Store Pill -->
                 <div class="flex items-center gap-4">
                     <h2 id="topbar-page-title" class="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                        အရောင်းကောင်တာ (POS)
+                        Sale Counter (POS)
                     </h2>
 
                     <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
@@ -179,13 +179,13 @@
                 </div>
             </header>
 
-            <!-- 2. Unified 4-Box KPI Summary Bar (Fixed across ALL views - Never jumps!) -->
+            <!-- 2. Updated 4-Box KPI Summary Bar (Requested Format) -->
             <section id="global-kpi-bar" class="px-6 pt-4 pb-2 shrink-0">
                 <div class="grid grid-cols-4 gap-4">
                     <!-- KPI Box 1 -->
                     <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-1-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ ငွေသားရောင်းရငွေ</div>
+                            <div id="kpi-1-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Today Sale (Cash)</div>
                             <div id="kpi-1-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0">
@@ -196,7 +196,7 @@
                     <!-- KPI Box 2 -->
                     <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-2-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ KPay / ဘဏ်ရောင်းရငွေ</div>
+                            <div id="kpi-2-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Today Sale (Bank)</div>
                             <div id="kpi-2-value" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0">
@@ -207,22 +207,22 @@
                     <!-- KPI Box 3 -->
                     <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-3-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ယနေ့ အသုံးစရိတ်စုစုပေါင်း</div>
-                            <div id="kpi-3-value" class="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight">0</div>
+                            <div id="kpi-3-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Today Sale</div>
+                            <div id="kpi-3-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
                         </div>
-                        <div class="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg shrink-0">
-                            <i id="kpi-3-icon" class="fa-solid fa-arrow-trend-down"></i>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0">
+                            <i id="kpi-3-icon" class="fa-solid fa-cash-register"></i>
                         </div>
                     </div>
 
                     <!-- KPI Box 4 -->
                     <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-4-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">လက်ရှိ အသားတင်လက်ကျန်</div>
+                            <div id="kpi-4-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Sale Items</div>
                             <div id="kpi-4-value" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0">
-                            <i id="kpi-4-icon" class="fa-solid fa-vault"></i>
+                            <i id="kpi-4-icon" class="fa-solid fa-shirt"></i>
                         </div>
                     </div>
                 </div>

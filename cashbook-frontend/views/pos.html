@@ -24,7 +24,7 @@
                 <input type="text" id="pos-search-input" autofocus
                     placeholder="Barcode စကင်ဖတ်ပါ သို့မဟုတ် အမည် / အဆင် / အရောင် ရိုက်ရှာပါ (ဥပမာ - ကချင် အနက်)..."
                     class="w-full pl-11 pr-10 py-3 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-slate-400" />
-                <button id="btn-clear-search" class="hidden absolute right-3.5 top-3 text-slate-400 hover:text-slate-200">
+                <button type="button" id="btn-clear-search" class="hidden absolute right-3.5 top-3 text-slate-400 hover:text-slate-200 cursor-pointer">
                     <i class="fa-solid fa-circle-xmark"></i>
                 </button>
             </div>
@@ -55,10 +55,16 @@
                     <i class="fa-solid fa-bag-shopping text-emerald-500"></i>
                     <span>အရောင်းဘောင်ချာ</span>
                 </span>
-                <!-- Retail vs Wholesale Toggle -->
-                <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700">
-                    <button id="btn-type-retail" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer">လက်လီ</button>
-                    <button id="btn-type-wholesale" class="px-3.5 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-white transition cursor-pointer">လက်ကား</button>
+                <div class="flex items-center gap-2">
+                    <!-- Retail vs Wholesale Toggle -->
+                    <div class="inline-flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700">
+                        <button type="button" id="btn-type-retail" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer">လက်လီ</button>
+                        <button type="button" id="btn-type-wholesale" class="px-3.5 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer">လက်ကား</button>
+                    </div>
+                    <!-- Clear Cart Button -->
+                    <button type="button" id="btn-clear-cart" title="ခြင်းတောင်း ရှင်းလင်းမည်" class="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition cursor-pointer">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
                 </div>
             </div>
 
@@ -80,7 +86,7 @@
             <div class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300 font-bold">
                 <span class="flex items-center gap-2">
                     <span>လျှော့ငွေ</span>
-                    <input type="number" id="pos-discount" value="0" min="0" class="w-24 text-right text-sm font-black bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 font-mono">
+                    <input type="number" id="pos-discount" value="0" min="0" step="any" class="w-24 text-right text-sm font-black bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-2.5 py-1 focus:outline-none focus:border-emerald-500 font-mono">
                 </span>
                 <span id="pos-discount-display" class="font-mono text-rose-500 font-bold text-sm">-0</span>
             </div>
@@ -90,7 +96,7 @@
                 <span id="pos-final-total" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0</span>
             </div>
 
-            <button id="btn-pos-checkout" disabled
+            <button type="button" id="btn-pos-checkout" disabled
                 class="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed active:scale-[0.99] text-white font-extrabold text-base rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2.5 cursor-pointer">
                 <i class="fa-solid fa-money-bill-wave"></i>
                 <span>ငွေရှင်းမည် (Pay Now)</span>
@@ -107,7 +113,7 @@
                 <i class="fa-solid fa-receipt text-emerald-400"></i>
                 <span>ငွေပေးချေမှု အတည်ပြုခြင်း</span>
             </div>
-            <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="p-6 space-y-5">
@@ -147,15 +153,15 @@
 
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">လက်ခံရရှိငွေ (Paid Amount)</label>
-                <input type="number" id="modal-paid-amount" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
+                <input type="number" id="modal-paid-amount" step="any" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
             </div>
 
             <div id="modal-debt-change-box" class="p-3.5 rounded-xl text-sm flex justify-between font-bold bg-slate-100 dark:bg-slate-800">
-                <span>ပြန်အမ်းငွေ / အကြွေးကျန်:</span>
+                <span id="modal-change-label">ပြန်အမ်းငွေ / အကြွေးကျန်:</span>
                 <span id="modal-change-text" class="font-mono text-base font-black">0</span>
             </div>
 
-            <button id="btn-confirm-sale" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
+            <button type="button" id="btn-confirm-sale" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-check"></i>
                 <span>အရောင်း အတည်ပြုပြီး ဘောင်ချာထုတ်မည်</span>
             </button>
@@ -165,12 +171,12 @@
 
 <!-- 2. Thermal Receipt Print Modal (80mm Standard) -->
 <div id="receipt-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white text-slate-900 rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col">
+    <div class="bg-white text-slate-900 rounded-2xl max-w-sm w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col">
         
         <!-- Printable Receipt Paper -->
-        <div id="receipt-print-area" class="p-6 bg-white text-black font-sans text-xs space-y-3">
+        <div id="receipt-print-area" class="p-6 bg-white text-black font-sans text-xs space-y-3 overflow-y-auto flex-1">
             <div class="text-center border-b border-dashed border-slate-400 pb-3">
-                <div class="text-base font-extrabold">အထည်ဆိုင် POS & ERP</div>
+                <div class="text-base font-extrabold">မြကမ္ဘာစိုး ပိုးထည်တိုက်</div>
                 <div id="rcp-branch" class="text-xs font-bold mt-0.5">Main Home Shop</div>
                 <div class="text-[11px] text-slate-600 mt-0.5">အရောင်းပြေစာ (Sales Receipt)</div>
             </div>
@@ -178,6 +184,7 @@
             <div class="space-y-1 text-[11px] border-b border-dashed border-slate-400 pb-2.5">
                 <div class="flex justify-between"><span>ဘောင်ချာအမှတ်:</span> <strong id="rcp-inv" class="font-mono">INV-0001</strong></div>
                 <div class="flex justify-between"><span>ရက်စွဲ/အချိန်:</span> <span id="rcp-date" class="font-mono">--</span></div>
+                <div class="flex justify-between"><span>ဖောက်သည်:</span> <span id="rcp-customer" class="font-bold">Walk-in</span></div>
                 <div class="flex justify-between"><span>ငွေချေစနစ်:</span> <strong id="rcp-method" class="uppercase">CASH</strong></div>
             </div>
 
@@ -199,6 +206,7 @@
                     <span>ပေးချေရမည့်ငွေ:</span> <span id="rcp-final" class="font-mono">0</span>
                 </div>
                 <div class="flex justify-between"><span>ပေးငွေ:</span> <span id="rcp-paid" class="font-mono font-bold">0</span></div>
+                <div class="flex justify-between"><span id="rcp-change-label">ပြန်အမ်းငွေ:</span> <span id="rcp-change" class="font-mono font-bold">0</span></div>
             </div>
 
             <div class="text-center pt-3 border-t border-dashed border-slate-400 text-[11px] font-bold">
@@ -207,12 +215,12 @@
         </div>
 
         <!-- Modal Action Buttons (Hidden on Print) -->
-        <div class="p-4 bg-slate-100 border-t border-slate-200 flex gap-3 no-print">
-            <button id="btn-print-receipt" class="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer">
+        <div class="p-4 bg-slate-100 border-t border-slate-200 flex gap-3 shrink-0 no-print">
+            <button type="button" id="btn-print-receipt" class="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-print"></i>
                 <span>Print ထုတ်မည်</span>
             </button>
-            <button id="btn-close-receipt" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl cursor-pointer">
+            <button type="button" id="btn-close-receipt" class="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl cursor-pointer">
                 အရောင်းအသစ်
             </button>
         </div>

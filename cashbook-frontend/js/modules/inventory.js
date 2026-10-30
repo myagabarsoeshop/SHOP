@@ -6,7 +6,7 @@ import { setKPI } from "../app.js";
 let products = [];
 
 function escapeHtml(str) {
-    return String(str ?? "")
+    return String(str !== null && str !== undefined ? str : "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -19,14 +19,33 @@ export async function initInventory() {
 }
 
 function bindEvents() {
-    document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
-    document.getElementById("btn-close-product-modal")?.addEventListener("click", () => {
-        document.getElementById("product-modal")?.classList.add("hidden");
-    });
+    const addBtn = document.getElementById("btn-add-product");
+    if (addBtn) {
+        addBtn.onclick = () => openProductModal(null);
+    }
 
-    document.getElementById("product-form")?.addEventListener("submit", submitProduct);
-    document.getElementById("inv-category-filter")?.addEventListener("change", filterAndRender);
-    document.getElementById("inv-search")?.addEventListener("input", filterAndRender);
+    const closeBtn = document.getElementById("btn-close-product-modal");
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            const modal = document.getElementById("product-modal");
+            if (modal) modal.classList.add("hidden");
+        };
+    }
+
+    const form = document.getElementById("product-form");
+    if (form) {
+        form.onsubmit = submitProduct;
+    }
+
+    const catFilter = document.getElementById("inv-category-filter");
+    if (catFilter) {
+        catFilter.onchange = filterAndRender;
+    }
+
+    const searchInput = document.getElementById("inv-search");
+    if (searchInput) {
+        searchInput.oninput = filterAndRender;
+    }
 }
 
 async function loadInventory() {
@@ -36,7 +55,7 @@ async function loadInventory() {
     }
 
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
         const res = await api.get("/products", { branch_id: branchId });
         products = res.data || [];
 
@@ -62,7 +81,9 @@ function populateCategoryFilter() {
         opt.textContent = c;
         select.appendChild(opt);
     });
-    if (cats.includes(current)) select.value = current;
+    if (cats.includes(current)) {
+        select.value = current;
+    }
 }
 
 function updateInventoryKPIs() {
@@ -78,8 +99,10 @@ function updateInventoryKPIs() {
 }
 
 function filterAndRender() {
-    const cat = document.getElementById("inv-category-filter")?.value || "";
-    const kw = (document.getElementById("inv-search")?.value || "").trim().toLowerCase();
+    const catEl = document.getElementById("inv-category-filter");
+    const searchEl = document.getElementById("inv-search");
+    const cat = catEl ? catEl.value : "";
+    const kw = (searchEl ? searchEl.value : "").trim().toLowerCase();
 
     const filtered = products.filter(p => {
         if (cat && p.category !== cat) return false;
@@ -142,4 +165,83 @@ function renderTable(list) {
         tbody.appendChild(tr);
     });
 
-    tbody.
+    tbody.querySelectorAll(".btn-edit-prod").forEach(btn => {
+        btn.onclick = () => {
+            const prod = products.find(p => p.id === Number(btn.dataset.id));
+            if (prod) openProductModal(prod);
+        };
+    });
+}
+
+function openProductModal(prod) {
+    const modal = document.getElementById("product-modal");
+    const title = document.getElementById("product-modal-title");
+    const form = document.getElementById("product-form");
+    if (form) form.reset();
+
+    if (prod) {
+        if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
+        document.getElementById("prod-id").value = prod.id;
+        document.getElementById("prod-sku").value = prod.sku || "";
+        document.getElementById("prod-barcode").value = prod.barcode || "";
+        document.getElementById("prod-category").value = prod.category || "";
+        document.getElementById("prod-name").value = prod.item_name || "";
+        document.getElementById("prod-pattern").value = prod.pattern || "";
+        document.getElementById("prod-color").value = prod.color || "";
+        document.getElementById("prod-size").value = prod.size || "Free Size";
+        document.getElementById("prod-cost").value = prod.cost_price || 0;
+        document.getElementById("prod-retail").value = prod.retail_price || 0;
+        document.getElementById("prod-wholesale").value = prod.wholesale_price || 0;
+        document.getElementById("prod-stock").value = prod.current_stock !== undefined ? prod.current_stock : 0;
+    } else {
+        if (title) title.textContent = "အထည်ပစ္စည်း အသစ်ထည့်သွင်းမည်";
+        document.getElementById("prod-id").value = "";
+        document.getElementById("prod-size").value = "Free Size";
+    }
+
+    if (modal) {
+        modal.classList.remove("hidden");
+    }
+}
+
+async function submitProduct(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-submit-product");
+    if (btn) btn.disabled = true;
+
+    const prodId = document.getElementById("prod-id").value;
+    const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
+    const stockVal = parseInt(document.getElementById("prod-stock").value, 10) || 0;
+
+    const payload = {
+        sku: document.getElementById("prod-sku").value.trim() || null,
+        barcode: document.getElementById("prod-barcode").value.trim() || null,
+        category: document.getElementById("prod-category").value.trim(),
+        itemName: document.getElementById("prod-name").value.trim(),
+        pattern: document.getElementById("prod-pattern").value.trim() || null,
+        color: document.getElementById("prod-color").value.trim() || null,
+        size: document.getElementById("prod-size").value.trim() || "Free Size",
+        costPrice: parseFloat(document.getElementById("prod-cost").value) || 0,
+        retailPrice: parseFloat(document.getElementById("prod-retail").value) || 0,
+        wholesalePrice: parseFloat(document.getElementById("prod-wholesale").value) || 0,
+        initialStock: stockVal,
+        quantity: stockVal,
+        targetBranchId: branchId,
+        branchId: branchId
+    };
+
+    try {
+        if (prodId) {
+            await api.put(`/products/${prodId}`, payload);
+        } else {
+            await api.post("/products", payload);
+        }
+        const modal = document.getElementById("product-modal");
+        if (modal) modal.classList.add("hidden");
+        await loadInventory();
+    } catch (err) {
+        alert("သိမ်းဆည်း၍မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}

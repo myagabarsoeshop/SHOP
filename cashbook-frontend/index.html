@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>မြကမ္ဘာစိုး ပိုးထည်တိုက် - POS & စာရင်းကိုင်စနစ်</title>
 
+    <!-- Luxury "မြ" SVG Favicon (Fixes /favicon.ico 404 error) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='b' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23064e3b'/%3E%3Cstop offset='100%25' stop-color='%23090d16'/%3E%3C/linearGradient%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23fef08a'/%3E%3Cstop offset='50%25' stop-color='%23fbbf24'/%3E%3Cstop offset='100%25' stop-color='%23d97706'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='120' height='120' rx='28' fill='url(%23b)'/%3E%3Crect x='4' y='4' width='112' height='112' rx='24' fill='none' stroke='url(%23g)' stroke-width='4'/%3E%3Ctext x='60' y='66' text-anchor='middle' dominant-baseline='central' font-family='Padauk,Pyidaungsu,sans-serif' font-size='56' font-weight='bold' fill='url(%23g)'%3Eမြ%3C/text%3E%3C/svg%3E" />
+
     <!-- Tailwind CSS (Official CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -14,6 +17,9 @@
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'Padauk', 'sans-serif'],
+                    },
+                    spacing: {
+                        '68': '17rem',
                     }
                 }
             }
@@ -49,6 +55,10 @@
 
         /* Thermal Receipt Printer (80mm) Styles */
         @media print {
+            @page {
+                size: 80mm auto;
+                margin: 0;
+            }
             body * {
                 visibility: hidden;
             }
@@ -73,6 +83,9 @@
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen">
 
+    <!-- Global Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 space-y-2 pointer-events-none no-print"></div>
+
     <!-- Login Container -->
     <div id="login-container" class="hidden min-h-screen w-full"></div>
 
@@ -84,8 +97,29 @@
             <div>
                 <!-- Brand Logo & Shop Name -->
                 <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
-                        <i class="fa-solid fa-shirt text-base"></i>
+                    <!-- Luxury "မြ" Emerald & Gold Emblem SVG -->
+                    <div class="w-11 h-11 rounded-xl shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="bgLuxury" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#064e3b"/>
+                                    <stop offset="50%" stop-color="#022c22"/>
+                                    <stop offset="100%" stop-color="#090d16"/>
+                                </linearGradient>
+                                <linearGradient id="goldLuxury" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#fef08a"/>
+                                    <stop offset="40%" stop-color="#fbbf24"/>
+                                    <stop offset="80%" stop-color="#d97706"/>
+                                    <stop offset="100%" stop-color="#fde68a"/>
+                                </linearGradient>
+                            </defs>
+                            <rect width="120" height="120" rx="26" fill="url(#bgLuxury)"/>
+                            <rect x="4" y="4" width="112" height="112" rx="22" fill="none" stroke="url(#goldLuxury)" stroke-width="3"/>
+                            <polygon points="60,12 94,26 108,60 94,94 60,108 26,94 12,60 26,26" fill="#10b981" fill-opacity="0.14" stroke="url(#goldLuxury)" stroke-width="1.2" stroke-opacity="0.45"/>
+                            <circle cx="60" cy="60" r="34" fill="#10b981" fill-opacity="0.18"/>
+                            <path d="M28 94 Q60 104 92 94" fill="none" stroke="url(#goldLuxury)" stroke-width="2.5" stroke-linecap="round"/>
+                            <text x="60" y="64" text-anchor="middle" dominant-baseline="central" font-family="'Padauk', 'Pyidaungsu', sans-serif" font-size="52" font-weight="700" fill="url(#goldLuxury)" stroke="#fef08a" stroke-width="0.5">မြ</text>
+                        </svg>
                     </div>
                     <div class="overflow-hidden">
                         <div class="text-xs font-bold text-emerald-400 truncate">မြကမ္ဘာစိုး ပိုးထည်တိုက်</div>
@@ -95,23 +129,23 @@
 
                 <!-- Navigation Menu (English Labels) -->
                 <nav class="p-3.5 space-y-1.5 text-sm font-bold">
-                    <button data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
+                    <button type="button" data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
                         <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
                         <span>Sale Counter</span>
                     </button>
-                    <button data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                    <button type="button" data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
                         <span>Cash Book</span>
                     </button>
-                    <button data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                    <button type="button" data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
                         <span>Stock Balances</span>
                     </button>
-                    <button data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                    <button type="button" data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
                         <span>Yarn Balances</span>
                     </button>
-                    <button data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                    <button type="button" data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-users w-5 text-center text-base"></i>
                         <span>Customers & Liabilities</span>
                     </button>
@@ -130,7 +164,7 @@
                             <div id="user-role" class="text-xs text-slate-400 capitalize truncate">Role</div>
                         </div>
                     </div>
-                    <button id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2.5 rounded-xl transition cursor-pointer">
+                    <button type="button" id="btn-logout" title="စနစ်မှ ထွက်မည်" class="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-2.5 rounded-xl transition cursor-pointer">
                         <i class="fa-solid fa-power-off text-base"></i>
                     </button>
                 </div>
@@ -172,9 +206,9 @@
                         <span id="live-clock" class="font-mono font-bold text-sm">--:--:--</span>
                     </div>
 
-                    <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3.5 py-2 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800/60 text-xs">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span>D1 Online</span>
+                    <div id="d1-status-badge" class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3.5 py-2 rounded-xl font-bold border border-emerald-200 dark:border-emerald-800/60 text-xs">
+                        <span id="d1-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="d1-status-text">D1 Online</span>
                     </div>
                 </div>
             </header>

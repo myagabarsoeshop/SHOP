@@ -1,7 +1,7 @@
 // cashbook-frontend/js/modules/pos.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { refreshGlobalKPIs } from "../app.js";
+import { refreshGlobalKPIs, setKPI } from "../app.js";
 
 let allProducts = [];
 let cart = [];
@@ -12,6 +12,7 @@ export async function initPOS() {
     bindEvents();
     await loadProducts();
     renderCart();
+    await updatePOSKPIs();
 }
 
 async function loadProducts() {
@@ -48,9 +49,6 @@ function populateCategoryDropdown(products) {
     select.value = currentVal;
 }
 
-/**
- * Category + Multi-Keyword Search (ဥပမာ - "ပုဆိုး" + "ကချင် အနက်" ရိုက်ရှာနိုင်သည်)
- */
 function filterAndRenderProducts() {
     const category = document.getElementById("pos-category-select")?.value || "";
     const rawSearch = (document.getElementById("pos-search-input")?.value || "").trim().toLowerCase();
@@ -82,19 +80,20 @@ function renderProductsGrid(products) {
         const price = currentSaleType === "retail" ? p.retail_price : p.wholesale_price;
         const stock = p.current_stock || 0;
         const isOutOfStock = stock <= 0;
+        const itemCode = p.sku || p.barcode || 'N/A';
 
         const card = document.createElement("div");
         card.className = `bg-slate-50 dark:bg-slate-900/90 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 hover:border-emerald-500 active:scale-95 transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-45 pointer-events-none' : ''}`;
         
         card.innerHTML = `
             <div>
-                <div class="flex items-center justify-between gap-2 mb-2.5">
-                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${p.category}</span>
-                    <span class="text-xs font-mono font-bold ${stock < 5 ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}">လက်ကျန်: ${stock}</span>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${p.category}</span>
+                    <span class="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">ကုတ်: ${itemCode}</span>
                 </div>
                 <div class="text-base font-extrabold text-slate-900 dark:text-white leading-snug">${p.item_name}</div>
-                <div class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">${p.pattern || ''}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">${p.color || ''} • ${p.size || 'Free'}</div>
+                <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">${p.pattern || ''} • ${p.color || ''}</div>
+                <div class="text-xs text-slate-400 mt-0.5">ဆိုက်: ${p.size || 'Free'} • လက်ကျန်: <strong class="${stock < 5 ? 'text-rose-500' : 'text-slate-700 dark:text-slate-200'}">${stock}</strong></div>
             </div>
             <div class="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
                 <span class="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">${Number(price).toLocaleString()}</span>
@@ -115,12 +114,7 @@ function addToCart(product) {
         existing.quantity += 1;
     } else {
         const price = currentSaleType === "retail" ? product.retail_price : product.wholesale_price;
-        cart.push({
-            product,
-            quantity: 1,
-            unitPrice: price,
-            costPrice: product.cost_price
-        });
+        cart.push({ product, quantity: 1, unitPrice: price, costPrice: product.cost_price });
     }
     renderCart();
 }
@@ -158,13 +152,13 @@ function renderCart() {
         row.className = "py-3.5 flex items-center justify-between gap-3";
         row.innerHTML = `
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold text-slate-900 dark:text-white truncate">${item.product.item_name} ${item.product.pattern ? `(${item.product.pattern})` : ''}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">${Number(item.unitPrice).toLocaleString()}</div>
+                <div class="text-sm font-bold text-slate-900 dark:text-white truncate">${item.product.item_name}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${Number(item.unitPrice).toLocaleString()}</div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-                <button data-idx="${index}" class="btn-qty-minus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-200 font-bold cursor-pointer">-</button>
+                <button data-idx="${index}" class="btn-qty-minus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold cursor-pointer">-</button>
                 <span class="w-7 text-center text-sm font-black font-mono text-slate-900 dark:text-white">${item.quantity}</span>
-                <button data-idx="${index}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-200 font-bold cursor-pointer">+</button>
+                <button data-idx="${index}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold cursor-pointer">+</button>
             </div>
             <div class="text-right shrink-0 w-24">
                 <div class="text-sm font-black text-slate-900 dark:text-white font-mono">${Number(lineTotal).toLocaleString()}</div>
@@ -201,7 +195,6 @@ function renderCart() {
 function bindEvents() {
     const searchInput = document.getElementById("pos-search-input");
     const categorySelect = document.getElementById("pos-category-select");
-    const clearBtn = document.getElementById("btn-clear-search");
     const retailBtn = document.getElementById("btn-type-retail");
     const wholesaleBtn = document.getElementById("btn-type-wholesale");
     const discountInput = document.getElementById("pos-discount");
@@ -211,31 +204,7 @@ function bindEvents() {
     const confirmSaleBtn = document.getElementById("btn-confirm-sale");
 
     categorySelect?.addEventListener("change", filterAndRenderProducts);
-
-    searchInput?.addEventListener("input", (e) => {
-        if (clearBtn) clearBtn.classList.toggle("hidden", !e.target.value);
-        filterAndRenderProducts();
-    });
-
-    clearBtn?.addEventListener("click", () => {
-        if (searchInput) searchInput.value = "";
-        clearBtn.classList.add("hidden");
-        filterAndRenderProducts();
-    });
-
-    searchInput?.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-            const code = searchInput.value.trim();
-            if (!code) return;
-            const exact = allProducts.find(p => p.barcode === code || p.sku === code);
-            if (exact && exact.current_stock > 0) {
-                addToCart(exact);
-                searchInput.value = "";
-                clearBtn?.classList.add("hidden");
-                filterAndRenderProducts();
-            }
-        }
-    });
+    searchInput?.addEventListener("input", () => filterAndRenderProducts());
 
     retailBtn?.addEventListener("click", () => {
         currentSaleType = "retail";
@@ -261,7 +230,6 @@ function bindEvents() {
                 b.className = "method-btn p-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
             });
             btn.className = "method-btn active p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
-            
             selectedPaymentMethod = btn.dataset.method;
             const bankGroup = document.getElementById("bank-input-group");
             if (selectedPaymentMethod === "bank") bankGroup?.classList.remove("hidden");
@@ -278,7 +246,6 @@ function bindEvents() {
     document.getElementById("modal-paid-amount")?.addEventListener("input", calculateChange);
     confirmSaleBtn?.addEventListener("click", submitSale);
 
-    // Receipt Modal Buttons
     document.getElementById("btn-print-receipt")?.addEventListener("click", () => window.print());
     document.getElementById("btn-close-receipt")?.addEventListener("click", () => {
         document.getElementById("receipt-modal")?.classList.add("hidden");
@@ -304,10 +271,8 @@ function openCheckoutModal() {
     const dueEl = document.getElementById("modal-due-amount");
     const paidInput = document.getElementById("modal-paid-amount");
     const finalTotal = getFinalTotal();
-
     if (dueEl) dueEl.textContent = finalTotal.toLocaleString();
     if (paidInput) paidInput.value = finalTotal;
-
     calculateChange();
     modal?.classList.remove("hidden");
 }
@@ -324,6 +289,27 @@ function calculateChange() {
     } else {
         changeBox.className = "p-3.5 rounded-xl text-sm flex justify-between font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400";
         changeText.textContent = `အကြွေးကျန်: ${(finalTotal - paid).toLocaleString()}`;
+    }
+}
+
+/**
+ * POS မျက်နှာပြင်အတွက် ၄ ကွက် KPI Summary အသစ်များ အပ်ဒိတ်လုပ်ခြင်း
+ */
+async function updatePOSKPIs() {
+    try {
+        const branchId = state.currentBranch?.id || 1;
+        const today = new Date().toISOString().split("T")[0];
+        const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
+        const s = res.data?.summary || { cash: { in: 0 }, bank: { in: 0 }, totalNet: 0 };
+
+        const totalSales = (s.cash.in || 0) + (s.bank.in || 0);
+
+        setKPI(1, "ယနေ့ ငွေသားရောင်းရငွေ (Cash)", s.cash.in, "fa-money-bill-wave");
+        setKPI(2, "ယနေ့ ဘဏ်ရောင်းရငွေ (Bank/KPay)", s.bank.in, "fa-building-columns");
+        setKPI(3, "ယနေ့ စုစုပေါင်းရောင်းရငွေ (Total)", totalSales, "fa-cash-register");
+        setKPI(4, "ယနေ့ ရောင်းရသည့်အထည်ရေ (Items Qty)", cart.reduce((acc, i) => acc + i.quantity, 0), "fa-shirt");
+    } catch (err) {
+        console.error("POS KPI update error:", err);
     }
 }
 
@@ -345,14 +331,10 @@ async function submitSale() {
             customerId: customerId ? parseInt(customerId) : null,
             saleType: currentSaleType,
             items: cart.map(i => ({
-                productId: i.product.id,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                costPrice: i.costPrice
+                productId: i.product.id, quantity: i.quantity,
+                unitPrice: i.unitPrice, costPrice: i.costPrice
             })),
-            discountAmount,
-            paidAmount,
-            paymentMethod: selectedPaymentMethod,
+            discountAmount, paidAmount, paymentMethod: selectedPaymentMethod,
             cashAmount: selectedPaymentMethod === "cash" ? paidAmount : 0,
             bankAmount: selectedPaymentMethod === "bank" ? paidAmount : 0,
             bankAccountName: selectedPaymentMethod === "bank" ? bankName : null,
@@ -360,7 +342,6 @@ async function submitSale() {
         };
 
         const res = await api.post("/pos/sales", payload);
-
         if (res.success) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
             showReceiptModal(res.data.invoiceNo, cart, subtotal, discountAmount, finalTotal, paidAmount);
@@ -369,6 +350,7 @@ async function submitSale() {
             document.getElementById("pos-discount").value = 0;
             renderCart();
             await loadProducts();
+            await updatePOSKPIs();
             await refreshGlobalKPIs();
         }
     } catch (err) {
@@ -401,6 +383,5 @@ function showReceiptModal(invoiceNo, items, subtotal, discount, finalTotal, paid
     document.getElementById("rcp-discount").textContent = `-${discount.toLocaleString()}`;
     document.getElementById("rcp-final").textContent = finalTotal.toLocaleString();
     document.getElementById("rcp-paid").textContent = paid.toLocaleString();
-
     document.getElementById("receipt-modal")?.classList.remove("hidden");
 }

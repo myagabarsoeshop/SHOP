@@ -1,21 +1,27 @@
 // cashbook-frontend/js/app.js
 import { state } from "./core/state.js";
+import { api } from "./core/api.js";
 import { initAuth } from "./modules/auth.js";
 import { initPOS } from "./modules/pos.js";
 import { initCashbook } from "./modules/cashbook.js";
-import { api } from "./core/api.js";
+import { initInventory } from "./modules/inventory.js";
+import { initYarn } from "./modules/yarn.js";
+import { initCustomers } from "./modules/customers.js";
 
 const VIEW_TITLES = {
-    pos: "အရောင်းကောင်တာ (POS)",
-    cashbook: "နေ့စဉ်ငွေစာရင်း (Cashbook)",
-    inventory: "အထည်လက်ကျန် စာရင်း (Stock)",
-    yarn: "ချည်စတိုနှင့် ရက်ကန်းစီမံခန့်ခွဲမှု",
-    customers: "ဖောက်သည်နှင့် အကြွေးစာရင်း"
+    pos: "Sale Counter (POS)",
+    cashbook: "Cash Book (နေ့စဉ်ငွေစာရင်း)",
+    inventory: "Stock Balances (အထည်လက်ကျန်)",
+    yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
+    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
 };
+
+let currentActiveView = "pos";
 
 document.addEventListener("DOMContentLoaded", async () => {
     startClock();
     initTheme();
+    setupNavigation();
 
     if (!state.isLoggedIn()) {
         await showLoginView();
@@ -24,7 +30,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadBranches();
         await navigateTo("pos");
     }
+});
 
+function setupNavigation() {
     document.getElementById("btn-logout")?.addEventListener("click", () => {
         if (confirm("စနစ်မှ အမှန်တကယ် ထွက်ခွာလိုပါသလား?")) {
             state.logout();
@@ -33,18 +41,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelectorAll(".nav-item").forEach(btn => {
         btn.addEventListener("click", () => {
-            document.querySelectorAll(".nav-item").forEach(b => {
-                b.className = "nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer";
-            });
-            btn.className = "nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer";
+            setActiveNavButton(btn.dataset.view);
             navigateTo(btn.dataset.view);
         });
     });
-});
+}
+
+function setActiveNavButton(viewName) {
+    document.querySelectorAll(".nav-item").forEach(b => {
+        if (b.dataset.view === viewName) {
+            b.className = "nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer";
+        } else {
+            b.className = "nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer";
+        }
+    });
+}
 
 async function showLoginView() {
     document.getElementById("app-layout")?.classList.add("hidden");
     const container = document.getElementById("login-container");
+    if (!container) return;
     container.classList.remove("hidden");
 
     const html = await fetch("views/login.html").then(r => r.text());
@@ -56,9 +72,16 @@ function showAppLayout() {
     document.getElementById("login-container")?.classList.add("hidden");
     document.getElementById("app-layout")?.classList.remove("hidden");
 
-    document.getElementById("user-name").textContent = state.user.fullName || state.user.username;
-    document.getElementById("user-role").textContent = state.user.role;
-    document.getElementById("user-initial").textContent = (state.user.fullName || "U").charAt(0).toUpperCase();
+    const user = state.user || {};
+    const displayName = user.fullName || user.username || "User";
+
+    const nameEl = document.getElementById("user-name");
+    const roleEl = document.getElementById("user-role");
+    const initEl = document.getElementById("user-initial");
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (roleEl) roleEl.textContent = user.role || "cashier";
+    if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
 }
 
 async function loadBranches() {
@@ -67,9 +90,15 @@ async function loadBranches() {
 
     try {
         const res = await api.get("/branches");
+        const branches = res.data || [];
         select.innerHTML = "";
 
-        res.data.forEach(b => {
+        if (branches.length > 0 && !state.currentBranch) {
+            const defaultBranch = branches.find(b => b.id === state.user?.branchId) || branches[0];
+            state.setBranch(defaultBranch);
+        }
+
+        branches.forEach(b => {
             const opt = document.createElement("option");
             opt.value = b.id;
             opt.textContent = `${b.name} (${b.code})`;
@@ -77,53 +106,94 @@ async function loadBranches() {
             select.appendChild(opt);
         });
 
-        if (!state.isAdmin()) {
-            select.disabled = true;
-        }
+        select.disabled = !state.isAdmin();
 
-        select.addEventListener("change", (e) => {
-            const b = res.data.find(item => item.id === parseInt(e.target.value));
-            state.setBranch(b);
-            const activeView = document.querySelector(".nav-item.active")?.dataset.view || "pos";
-            navigateTo(activeView);
-        });
+        select.onchange = (e) => {
+            const b = branches.find(item => item.id === parseInt(e.target.value, 10));
+            if (b) {
+                state.setBranch(b);
+                navigateTo(currentActiveView);
+            }
+        };
     } catch (err) {
         console.error("Failed to load branches:", err);
     }
 }
 
 /**
+ * Local Timezone ဖြင့် YYYY-MM-DD ရက်စွဲမှန် ရယူခြင်း
+ */
+export function getLocalTodayDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+/**
  * Global 4-Box KPI ကို View အလိုက် အချက်အလက် ပြောင်းလဲပေးခြင်း
  */
-export async function refreshGlobalKPIs() {
+export async function refreshGlobalKPIs(viewOverride) {
+    const view = viewOverride || currentActiveView;
+    // inventory, yarn, customers မော်ဂျူးများသည် ၎င်းတို့ကိုယ်ပိုင် KPI ကို တွက်ချက်ပြသပေးသည်
+    if (view === "inventory" || view === "yarn" || view === "customers") return;
+
     try {
         const branchId = state.currentBranch?.id || 1;
-        const today = new Date().toISOString().split("T")[0];
+        const today = getLocalTodayDate();
         const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
-        const summary = res.data?.summary || { cash: { in: 0, out: 0, net: 0 }, bank: { in: 0, out: 0, net: 0 }, totalNet: 0 };
+        const summary = res.data?.summary || {
+            cash: { in: 0, out: 0, net: 0 },
+            bank: { in: 0, out: 0, net: 0 },
+            totalNet: 0
+        };
 
-        const totalExpenses = (summary.cash.out || 0) + (summary.bank.out || 0);
+        const cashIn = Number(summary.cash?.in || 0);
+        const bankIn = Number(summary.bank?.in || 0);
+        const totalIn = cashIn + bankIn;
+        const totalExpenses = Number(summary.cash?.out || 0) + Number(summary.bank?.out || 0);
 
-        setKPI(1, "ယနေ့ ငွေသားဝင်ငွေ (Cash In)", summary.cash.in, "fa-money-bill-wave");
-        setKPI(2, "ယနေ့ KPay / ဘဏ်ဝင်ငွေ (Bank In)", summary.bank.in, "fa-building-columns");
-        setKPI(3, "ယနေ့ စရိတ်ထွက်ငွေ (Expenses)", totalExpenses, "fa-arrow-trend-down");
-        setKPI(4, "ယနေ့ အသားတင်လက်ကျန် (Net)", summary.totalNet, "fa-vault");
+        if (view === "cashbook") {
+            setKPI(1, "လက်ကျန် ငွေသား (Cash Net)", summary.cash?.net || 0, "fa-money-bill-wave", "emerald");
+            setKPI(2, "လက်ကျန် ဘဏ်ငွေ (Bank Net)", summary.bank?.net || 0, "fa-building-columns", "blue");
+            setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalExpenses, "fa-arrow-trend-down", "rose");
+            setKPI(4, "စုစုပေါင်း အသားတင် (Total Net)", summary.totalNet || 0, "fa-vault", "amber");
+        } else {
+            setKPI(1, "Today Sale (Cash)", cashIn, "fa-money-bill-wave", "emerald");
+            setKPI(2, "Today Sale (Bank)", bankIn, "fa-building-columns", "blue");
+            setKPI(3, "Total Today Sale", totalIn, "fa-cash-register", "emerald");
+            setKPI(4, "Total Sale Items", summary.totalSaleItems || 0, "fa-shirt", "slate");
+        }
     } catch (err) {
         console.error("KPI update error:", err);
     }
 }
 
-export function setKPI(index, label, value, iconClass) {
+export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
     const lblEl = document.getElementById(`kpi-${index}-label`);
     const valEl = document.getElementById(`kpi-${index}-value`);
     const icoEl = document.getElementById(`kpi-${index}-icon`);
 
     if (lblEl) lblEl.textContent = label;
-    if (valEl) valEl.textContent = Number(value || 0).toLocaleString();
+    if (valEl) {
+        valEl.textContent = Number(value || 0).toLocaleString();
+        const colorMap = {
+            emerald: "text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight",
+            blue: "text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight",
+            rose: "text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight",
+            amber: "text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight",
+            slate: "text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight"
+        };
+        valEl.className = colorMap[colorTheme] || colorMap.emerald;
+    }
     if (icoEl && iconClass) icoEl.className = `fa-solid ${iconClass}`;
 }
 
-async function navigateTo(viewName) {
+export async function navigateTo(viewName) {
+    currentActiveView = viewName;
+    setActiveNavButton(viewName);
+
     const container = document.getElementById("view-container");
     const titleEl = document.getElementById("topbar-page-title");
     if (titleEl) titleEl.textContent = VIEW_TITLES[viewName] || "GARMENT ERP";
@@ -135,19 +205,23 @@ async function navigateTo(viewName) {
         });
         container.innerHTML = html;
 
-        await refreshGlobalKPIs();
-
         if (viewName === "pos") {
-            initPOS();
+            await initPOS();
         } else if (viewName === "cashbook") {
-            initCashbook();
+            await initCashbook();
+        } else if (viewName === "inventory") {
+            await initInventory();
+        } else if (viewName === "yarn") {
+            await initYarn();
+        } else if (viewName === "customers") {
+            await initCustomers();
         }
     } catch (err) {
         container.innerHTML = `
             <div class="h-full w-full bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
                 <i class="fa-solid fa-layer-group text-4xl text-emerald-500 mb-3"></i>
                 <div class="text-base font-bold text-slate-700 dark:text-slate-200">${VIEW_TITLES[viewName] || viewName}</div>
-                <div class="text-xs mt-1">ဤမော်ဂျူးကို ဆက်လက်တည်ဆောက်နေပါသည်</div>
+                <div class="text-xs mt-1">ဤမော်ဂျူးကို ဖွင့်လှစ်ရာတွင် အခက်အခဲရှိနေပါသည် (${err.message})</div>
             </div>`;
     }
 }
@@ -155,7 +229,7 @@ async function navigateTo(viewName) {
 function startClock() {
     const update = () => {
         const clock = document.getElementById("live-clock");
-        if (clock) clock.textContent = new Date().toLocaleTimeString();
+        if (clock) clock.textContent = new Date().toLocaleTimeString("en-US", { hour12: false });
     };
     update();
     setInterval(update, 1000);

@@ -87,13 +87,16 @@ function renderProductsGrid(products) {
         
         card.innerHTML = `
             <div>
+                <!-- Category ဘေးတွင် လက်ကျန်အရေအတွက်ကို ထင်ရှားစွာပြသခြင်း -->
                 <div class="flex items-center justify-between gap-2 mb-2">
-                    <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${p.category}</span>
-                    <span class="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">ကုတ်: ${itemCode}</span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        ${p.category} <strong class="${stock < 5 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">(${stock})</strong>
+                    </span>
+                    <span class="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">Code: ${itemCode}</span>
                 </div>
                 <div class="text-base font-extrabold text-slate-900 dark:text-white leading-snug">${p.item_name}</div>
                 <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">${p.pattern || ''} • ${p.color || ''}</div>
-                <div class="text-xs text-slate-400 mt-0.5">ဆိုက်: ${p.size || 'Free'} • လက်ကျန်: <strong class="${stock < 5 ? 'text-rose-500' : 'text-slate-700 dark:text-slate-200'}">${stock}</strong></div>
+                <div class="text-xs text-slate-400 mt-0.5">ဆိုက်: ${p.size || 'Free'}</div>
             </div>
             <div class="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
                 <span class="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">${Number(price).toLocaleString()}</span>
@@ -117,6 +120,7 @@ function addToCart(product) {
         cart.push({ product, quantity: 1, unitPrice: price, costPrice: product.cost_price });
     }
     renderCart();
+    updatePOSKPIs();
 }
 
 function renderCart() {
@@ -140,6 +144,7 @@ function renderCart() {
         if (subtotalEl) subtotalEl.textContent = "0";
         if (finalTotalEl) finalTotalEl.textContent = "0";
         if (checkoutBtn) checkoutBtn.disabled = true;
+        updatePOSKPIs();
         return;
     }
 
@@ -177,7 +182,7 @@ function renderCart() {
     if (checkoutBtn) checkoutBtn.disabled = false;
 
     container.querySelectorAll(".btn-qty-plus").forEach(btn => {
-        btn.onclick = () => { cart[btn.dataset.idx].quantity += 1; renderCart(); };
+        btn.onclick = () => { cart[btn.dataset.idx].quantity += 1; renderCart(); updatePOSKPIs(); };
     });
     container.querySelectorAll(".btn-qty-minus").forEach(btn => {
         btn.onclick = () => {
@@ -185,11 +190,14 @@ function renderCart() {
             if (cart[idx].quantity > 1) cart[idx].quantity -= 1;
             else cart.splice(idx, 1);
             renderCart();
+            updatePOSKPIs();
         };
     });
     container.querySelectorAll(".btn-remove-item").forEach(btn => {
-        btn.onclick = () => { cart.splice(btn.dataset.idx, 1); renderCart(); };
+        btn.onclick = () => { cart.splice(btn.dataset.idx, 1); renderCart(); updatePOSKPIs(); };
     });
+
+    updatePOSKPIs();
 }
 
 function bindEvents() {
@@ -293,21 +301,24 @@ function calculateChange() {
 }
 
 /**
- * POS မျက်နှာပြင်အတွက် ၄ ကွက် KPI Summary အသစ်များ အပ်ဒိတ်လုပ်ခြင်း
+ * တောင်းဆိုထားသော KPI ၄ ကွက် (Cash, Bank, Total Today Sale, Total Sale Items) တွက်ချက်ပြသခြင်း
  */
 async function updatePOSKPIs() {
     try {
         const branchId = state.currentBranch?.id || 1;
         const today = new Date().toISOString().split("T")[0];
         const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
-        const s = res.data?.summary || { cash: { in: 0 }, bank: { in: 0 }, totalNet: 0 };
+        const s = res.data?.summary || { cash: { in: 0 }, bank: { in: 0 } };
 
-        const totalSales = (s.cash.in || 0) + (s.bank.in || 0);
+        const cashSale = s.cash.in || 0;
+        const bankSale = s.bank.in || 0;
+        const totalSale = cashSale + bankSale;
+        const totalItemsQty = cart.reduce((acc, i) => acc + i.quantity, 0);
 
-        setKPI(1, "ယနေ့ ငွေသားရောင်းရငွေ (Cash)", s.cash.in, "fa-money-bill-wave");
-        setKPI(2, "ယနေ့ ဘဏ်ရောင်းရငွေ (Bank/KPay)", s.bank.in, "fa-building-columns");
-        setKPI(3, "ယနေ့ စုစုပေါင်းရောင်းရငွေ (Total)", totalSales, "fa-cash-register");
-        setKPI(4, "ယနေ့ ရောင်းရသည့်အထည်ရေ (Items Qty)", cart.reduce((acc, i) => acc + i.quantity, 0), "fa-shirt");
+        setKPI(1, "Today Sale (Cash)", cashSale, "fa-money-bill-wave");
+        setKPI(2, "Today Sale (Bank)", bankSale, "fa-building-columns");
+        setKPI(3, "Total Today Sale", totalSale, "fa-cash-register");
+        setKPI(4, "Total Sale Items", totalItemsQty, "fa-shirt");
     } catch (err) {
         console.error("POS KPI update error:", err);
     }

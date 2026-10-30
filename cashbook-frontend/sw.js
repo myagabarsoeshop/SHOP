@@ -1,76 +1,67 @@
 /**
- * GOLDEN ERP SYSTEM - PROGRESSIVE WEB APP (PWA) SERVICE WORKER
- * File: sw.js (Location: shop-frontend/sw.js)
- * 💡 Features: Fault-Tolerant Parallel Pre-caching (Zero Install Bottlenecks),
- *              Native Route Reconciliation via ignoreSearch (Phase 4.3),
- *              0ms Instant Offline Navigation (Stale-While-Revalidate Engine),
- *              🎯 Phase 4.1: Font Awesome WebFonts Pre-caching (Zero Broken Icons Offline),
- *              Crash-Proof Fetch Interceptor (Zero TypeError on Offline Drop)
+ * ==============================================================================
+ * မြကမ္ဘာစိုး ပိုးထည်တိုက် - POS & GARMENT ERP SERVICE WORKER
+ * File: cashbook-frontend/sw.js
+ * ==============================================================================
  */
 
-const CACHE_NAME = 'xxxxx';
+const CACHE_NAME = 'myagabarsoe-pos-v2.4.0';
 
-// 💡 အော့ဖ်လိုင်းသုံးနိုင်ရန် စက်ထဲ ကြိုတင်သိမ်းဆည်းမည့် ဖိုင်များအားလုံး (CSS + JS + HTML Views + WebFonts)
+// လက်ရှိ စနစ်အသစ်တွင် အမှန်တကယ် ရှိသော ဖိုင်လမ်းကြောင်း အတိအကျများ
 const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  
-  // 💡 1. CORE STYLES
-  './css/tailwind.min.css',
-  './css/fontawesome.min.css',
-  './css/style.css',
+  '/',
+  '/index.html',
 
-  // 🎯 Phase 4.1 Fix: Offline Font Icons Pre-caching (အော့ဖ်လိုင်းတွင် icon များ အပြည့်အဝ ပေါ်စေရန်)
-  './webfonts/fa-solid-900.woff2',
-  './webfonts/fa-regular-400.woff2',
-  './webfonts/fa-brands-400.woff2',
-  './webfonts/fa-v4compatibility.woff2',
+  // HTML Views (6 files)
+  '/views/login.html',
+  '/views/pos.html',
+  '/views/cashbook.html',
+  '/views/inventory.html',
+  '/views/yarn.html',
+  '/views/customers.html',
 
-  // 💡 2. CORE APPLICATION SCRIPTS
-  './js/config.js',
-  './js/offline-sync.js',
-  './js/api.js',
-  './js/auth.js',
-  './js/reports.js',
-  './js/settings.js',
-  './js/dashboard.js',
-  './js/app.js',
+  // Core JS Scripts (3 files)
+  '/js/app.js',
+  '/js/core/api.js',
+  '/js/core/state.js',
 
-  // 💡 3. ALL 13 RECONCILED HTML VIEWS (Offline SPA View Routes)
-  './views/dashboard.html',
-  './views/reports.html',
-  './views/settings.html'
+  // Module JS Scripts (6 files)
+  '/js/modules/auth.js',
+  '/js/modules/pos.js',
+  '/js/modules/cashbook.js',
+  '/js/modules/inventory.js',
+  '/js/modules/yarn.js',
+  '/js/modules/customers.js'
 ];
 
 /**
- * 💡 1. Install Event - Parallel Fault-Tolerant Pre-caching
+ * 1. Install Event - Pre-cache current POS assets
  */
 self.addEventListener('install', (event) => {
-  console.log('[Service Worker] Installing & Pre-caching All Styles, Scripts, Fonts & Views...');
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.all(
-        PRECACHE_ASSETS.map(asset => {
-          return cache.add(asset).catch(err => {
-            console.warn(`[Service Worker] Warning caching ${asset}:`, err.message);
-          });
-        })
+        PRECACHE_ASSETS.map((asset) =>
+          cache.add(asset).catch((err) => {
+            console.warn(`[SW] Skipping pre-cache for ${asset}:`, err.message);
+          })
+        )
       );
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
 /**
- * 💡 2. Activate Event - Clean Old Cache Versions
+ * 2. Activate Event - Delete all old Golden ERP caches ('xxxxx', etc.)
  */
 self.addEventListener('activate', (event) => {
-  console.log('[Service Worker] Activating & Cleaning Old Caches...');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log(`[Service Worker] Deleting old cache: ${cacheName}`);
+            console.log(`[SW] Removing old cache: ${cacheName}`);
             return caches.delete(cacheName);
           }
         })
@@ -80,62 +71,44 @@ self.addEventListener('activate', (event) => {
 });
 
 /**
- * 💡 3. Crash-Proof Fetch Interceptor & Route Reconciler
+ * 3. Fetch Event - Network-First for HTML/JS (so updates show immediately), Cache Fallback for Offline
  */
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
-  // Ignore non-HTTP/HTTPS requests
-  if (!request.url.startsWith('http')) {
+  if (!request.url.startsWith('http') || request.method !== 'GET') {
     return;
   }
 
   const url = new URL(request.url);
 
-  // Bypass API calls & Cloudflare Worker endpoints (Handled by offline-sync.js)
-  if (
-    request.method !== 'GET' ||
-    url.pathname.startsWith('/api') ||
-    url.hostname.includes('workers.dev') ||
-    url.searchParams.has('action')
-  ) {
-    return; 
+  // API calls (/api/*) ကို လုံးဝ Cache မလုပ်ပါ (D1 Database မှ တိုက်ရိုက်ယူမည်)
+  if (url.pathname.startsWith('/api')) {
+    return;
   }
 
-  // Stale-While-Revalidate Engine with Native ignoreSearch
+  // Network-First Strategy: အင်တာနက်ရှိလျှင် အမြဲတမ်း ကုတ်အသစ်ကို ပြပြီး၊ အင်တာနက်ပြတ်မှသာ Cache ထဲက ပြမည်
   event.respondWith(
-    (async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const cachedResponse = await cache.match(request, { ignoreSearch: true });
-
-      const fetchPromise = fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
-            cache.put(request, networkResponse.clone());
-          }
-          return networkResponse;
-        })
-        .catch(() => null);
-
-      if (cachedResponse) {
-        event.waitUntil(fetchPromise);
-        return cachedResponse;
-      }
-
-      const networkResponse = await fetchPromise;
-      if (networkResponse) {
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseClone);
+          });
+        }
         return networkResponse;
-      }
-
-      if (request.mode === 'navigate') {
-        const indexFallback = await cache.match('./index.html', { ignoreSearch: true });
-        if (indexFallback) return indexFallback;
-      }
-
-      return new Response('', {
-        status: 503,
-        statusText: 'Service Unavailable (Offline)'
-      });
-    })()
+      })
+      .catch(async () => {
+        const cachedResponse = await caches.match(request, { ignoreSearch: true });
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        if (request.mode === 'navigate') {
+          const fallback = await caches.match('/index.html');
+          if (fallback) return fallback;
+        }
+        return new Response('Offline', { status: 503 });
+      })
   );
 });

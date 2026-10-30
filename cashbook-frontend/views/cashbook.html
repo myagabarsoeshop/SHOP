@@ -5,7 +5,7 @@
     <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3 flex-1 min-w-[280px]">
             <div class="relative flex-1 max-w-md">
-                <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm"></i>
+                <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
                 <input type="text" id="cb-search" placeholder="ခေါင်းစဉ် သို့မဟုတ် အသေးစိတ် ရှာဖွေရန်..."
                     class="w-full pl-10 pr-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
             </div>
@@ -15,15 +15,15 @@
         </div>
 
         <div class="flex items-center gap-2.5">
-            <button id="btn-export-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-700 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" id="btn-export-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-700 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-file-export text-emerald-500"></i>
                 <span>Export CSV</span>
             </button>
-            <button id="btn-add-expense" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-xl shadow-md shadow-rose-600/20 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" id="btn-add-expense" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-xl shadow-md shadow-rose-600/20 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-minus-circle"></i>
                 <span>အသုံးစရိတ် ထည့်မည်</span>
             </button>
-            <button id="btn-add-income" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" id="btn-add-income" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-plus-circle"></i>
                 <span>အခြားဝင်ငွေ ထည့်မည်</span>
             </button>
@@ -33,7 +33,7 @@
     <!-- Entries Table -->
     <div class="flex-1 overflow-y-auto">
         <table class="w-full text-left text-sm whitespace-nowrap">
-            <thead class="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 font-bold sticky top-0 border-b border-slate-200 dark:border-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                 <tr>
                     <th class="p-4">ရက်စွဲ</th>
                     <th class="p-4">အမျိုးအစား / ခေါင်းစဉ်</th>
@@ -60,7 +60,9 @@
                 <i class="fa-solid fa-pen-to-square"></i>
                 <span id="entry-modal-title">ငွေစာရင်း ထည့်သွင်းမည်</span>
             </div>
-            <button id="btn-close-entry-modal" class="text-white/80 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" id="btn-close-entry-modal" class="text-white/80 hover:text-white text-lg cursor-pointer">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </div>
 
         <form id="entry-form" class="p-6 space-y-4">
@@ -83,7 +85,7 @@
 
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပမာဏ (Amount)</label>
-                <input type="number" id="entry-amount" required min="1" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <input type="number" id="entry-amount" required min="1" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
             <div>

@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js
+// File: cashbook-api/worker.js (Zero TypeScript Warnings Version)
 // =============================================================================
 
 const corsHeaders = {
@@ -52,10 +52,14 @@ export default {
 
         // 1. Frontend Static Files (index.html, views/*, js/*) ကို ပြသပေးခြင်း
         if (!path.startsWith("/api")) {
-            if (env.ASSETS) {
+            if (env && env.ASSETS) {
                 return env.ASSETS.fetch(request);
             }
-            return jsonResponse({ status: "online", version: "2.3.0" });
+            return jsonResponse({
+                status: "online",
+                version: "2.4.0",
+                note: "Frontend assets not bound. Please deploy via 'npx wrangler deploy' or GitHub push."
+            });
         }
 
         try {
@@ -63,7 +67,7 @@ export default {
             // 1. HEALTH CHECK
             // =================================================================
             if (path === "/api/health") {
-                return jsonResponse({ status: "online", version: "2.3.0" });
+                return jsonResponse({ status: "online", version: "2.4.0" });
             }
 
             // =================================================================
@@ -93,7 +97,7 @@ export default {
                         id: user.id,
                         username: user.username,
                         fullName: user.full_name || user.username,
-                        role: (user.role || "cashier").toLowerCase(),
+                        role: String(user.role || "cashier").toLowerCase(),
                         branchId: user.branch_id || 1,
                         branchCode: user.branch_code || "MAIN",
                         branchName: user.branch_name || "Main Home Shop"
@@ -126,10 +130,11 @@ export default {
                            COALESCE(${branchId ? "bi.quantity" : "(SELECT SUM(quantity) FROM branch_inventory WHERE product_id = p.id)"}, 0) AS current_stock
                     FROM products p
                 `;
+                /** @type {any[]} */
                 const bindings = [];
                 if (branchId) {
                     sql += " LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ? ";
-                    bindings.push(Number(branchId));
+                    bindings.push(branchId);
                 }
                 sql += " WHERE p.is_active = 1 ";
                 if (search) {
@@ -272,10 +277,11 @@ export default {
                     LEFT JOIN users u ON ce.created_by = u.id
                     WHERE ce.entry_date BETWEEN ? AND ?
                 `;
+                // ✅ FIXED: String(branchId) သုံးထားသဖြင့် ts(2345) အနီရောင်မျဉ်း လုံးဝ မတက်တော့ပါ
                 const bindings = [startDate, endDate];
                 if (branchId) {
                     sql += " AND ce.branch_id = ?";
-                    bindings.push(Number(branchId));
+                    bindings.push(String(branchId));
                 }
                 sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
                 const { results } = await env.DB.prepare(sql).bind(...bindings).all();
@@ -283,9 +289,9 @@ export default {
                 let totalCashIn = 0, totalCashOut = 0, totalBankIn = 0, totalBankOut = 0;
                 (results || []).forEach(r => {
                     const amt = parseFloat(r.amount) || 0;
-                    const method = (r.payment_method || "cash").toLowerCase();
-                    const type = (r.entry_type || "EXPENSE").toUpperCase();
-                    if (method === "cash") {
+                    const method2 = String(r.payment_method || "cash").toLowerCase();
+                    const type = String(r.entry_type || "EXPENSE").toUpperCase();
+                    if (method2 === "cash") {
                         if (type === "INCOME") totalCashIn += amt;
                         else totalCashOut += amt;
                     } else {
@@ -392,7 +398,6 @@ export default {
                 const saleId = saleInsert.meta.last_row_id;
                 const subQueries = [];
 
-                // (က) Sale Items သွင်းခြင်းနှင့် Stock မှ အမှန်တကယ် နှုတ်ခြင်း
                 for (const item of items) {
                     const qty = parseInt(item.quantity, 10);
                     const unitPrice = parseFloat(item.unitPrice) || 0;
@@ -403,7 +408,6 @@ export default {
                             .bind(saleId, Number(item.productId), qty, unitPrice, parseFloat(item.costPrice) || 0, subtotal)
                     );
 
-                    // ✅ FIXED: -qty ကို + excluded.quantity ဖြင့် ပေါင်းမှ လက်ကျန်လျော့မည်
                     subQueries.push(
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
@@ -412,7 +416,6 @@ export default {
                     );
                 }
 
-                // (ခ) Cashbook သို့ Auto ဝင်ငွေထည့်ခြင်း (entry_date အပါအဝင်)
                 if (effectivePaid > 0) {
                     if (pCash > 0) {
                         subQueries.push(
@@ -432,7 +435,6 @@ export default {
                     }
                 }
 
-                // (ဂ) အကြွေးကျန်ရှိပါက Customer Debt စာရင်းသွင်းခြင်း
                 if (debtAmount > 0 && customerId) {
                     const cust = await env.DB.prepare("SELECT current_debt FROM customers WHERE id = ?").bind(Number(customerId)).first();
                     const newDebt = (Number(cust?.current_debt) || 0) + debtAmount;
@@ -497,7 +499,7 @@ export default {
             }
 
             // =================================================================
-            // 8. CUSTOMERS & DEBT LIABILITIES (ဖောက်သည်နှင့် အကြွေးစာရင်း)
+            // 8. CUSTOMERS & DEBT LIABILITIES
             // =================================================================
             if (path === "/api/customers" && method === "GET") {
                 const { results } = await env.DB.prepare(

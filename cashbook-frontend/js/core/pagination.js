@@ -96,43 +96,37 @@ export class PaginationController {
         for (let p = startPage; p <= endPage; p++) {
             const isActive = p === this.currentPage;
             pageButtonsHtml += `
-                <button type="button" data-page="${p}" class="pagination-btn min-w-[32px] h-8 px-2.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                <button type="button" data-page="${p}" class="pagination-btn min-w-[28px] h-7 px-2 text-xs font-bold rounded-lg transition cursor-pointer ${
                     isActive 
                         ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 font-black" 
-                        : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"
                 }">
                     ${p}
                 </button>
             `;
         }
 
-        // Pagination Container HTML ဖွဲ့စည်းမှု
+        // English စာသားနှင့် အောက်ခြေထိကပ် (Flush Bottom) ဒီဇိုင်း HTML
         container.innerHTML = `
-            <div class="w-full flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/80 rounded-b-2xl select-none">
+            <div class="w-full flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 select-none">
                 <!-- Info Status -->
-                <div class="font-semibold flex items-center gap-1.5">
-                    <span>မှတ်တမ်း</span>
-                    <span class="font-bold text-slate-800 dark:text-slate-200">${this.totalItems.toLocaleString()}</span>
-                    <span>ခုအနက်</span>
-                    <span class="font-bold text-slate-800 dark:text-slate-200">${startRecord}</span>
-                    <span>-</span>
-                    <span class="font-bold text-slate-800 dark:text-slate-200">${endRecord}</span>
-                    <span>ကို ပြသနေပါသည်</span>
+                <div class="font-semibold text-slate-500 dark:text-slate-400">
+                    Showing <span class="font-bold text-slate-900 dark:text-white font-mono">${startRecord}</span> to <span class="font-bold text-slate-900 dark:text-white font-mono">${endRecord}</span> of <span class="font-bold text-slate-900 dark:text-white font-mono">${this.totalItems.toLocaleString()}</span> entries
                 </div>
 
                 <!-- Navigation Controls -->
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1">
                     <!-- First Page -->
-                    <button type="button" data-page="1" ${this.currentPage === 1 ? "disabled" : ""} title="ပထမဆုံး စာမျက်နှာ"
-                        class="pagination-btn h-8 px-2 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-slate-200 dark:hover:enabled:bg-slate-800">
+                    <button type="button" data-page="1" ${this.currentPage === 1 ? "disabled" : ""} title="First Page"
+                        class="pagination-btn h-7 px-2 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-slate-100 dark:hover:enabled:bg-slate-800">
                         <i class="fa-solid fa-angles-left"></i>
                     </button>
 
                     <!-- Previous Page -->
-                    <button type="button" data-page="${this.currentPage - 1}" ${this.currentPage === 1 ? "disabled" : ""} title="ရှေ့သို့"
-                        class="pagination-btn h-8 px-2.5 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-slate-200 dark:hover:enabled:bg-slate-800 flex items-center gap-1">
+                    <button type="button" data-page="${this.currentPage - 1}" ${this.currentPage === 1 ? "disabled" : ""} title="Previous"
+                        class="pagination-btn h-7 px-2.5 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-slate-100 dark:hover:enabled:bg-slate-800 flex items-center gap-1">
                         <i class="fa-solid fa-angle-left"></i>
-                        <span class="hidden sm:inline">Prev</span>
+                        <span>Prev</span>
                     </button>
 
                     <!-- Numbered Pages -->
@@ -141,22 +135,22 @@ export class PaginationController {
                     </div>
 
                     <!-- Next Page -->
-                    <button type="button" data-page="${this.currentPage + 1}" ${this.currentPage === this.totalPages ? "disabled" : ""} title="နောက်သို့"
-                        class="pagination-btn h-8 px-2.5 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-slate-200 dark:hover:enabled:bg-slate-800 flex items-center gap-1">
-                        <span class="hidden sm:inline">Next</span>
+                    <button type="button" data-page="${this.currentPage + 1}" ${this.currentPage === this.totalPages ? "disabled" : ""} title="Next"
+                        class="pagination-btn h-7 px-2.5 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-slate-100 dark:hover:enabled:bg-slate-800 flex items-center gap-1">
+                        <span>Next</span>
                         <i class="fa-solid fa-angle-right"></i>
                     </button>
 
                     <!-- Last Page -->
-                    <button type="button" data-page="${this.totalPages}" ${this.currentPage === this.totalPages ? "disabled" : ""} title="နောက်ဆုံး စာမျက်နှာ"
-                        class="pagination-btn h-8 px-2 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-slate-200 dark:hover:enabled:bg-slate-800">
+                    <button type="button" data-page="${this.totalPages}" ${this.currentPage === this.totalPages ? "disabled" : ""} title="Last Page"
+                        class="pagination-btn h-7 px-2 rounded-lg text-xs font-bold transition border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-slate-100 dark:hover:enabled:bg-slate-800">
                         <i class="fa-solid fa-angles-right"></i>
                     </button>
                 </div>
             </div>
         `;
 
-        // Click Event Bind လုပ်ခြင်း
+        // Click Event Bind ပြုလုပ်ခြင်း
         container.querySelectorAll(".pagination-btn").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 const targetBtn = e.currentTarget;

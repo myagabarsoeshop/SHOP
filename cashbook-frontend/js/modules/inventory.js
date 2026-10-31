@@ -19,14 +19,16 @@ export async function initInventory() {
 }
 
 function bindEvents() {
+    // Export CSV ကို မည်သည့် User မဆို ဝင်ရောက်အသုံးပြုနိုင်ရန် အမြဲဖွင့်ပေးမည်
+    document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
+
     if (state.isAdmin()) {
         document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
-        document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
         document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
     } else {
         document.getElementById("btn-add-product")?.classList.add("hidden");
-        document.getElementById("btn-export-csv")?.classList.add("hidden");
         document.getElementById("btn-import-csv")?.classList.add("hidden");
+        // btn-export-csv ကို hidden မလုပ်တော့ပါ (Cashier များပါ ထုတ်ယူနိုင်ပါပြီ)
     }
 
     document.getElementById("btn-close-product-modal")?.addEventListener("click", () => {

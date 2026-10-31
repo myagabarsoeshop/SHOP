@@ -123,22 +123,30 @@
                         <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
                         <span>Sale Counter</span>
                     </button>
+
                     <button type="button" data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
                         <span>Cash Book</span>
                     </button>
+
                     <button type="button" data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
                         <span>Stock Balances</span>
                     </button>
 
-                    <!-- NEW: Purchases Menu -->
+                    <!-- Purchases Menu -->
                     <button type="button" data-view="purchases" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-truck-ramp-box w-5 text-center text-base"></i>
                         <span>Purchases</span>
                     </button>
 
-                    <!-- NEW: Product Master Menu (Admin Only) -->
+                    <!-- NEW: Damage & Waste Menu -->
+                    <button type="button" data-view="waste" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                        <i class="fa-solid fa-box-open w-5 text-center text-base text-amber-500"></i>
+                        <span>Damage & Waste</span>
+                    </button>
+
+                    <!-- Product Master Menu (Admin Only) -->
                     <button type="button" id="nav-master-products" data-view="master_products" class="nav-item hidden flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-boxes-packing w-5 text-center text-base"></i>
                         <span>Product Master</span>
@@ -148,6 +156,7 @@
                         <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
                         <span>Yarn Balances</span>
                     </button>
+
                     <button type="button" data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                         <i class="fa-solid fa-users w-5 text-center text-base"></i>
                         <span>Customers & Liabilities</span>
@@ -216,7 +225,7 @@
                 </div>
             </header>
 
-            <!-- 2. Updated 4-Box KPI Summary Bar (Requested Format) -->
+            <!-- 2. Updated 4-Box KPI Summary Bar -->
             <section id="global-kpi-bar" class="px-6 pt-4 pb-2 shrink-0">
                 <div class="grid grid-cols-4 gap-4">
                     <!-- KPI Box 1 -->

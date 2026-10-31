@@ -302,3 +302,22 @@ INSERT OR IGNORE INTO users (id, branch_id, username, password_hash, full_name, 
 (5, 3, 'cashier_sh2', 'cashier_hash', 'Shop 2 Cashier', 'cashier'),
 (6, 4, 'cashier_sh3', 'cashier_hash', 'Shop 3 Cashier', 'cashier'),
 (7, 5, 'cashier_sh4', 'cashier_hash', 'Shop 4 Cashier', 'cashier');
+
+-- -----------------------------------------------------------------------------
+-- WASTE & DAMAGE LOGS (အလေအလွင့်နှင့် ပျက်စီးဆုံးရှုံးမှု မှတ်တမ်း)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS waste_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_no TEXT NOT NULL UNIQUE,             -- e.g., 'WST-SH1-202610-001'
+    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK(quantity > 0), -- ပျက်စီး/ပျောက်ဆုံး အရေအတွက်
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0), -- ဆုံးရှုံးသွားသော အရင်းတန်ဖိုး (တွက်ချက်ရန်)
+    reason TEXT NOT NULL,                          -- e.g., 'ကြွက်ကိုက်', 'အရောင်စွန်း', 'ပျောက်ဆုံး'
+    recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ပိုမိုမြန်ဆန်စွာ ရှာဖွေနိုင်ရန် Index ထည့်ခြင်း
+CREATE INDEX IF NOT EXISTS idx_waste_logs_branch_date ON waste_logs(branch_id, created_at);
+

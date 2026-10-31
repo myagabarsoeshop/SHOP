@@ -7,10 +7,8 @@ import { initCashbook } from "./modules/cashbook.js";
 import { initInventory } from "./modules/inventory.js";
 import { initYarn } from "./modules/yarn.js";
 import { initCustomers } from "./modules/customers.js";
-
-// နောက်ပိုင်းတွင် ရေးသားမည့် Module များအတွက် နေရာချန်ထားပါသည်
-// import { initPurchases } from "./modules/purchases.js";
-// import { initMasterProducts } from "./modules/master_products.js";
+import { initPurchases } from "./modules/purchases.js";
+import { initMasterProducts } from "./modules/master_products.js";
 
 const VIEW_TITLES = {
     pos: "Sale Counter (POS)",
@@ -226,8 +224,7 @@ export async function navigateTo(viewName) {
         } else if (viewName === "customers") {
             await initCustomers();
         } else if (viewName === "purchases") {
-            // await initPurchases(); // TODO: Purchases Module ရေးပြီးလျှင် Uncomment လုပ်မည်
-            container.innerHTML = `<div class="p-12 text-center text-slate-400">Purchases မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။</div>`;
+            await initPurchases(); 
         } else if (viewName === "master_products") {
             // await initMasterProducts(); // TODO: Master Products Module ရေးပြီးလျှင် Uncomment လုပ်မည်
             container.innerHTML = `<div class="p-12 text-center text-slate-400">Product Master မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။</div>`;

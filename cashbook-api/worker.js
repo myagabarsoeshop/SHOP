@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Full Updated Version)
+// File: cashbook-api/worker.js (Full Updated Version with Branch Transfer)
 // =============================================================================
 
 const corsHeaders = {
@@ -57,7 +57,7 @@ export default {
             }
             return jsonResponse({
                 status: "online",
-                version: "2.5.0",
+                version: "2.6.0",
                 note: "Frontend assets not bound. Please deploy via 'npx wrangler deploy' or GitHub push."
             });
         }
@@ -67,7 +67,7 @@ export default {
             // 1. HEALTH CHECK
             // =================================================================
             if (path === "/api/health") {
-                return jsonResponse({ status: "online", version: "2.5.0" });
+                return jsonResponse({ status: "online", version: "2.6.0" });
             }
 
             // =================================================================
@@ -179,7 +179,7 @@ export default {
                 const costPrice = parseFloat(body.costPrice ?? body.cost_price) || 0;
                 const retailPrice = parseFloat(body.retailPrice ?? body.retail_price) || 0;
                 const wholesalePrice = parseFloat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice) || 0;
-                const initialStock = parseInt(body.initialStock ?? body.quantity ?? 0, 10) || 0;
+                const initialStock = parseFloat(body.initialStock ?? body.quantity ?? 0) || 0;
                 const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? 1, 10) || 1;
 
                 const res = await env.DB.prepare(`
@@ -188,7 +188,7 @@ export default {
                 `).bind(
                     sku, barcode, String(body.category).trim(), String(itemName).trim(),
                     body.pattern ? String(body.pattern).trim() : null,
-                    body.size ? String(body.size).trim() : "Free Size",
+                    body.size ? String(body.size).trim() : "ထည်",
                     body.color ? String(body.color).trim() : null,
                     costPrice, retailPrice, wholesalePrice
                 ).run();
@@ -235,13 +235,12 @@ export default {
                     await env.DB.prepare(`
                         INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
                         ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity
-                    `).bind(Number(body.branchId), productId, parseInt(body.quantity, 10) || 0).run();
+                    `).bind(Number(body.branchId), productId, parseFloat(body.quantity) || 0).run();
                 }
 
                 return jsonResponse({ message: "ပစ္စည်းအချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
             }
 
-            // ပစ္စည်းအား စာရင်းမှ ဖျက်ပစ်ခြင်း (Soft Delete: is_active = 0)
             if (path.startsWith("/api/products/") && method === "DELETE") {
                 const productId = Number(path.split("/").pop());
                 if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
@@ -251,11 +250,11 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN (အဝယ်၊ စတော့အဝင်၊ ပြင်ဆင်ခြင်းနှင့် ဖျက်သိမ်းခြင်း)
+            // 5. PURCHASES & STOCK IN
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || 1;
-                
+
                 const sql = `
                     SELECT 
                         pi.id AS item_row_id,
@@ -293,7 +292,7 @@ export default {
             if (path === "/api/purchases" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const userId = 1;
-                
+
                 const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
                 const purchaseNo = `PO-${body.branch_id}-${dateStr}`;
 
@@ -305,14 +304,13 @@ export default {
                     parseFloat(body.total_amount), String(body.payment_method), 
                     body.bank_account_name || null, userId
                 ).run();
-                
+
                 const newPurId = purRes.meta.last_row_id;
                 const batchStatements = [];
 
                 for (const item of body.items) {
                     let targetProductId = item.product_id;
 
-                    // ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲ ဦးစွာ ထည့်သွင်းမည်
                     if (item.is_new && item.new_product) {
                         const np = item.new_product;
                         const prodRes = await env.DB.prepare(`
@@ -320,13 +318,12 @@ export default {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `).bind(
                             np.sku || null, null, String(np.category), String(np.item_name),
-                            null, np.size || "Free Size", np.color || null,
+                            null, np.size || "ထည်", np.color || null,
                             parseFloat(item.unit_cost), parseFloat(item.retail_price), parseFloat(item.wholesale_price)
                         ).run();
 
                         targetProductId = prodRes.meta.last_row_id;
                     } else {
-                        // ရှိပြီးသားပစ္စည်းဖြစ်ပါက ဝယ်ဈေးနှင့် ရောင်းဈေးများကို နောက်ဆုံးဈေးနှုန်းဖြင့် Update လုပ်မည်
                         batchStatements.push(
                             env.DB.prepare(`
                                 UPDATE products SET cost_price = ?, retail_price = ?, wholesale_price = ? WHERE id = ?
@@ -334,24 +331,21 @@ export default {
                         );
                     }
 
-                    // Purchase Items ထည့်သွင်းခြင်း
                     batchStatements.push(
                         env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
-                        .bind(newPurId, Number(targetProductId), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
+                        .bind(newPurId, Number(targetProductId), parseFloat(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
                     );
-                    
-                    // Stock Balances (branch_inventory) တိုးမြှင့်ခြင်း
+
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) 
                             VALUES (?, ?, ?)
                             ON CONFLICT(branch_id, product_id) DO UPDATE SET 
                             quantity = quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                        `).bind(Number(body.branch_id), Number(targetProductId), Number(item.quantity))
+                        `).bind(Number(body.branch_id), Number(targetProductId), parseFloat(item.quantity))
                     );
                 }
 
-                // Cashbook Expense (ချည်/အထည်ဝယ်ယူစရိတ် Category 4) သို့ အလိုအလျောက် သွင်းခြင်း
                 if (body.payment_method !== "credit") {
                     const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
                     batchStatements.push(
@@ -370,10 +364,9 @@ export default {
                 return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
             }
 
-            // အဝယ်ဘောင်ချာ ဖျက်သိမ်းခြင်း (စတော့နှင့် Cashbook ပါ ပြန်လည် နုတ်ယူရှင်းလင်းမည်)
             if (path.startsWith("/api/purchases/") && method === "DELETE") {
                 const purId = Number(path.split("/").pop());
-                
+
                 const { results: items } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const pur = await env.DB.prepare("SELECT branch_id FROM purchases WHERE id = ?").bind(purId).first();
                 const branchId = pur?.branch_id || 1;
@@ -383,7 +376,7 @@ export default {
                 (items || []).forEach(it => {
                     batchRollback.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
-                            .bind(Number(it.quantity), Number(branchId), Number(it.product_id))
+                            .bind(parseFloat(it.quantity), Number(branchId), Number(it.product_id))
                     );
                 });
 
@@ -396,10 +389,8 @@ export default {
             }
 
             // =================================================================
-            // 6. WASTE / DAMAGE LOGS (အလေအလွင့် စာရင်း ရယူခြင်း၊ သွင်းခြင်း၊ ပြင်ခြင်း၊ ဖျက်ခြင်း)
+            // 6. WASTE / DAMAGE LOGS
             // =================================================================
-            
-            // (၁) အလေအလွင့် စာရင်းများကို ဆွဲယူပြသပေးမည့် GET Route
             if (path === "/api/waste" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || 1;
                 const sql = `
@@ -417,7 +408,6 @@ export default {
                 return jsonResponse(results || []);
             }
 
-            // (၂) အလေအလွင့် စာရင်း အသစ်သွင်းမည့် POST Route (ချည် ဒသမကိန်း lb ပါ လက်ခံသည်)
             if (path === "/api/waste" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const branchId = Number(body.branch_id || body.branchId || 1);
@@ -431,7 +421,6 @@ export default {
                     return errorResponse("ဆိုင်ခွဲ၊ ပစ္စည်းနှင့် ပျက်စီးပမာဏ မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
                 }
 
-                // လက်ကျန်စတော့ စစ်ဆေးခြင်း
                 const inv = await env.DB.prepare(`
                     SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
                 `).bind(branchId, productId).first();
@@ -449,7 +438,7 @@ export default {
                         INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, recorded_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ချည်/အထည် ပျက်စီးအလေအလွင့်", userId),
-                    
+
                     env.DB.prepare(`
                         UPDATE branch_inventory 
                         SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
@@ -461,7 +450,6 @@ export default {
                 return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
             }
 
-            // (၃) အလေအလွင့် စာရင်း ပြင်ဆင်မည့် PUT Route (စတော့ အလိုအလျောက် ပြန်ညှိမည်)
             if (path.startsWith("/api/waste/") && method === "PUT") {
                 const id = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
@@ -476,10 +464,8 @@ export default {
                 const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity, unit_cost FROM waste_logs WHERE id = ?").bind(id).first();
                 if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
 
-                // ကွာခြားချက် ရှာဖွေခြင်း (ဒသမကိန်း တိကျစေရန် တွက်ချက်ခြင်း)
                 const diff = Math.round((Number(oldLog.quantity) - newQty) * 1000) / 1000;
 
-                // အရေအတွက် ပိုတိုး၍ လျော့မည်ဆိုပါက စတော့လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
                 if (diff < 0) {
                     const inv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
                         .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first();
@@ -501,7 +487,6 @@ export default {
                 return jsonResponse({ message: "အလေအလွင့်စာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်ညှိပြီးပါပြီ။" });
             }
 
-            // (၄) အလေအလွင့် စာရင်း ဖျက်ပစ်မည့် DELETE Route (စတော့ထဲသို့ အပြည့်အဝ ပြန်ပေါင်းထည့်မည်)
             if (path.startsWith("/api/waste/") && method === "DELETE") {
                 const id = Number(path.split("/").pop());
                 const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
@@ -592,7 +577,6 @@ export default {
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
             }
 
-            // Cashbook Entry ပြင်ဆင်ခြင်း (Edit)
             if (path.startsWith("/api/cashbook/entries/") && method === "PUT") {
                 const id = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
@@ -629,7 +613,7 @@ export default {
             }
 
             // =================================================================
-            // 8. POS CHECKOUT (Auto Cashbook, Stock Deduction & Customer Debt)
+            // 8. POS CHECKOUT
             // =================================================================
             if (path === "/api/pos/sales" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
@@ -645,7 +629,7 @@ export default {
 
                 let totalAmount = 0;
                 for (const item of items) {
-                    totalAmount += (parseInt(item.quantity, 10) * parseFloat(item.unitPrice));
+                    totalAmount += (parseFloat(item.quantity) * parseFloat(item.unitPrice));
                 }
                 const discount = Math.max(0, parseFloat(discountAmount) || 0);
                 const finalAmount = Math.max(0, totalAmount - discount);
@@ -678,7 +662,7 @@ export default {
                 const subQueries = [];
 
                 for (const item of items) {
-                    const qty = parseInt(item.quantity, 10);
+                    const qty = parseFloat(item.quantity);
                     const unitPrice = parseFloat(item.unitPrice) || 0;
                     const subtotal = qty * unitPrice;
 
@@ -738,10 +722,8 @@ export default {
             }
 
             // =================================================================
-            // 9. YARN BALANCES & PRODUCTION ISSUE (ချည်စတို နှင့် ရက်ကန်းထုတ်ပေးမှု)
+            // 9. YARN BALANCES & PRODUCTION ISSUE
             // =================================================================
-            
-            // (၁) ချည်စာရင်းများနှင့် လက်ကျန်စတော့ ဆွဲယူခြင်း (products & branch_inventory JOIN)
             if (path === "/api/yarns" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || 1;
                 const search = url.searchParams.get("search")?.trim() || "";
@@ -755,7 +737,10 @@ export default {
                     FROM products p
                     LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
                     WHERE p.is_active = 1 
-                      AND (p.category LIKE '%ချည်%' OR p.category LIKE '%yarn%' OR p.item_name LIKE '%ချည်%')
+                      AND (p.category = 'ချည်' OR p.category = 'Yarn' OR p.category LIKE 'ချည်%')
+                      AND p.category NOT LIKE '%ပုဆိုး%' 
+                      AND p.category NOT LIKE '%လုံချည်%'
+                      AND p.category NOT LIKE '%အင်္ကျီ%'
                 `;
                 const bindings = [Number(branchId)];
 
@@ -769,7 +754,6 @@ export default {
                 return jsonResponse(results || []);
             }
 
-            // (၂) ချည်အသစ် တိုက်ရိုက်မှတ်ပုံတင်ခြင်း (products နှင့် branch_inventory ထဲသို့ ထည့်သွင်းခြင်း)
             if (path === "/api/yarns" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const branchId = Number(body.branch_id || body.branchId || 1);
@@ -779,7 +763,7 @@ export default {
                 if (!name) return errorResponse("ချည်အမည် ထည့်သွင်းပေးပါ", 400);
 
                 const sku = code ? String(code).trim().toUpperCase() : `YARN-${Math.floor(1000 + Math.random() * 9000)}`;
-                const unit = String(body.unit || body.size || "lb").trim();
+                const unit = String(body.unit || body.size || "ပေါင်").trim();
                 const costPrice = parseFloat(body.costPrice ?? body.cost_price) || 0;
                 const retailPrice = parseFloat(body.retailPrice ?? body.retail_price) || 0;
                 const wholesalePrice = parseFloat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice) || 0;
@@ -806,7 +790,6 @@ export default {
                 return jsonResponse({ id: newProductId, sku, message: "ချည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
             }
 
-            // (၃) ရက်ကန်းသမားထံ ချည်ထုတ်ပေးခြင်း (branch_inventory မှ စတော့ နှုတ်ယူခြင်း)
             if (path === "/api/yarns/issue" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const branchId = Number(body.branchId || body.branch_id || 1);
@@ -820,7 +803,6 @@ export default {
                     return errorResponse("ချည်အမျိုးအစား၊ ရက်ကန်းသမားအမည်နှင့် ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
                 }
 
-                // branch_inventory ရှိ ချည်လက်ကျန်စစ်ဆေးခြင်း
                 const inv = await env.DB.prepare(`
                     SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
                 `).bind(branchId, yarnId).first();
@@ -831,13 +813,11 @@ export default {
                 }
 
                 await env.DB.batch([
-                    // ရက်ကန်းထုတ် မှတ်တမ်းသွင်းခြင်း
                     env.DB.prepare(`
                         INSERT INTO yarn_issues (yarn_id, weaver_name, quantity, issue_date, notes, created_by) 
                         VALUES (?, ?, ?, ?, ?, ?)
                     `).bind(yarnId, weaverName, qty, getMyanmarTodayDate(), notes, createdBy),
-                    
-                    // branch_inventory ထဲမှ ချည်လက်ကျန် တိုက်ရိုက်နှုတ်ယူခြင်း
+
                     env.DB.prepare(`
                         UPDATE branch_inventory 
                         SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
@@ -848,7 +828,6 @@ export default {
                 return jsonResponse({ message: "ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နှုတ်ပြီးပါပြီ။" });
             }
 
-            // (၄) ရက်ကန်းထုတ်ပေးခဲ့သော မှတ်တမ်းဟောင်းများ ဆွဲယူခြင်း (Audit Log)
             if (path === "/api/yarns/issues" && method === "GET") {
                 const sql = `
                     SELECT 
@@ -913,6 +892,155 @@ export default {
                 ]);
 
                 return jsonResponse({ message: "အကြွေးဆပ်ငွေ လက်ခံပြီးပါပြီ", newDebt });
+            }
+
+            // =================================================================
+            // 11. INTER-BRANCH STOCK TRANSFERS (ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းပေးပို့ခြင်း)
+            // =================================================================
+            
+            // (၁) ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူပြသခြင်း
+            if (path === "/api/transfers" && method === "GET") {
+                const branchId = url.searchParams.get("branch_id");
+
+                // stock_transfers ဇယား မရှိသေးပါက Auto ဖန်တီးပေးခြင်း
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS stock_transfers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        transfer_no TEXT UNIQUE,
+                        from_branch_id INTEGER NOT NULL,
+                        to_branch_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        quantity REAL NOT NULL,
+                        status TEXT DEFAULT 'COMPLETED',
+                        notes TEXT,
+                        created_by INTEGER DEFAULT 1,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run();
+
+                let sql = `
+                    SELECT 
+                        t.id, t.transfer_no, t.from_branch_id, t.to_branch_id, t.product_id, t.quantity, t.status, t.notes, t.created_at,
+                        b1.name AS from_branch_name, b1.code AS from_branch_code,
+                        b2.name AS to_branch_name, b2.code AS to_branch_code,
+                        p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
+                        COALESCE(u.full_name, 'Admin') AS created_by_name
+                    FROM stock_transfers t
+                    LEFT JOIN branches b1 ON t.from_branch_id = b1.id
+                    LEFT JOIN branches b2 ON t.to_branch_id = b2.id
+                    LEFT JOIN products p ON t.product_id = p.id
+                    LEFT JOIN users u ON t.created_by = u.id
+                `;
+                const bindings = [];
+                if (branchId) {
+                    sql += ` WHERE (t.from_branch_id = ? OR t.to_branch_id = ?) `;
+                    bindings.push(Number(branchId), Number(branchId));
+                }
+                sql += ` ORDER BY t.id DESC LIMIT 300 `;
+
+                const { results } = await env.DB.prepare(sql).bind(...bindings).all();
+                return jsonResponse(results || []);
+            }
+
+            // (၂) ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းပေးပို့ခြင်း (Stock Deduction & Stock In)
+            if (path === "/api/transfers" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const fromBranchId = Number(body.fromBranchId || body.from_branch_id);
+                const toBranchId = Number(body.toBranchId || body.to_branch_id);
+                const productId = Number(body.productId || body.product_id);
+                const quantity = parseFloat(body.quantity);
+                const notes = String(body.notes || "").trim();
+                const createdBy = Number(body.createdBy || body.userId || 1);
+
+                if (!fromBranchId || !toBranchId || !productId || isNaN(quantity) || quantity <= 0) {
+                    return errorResponse("လွှဲပြောင်းပေးပို့မည့် ဆိုင်ခွဲများ၊ ပစ္စည်းနှင့် အရေအတွက် အပြည့်အစုံ ထည့်သွင်းပေးပါ", 400);
+                }
+
+                if (fromBranchId === toBranchId) {
+                    return errorResponse("ပေးပို့မည့်ဆိုင်နှင့် လက်ခံမည့်ဆိုင် တူညီ၍ မရပါ", 400);
+                }
+
+                // မူလဆိုင်ခွဲတွင် လက်ကျန်ပစ္စည်း ရှိ/မရှိ စစ်ဆေးခြင်း
+                const sourceInv = await env.DB.prepare(`
+                    SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
+                `).bind(fromBranchId, productId).first();
+
+                const currentStock = Number(sourceInv?.quantity || 0);
+                if (currentStock < quantity) {
+                    return errorResponse(`လွှဲပြောင်းမည့်ဆိုင်တွင် လက်ကျန်ပစ္စည်း မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
+                }
+
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS stock_transfers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        transfer_no TEXT UNIQUE,
+                        from_branch_id INTEGER NOT NULL,
+                        to_branch_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        quantity REAL NOT NULL,
+                        status TEXT DEFAULT 'COMPLETED',
+                        notes TEXT,
+                        created_by INTEGER DEFAULT 1,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run();
+
+                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                const transferNo = `TRF-B${fromBranchId}TO${toBranchId}-${dateStr}`;
+
+                await env.DB.batch([
+                    // ၁။ Transfer Log မှတ်တမ်းတင်ခြင်း
+                    env.DB.prepare(`
+                        INSERT INTO stock_transfers (transfer_no, from_branch_id, to_branch_id, product_id, quantity, status, notes, created_by)
+                        VALUES (?, ?, ?, ?, ?, 'COMPLETED', ?, ?)
+                    `).bind(transferNo, fromBranchId, toBranchId, productId, quantity, notes || "ဆိုင်အချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု", createdBy),
+
+                    // ၂။ ပို့လိုက်သော ဆိုင်ခွဲမှ လက်ကျန်ပစ္စည်း နှုတ်ယူခြင်း
+                    env.DB.prepare(`
+                        UPDATE branch_inventory 
+                        SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
+                        WHERE branch_id = ? AND product_id = ?
+                    `).bind(quantity, fromBranchId, productId),
+
+                    // ၃။ လက်ခံရရှိမည့် ဆိုင်ခွဲတွင် စတော့ပေါင်းထည့်ခြင်း (မရှိသေးပါက အသစ်ဖန်တီးခြင်း)
+                    env.DB.prepare(`
+                        INSERT INTO branch_inventory (branch_id, product_id, quantity) 
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(branch_id, product_id) DO UPDATE SET 
+                        quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                    `).bind(toBranchId, productId, quantity)
+                ]);
+
+                return jsonResponse({ message: "ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းခြင်း အောင်မြင်ပါသည်", transferNo }, 201);
+            }
+
+            // (၃) လွှဲပြောင်းမှု မှားယွင်းပါက ပြန်လည်ပယ်ဖျက်ခြင်း (Admin Delete & Stock Rollback)
+            if (path.startsWith("/api/transfers/") && method === "DELETE") {
+                const id = Number(path.split("/").pop());
+                const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
+                if (!trf) return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+                // လက်ခံဆိုင်တွင် အဆိုပါပစ္စည်း လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
+                const destInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
+                    .bind(Number(trf.to_branch_id), Number(trf.product_id)).first();
+                const destStock = Number(destInv?.quantity || 0);
+
+                if (destStock < Number(trf.quantity)) {
+                    return errorResponse(`လက်ခံဆိုင်တွင် ပစ္စည်းလက်ကျန် (${destStock}) လျော့နည်းနေသဖြင့် လွှဲပြောင်းမှုကို ပြန်ဖျက်၍ မရပါ`, 400);
+                }
+
+                await env.DB.batch([
+                    // ပို့လိုက်သောဆိုင်သို့ စတော့ပြန်ပေါင်းပေးခြင်း
+                    env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(trf.quantity), Number(trf.from_branch_id), Number(trf.product_id)),
+                    // လက်ခံဆိုင်မှ စတော့ပြန်နုတ်ခြင်း
+                    env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(trf.quantity), Number(trf.to_branch_id), Number(trf.product_id)),
+                    // မှတ်တမ်းဖျက်ခြင်း
+                    env.DB.prepare("DELETE FROM stock_transfers WHERE id = ?").bind(id)
+                ]);
+
+                return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်းကို ပယ်ဖျက်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်ညှိပြီးပါပြီ" });
             }
 
             return errorResponse(`Route မတွေ့ပါ: ${method} ${path}`, 404);

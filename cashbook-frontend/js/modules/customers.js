@@ -2,10 +2,18 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI, refreshGlobalKPIs } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let customers = [];
+let currentFilteredCustomers = [];
 let activeCustomerLedger = [];
 let currentCustomer = null;
+
+// ဖောက်သည်စာရင်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -50,13 +58,14 @@ function bindEvents() {
     document.getElementById("customer-form")?.addEventListener("submit", submitNewCustomer);
     document.getElementById("repay-form")?.addEventListener("submit", submitRepayment);
 
-    // Search Input
+    // Search Input (စစ်ထုတ်ရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
     document.getElementById("cust-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
-        const filtered = customers.filter(c =>
+        currentFilteredCustomers = customers.filter(c =>
             `${c.name || ""} ${c.phone || ""} ${c.shop_name || ""} ${c.address || ""}`.toLowerCase().includes(kw)
         );
-        renderTable(filtered);
+        pagination.reset();
+        renderTable();
     });
 
     // Repay Modal: ဘဏ်လွှဲရွေးချယ်ပါက ဘဏ်အမည်အကွက် ဖွင့်ပေးခြင်း
@@ -87,6 +96,7 @@ async function loadCustomers() {
     try {
         const res = await api.get("/customers");
         customers = res.data || [];
+        currentFilteredCustomers = [...customers];
 
         const totalCust = customers.length;
         const wholesaleCust = customers.filter(c => c.customer_type === "wholesale").length;
@@ -98,7 +108,7 @@ async function loadCustomers() {
         setKPI(3, "အကြွေးကျန်ရှိသူ ဦးရေ", debtors.length, "fa-user-clock", "amber");
         setKPI(4, "ရရန်ကျန် အကြွေးစုစုပေါင်း", totalDebt, "fa-hand-holding-dollar", "rose");
 
-        renderTable(customers);
+        renderTable();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="7" class="p-10 text-center text-rose-500 font-bold">ဖောက်သည်စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
@@ -106,17 +116,21 @@ async function loadCustomers() {
     }
 }
 
-function renderTable(list) {
+function renderTable() {
     const tbody = document.getElementById("cust-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (currentFilteredCustomers.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="p-12 text-center text-slate-400 font-bold text-base">ဖောက်သည်စာရင်း မရှိသေးပါ</td></tr>`;
+        pagination.renderControls("customers-pagination");
         return;
     }
 
-    list.forEach(c => {
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredCustomers);
+
+    pageItems.forEach(c => {
         const debt = Number(c.current_debt || 0);
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
@@ -125,20 +139,20 @@ function renderTable(list) {
             <td class="p-4 font-mono text-slate-500 dark:text-slate-400">${escapeHtml(c.phone || "-")}</td>
             <td class="p-4">
                 <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(c.shop_name || "-")}</div>
-                <span class="text-[11px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold uppercase">${escapeHtml(c.customer_type || "retail")}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold uppercase">${escapeHtml(c.customer_type || "retail")}</span>
             </td>
             <td class="p-4 text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(c.address || "-")}</td>
-            <td class="p-4 text-right font-mono font-black text-base ${debt > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}">
+            <td class="p-4 text-right font-mono font-black text-base ${debt > 0 ? "text-rose-500" : "text-emerald-500"}">
                 ${debt.toLocaleString()} Ks
             </td>
             <td class="p-4 text-center">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${debt > 0 ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'}">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${debt > 0 ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
                     ${debt > 0 ? 'အကြွေးကျန်ရှိ' : 'ရှင်းပြီး'}
                 </span>
             </td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <button type="button" data-id="${c.id}" title="အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း ကြည့်မည်" class="btn-view-ledger px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 transition cursor-pointer flex items-center gap-1 shadow-sm">
+                    <button type="button" data-id="${c.id}" title="အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း ကြည့်မည်" class="btn-view-ledger px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-700 transition cursor-pointer flex items-center gap-1 shadow-sm">
                         <i class="fa-solid fa-receipt text-blue-500"></i>
                         <span>မှတ်တမ်း</span>
                     </button>
@@ -148,7 +162,7 @@ function renderTable(list) {
                         <i class="fa-solid fa-hand-holding-dollar"></i>
                         <span>အကြွေးဆပ်မည်</span>
                     </button>` : `
-                    <button type="button" disabled class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-lg text-xs font-bold cursor-not-allowed">
+                    <button type="button" disabled class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg text-xs font-bold cursor-not-allowed">
                         ကင်းရှင်း
                     </button>`}
                 </div>
@@ -170,6 +184,9 @@ function renderTable(list) {
             if (cust) openCustomerLedgerModal(cust);
         };
     });
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("customers-pagination");
 }
 
 // --- Customer Ledger / Statement Modal Logic ---
@@ -223,7 +240,7 @@ function renderCustomerLedger(ledgerList) {
         tr.innerHTML = `
             <td class="p-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">${dateStr}</td>
             <td class="p-3">
-                <span class="px-2.5 py-1 rounded-md font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'}">
+                <span class="px-2.5 py-1 rounded-md font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
                     ${isDebit ? 'အကြွေးယူခြင်း (Debit)' : 'အကြွေးဆပ်ခြင်း (Credit)'}
                 </span>
             </td>
@@ -233,7 +250,7 @@ function renderCustomerLedger(ledgerList) {
             <td class="p-3 text-slate-600 dark:text-slate-400 font-bold capitalize">
                 ${escapeHtml(entry.payment_method || (isDebit ? 'အကြွေး' : 'ငွေသား'))}
             </td>
-            <td class="p-3 text-right font-mono font-bold text-sm ${isDebit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
+            <td class="p-3 text-right font-mono font-bold text-sm ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
                 ${isDebit ? '+' : '-'}${amt.toLocaleString()}
             </td>
             <td class="p-3 text-right font-mono font-black text-sm text-slate-900 dark:text-white">
@@ -338,9 +355,7 @@ async function submitRepayment(e) {
     }
 }
 
-// --- CSV Export Functions (UTF-8 BOM ပါဝင်ပြီး Excel တွင် မြန်မာစာ မပျက်ပါ) ---
-
-// ၁။ ပင်မ view မှ ဖောက်သည်စာရင်း အားလုံးကို Export ထုတ်ခြင်း
+// --- CSV Export Functions ---
 function exportAllCustomersToCSV() {
     if (!customers || customers.length === 0) {
         return alert("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
@@ -366,7 +381,6 @@ function exportAllCustomersToCSV() {
     downloadCSV(csvContent, `Customers_Liabilities_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
-// ၂။ တစ်ဦးချင်း Customer Statement မှတ်တမ်းဇယားကို Export ထုတ်ခြင်း
 function exportCustomerLedgerToCSV() {
     if (!activeCustomerLedger || activeCustomerLedger.length === 0) {
         return alert("ထုတ်ယူရန် အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း မရှိပါ။");
@@ -397,7 +411,6 @@ function exportCustomerLedgerToCSV() {
 }
 
 function downloadCSV(csvContent, fileName) {
-    // 0xEF, 0xBB, 0xBF (UTF-8 BOM) ထည့်သွင်းထားသဖြင့် Microsoft Excel တွင် မြန်မာစာလုံးများ ပုံမှန်အတိုင်း ဖတ်ရှုနိုင်ပါသည်
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

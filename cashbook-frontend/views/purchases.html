@@ -3,138 +3,147 @@
     
     <!-- Top Action Toolbar -->
     <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
-            <h2 class="text-lg font-bold text-slate-800 dark:text-white">အဝယ်စာရင်း (Purchases)</h2>
+        <div class="flex items-center gap-3">
+            <h2 class="text-lg font-bold text-slate-800 dark:text-white">အဝယ်စာရင်း (Purchases & Stock In)</h2>
             <div class="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/20">
-                စတော့အဝင် နှင့် အဝယ်စရိတ် မှတ်တမ်း
+                ပစ္စည်းဝယ်ယူမှုနှင့် စတော့အဝင် မှတ်တမ်း
             </div>
         </div>
 
         <div class="flex items-center gap-2.5">
-            <button type="button" id="btn-add-purchase" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
-                <i class="fa-solid fa-cart-plus"></i>
-                <span>အဝယ်ဘောင်ချာ အသစ်သွင်းမည်</span>
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"></i>
+                <input type="text" id="pur-search" placeholder="ဘောင်ချာ / ပစ္စည်းအမည် / ပွဲရုံ ရှာရန်..." 
+                    class="pl-9 pr-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-64 transition">
+            </div>
+
+            <button type="button" id="btn-add-purchase" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20">
+                <i class="fa-solid fa-plus-circle"></i>
+                <span>အဝယ်စာရင်း (စတော့အဝင်) သွင်းမည်</span>
             </button>
         </div>
     </div>
 
-    <!-- Purchases History Table -->
+    <!-- Purchases Table -->
     <div class="flex-1 overflow-x-auto overflow-y-auto">
-        <table class="w-full text-left text-sm whitespace-nowrap min-w-[1200px]">
+        <table class="w-full text-left text-sm whitespace-nowrap min-w-[1300px]">
             <thead class="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                    <th class="p-4">ဘောင်ချာနံပါတ် / ရက်စွဲ</th>
-                    <th class="p-4">ကုတ် / Barcode</th>
+                    <th class="p-4">ဘောင်ချာ / ရက်စွဲ</th>
+                    <th class="p-4">SKU / Barcode</th>
                     <th class="p-4">အမျိုးအစား</th>
-                    <th class="p-4">အထည်အမည် / အဆင်</th>
+                    <th class="p-4">ပစ္စည်းအမည် / အဆင်</th>
                     <th class="p-4">အရောင် / ယူနစ်</th>
                     <th class="p-4 text-center">အရေအတွက်</th>
                     <th class="p-4 text-center">ငွေပေးချေမှု</th>
-                    <th class="p-4 text-right">ဝယ်ဈေး</th>
+                    <th class="p-4 text-right">အရင်းဈေး</th>
                     <th class="p-4 text-right">လက်လီဈေး</th>
                     <th class="p-4 text-right">လက်ကားဈေး</th>
-                    <th class="p-4">ပွဲရုံ (Supplier)</th>
+                    <th class="p-4">ပေးသွင်းသူ (ပွဲရုံ)</th>
                     <th class="p-4 text-center">အခြေအနေ</th>
                     <th class="p-4 text-center">လုပ်ဆောင်ချက်</th>
                 </tr>
             </thead>
             <tbody id="pur-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200">
                 <tr>
-                    <td colspan="13" class="p-12 text-center text-slate-400 text-base">အဝယ်စာရင်း ဆွဲယူနေပါသည်...</td>
+                    <td colspan="13" class="p-12 text-center text-slate-400 text-base">အဝယ်စာရင်း မှတ်တမ်းများ ဆွဲယူနေပါသည်...</td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <!-- 15-Rows Pagination Footer Container (Window/Table အောက်စွန်းနှင့် တစ်သားတည်း ကွက်တိကျစေရန်) -->
+    <!-- 15-Rows Pagination Footer Container -->
     <div id="purchases-pagination" class="shrink-0"></div>
 </div>
 
-<!-- Add / Edit Purchase Modal -->
+<!-- Modal: Purchases Entry Form (Pro Standard) -->
 <div id="purchase-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-6xl w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[94vh]">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
         
         <!-- Modal Header -->
-        <div class="p-5 bg-emerald-600 text-white flex items-center justify-between shrink-0">
-            <div class="text-base font-bold flex items-center gap-2">
-                <i class="fa-solid fa-truck-ramp-box text-lg"></i>
+        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-base font-bold flex items-center gap-2.5">
+                <i class="fa-solid fa-cart-flatbed text-emerald-400"></i>
                 <span id="purchase-modal-title">အဝယ်စာရင်း (စတော့အဝင်) သွင်းမည်</span>
             </div>
-            <button type="button" id="btn-close-purchase-modal" class="text-white/80 hover:text-white text-lg cursor-pointer">
+            <button type="button" id="btn-close-purchase-modal" class="text-slate-400 hover:text-white text-lg cursor-pointer">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <!-- Modal Body -->
-        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <!-- Modal Body (Form) -->
+        <div class="p-6 space-y-5 overflow-y-auto flex-1">
             <input type="hidden" id="pur-edit-id" value="">
-            
-            <!-- Supplier & Payment Info -->
+
+            <!-- Supplier & Payment Row -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800">
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ပွဲရုံ / ပေးသွင်းသူ အမည် *</label>
-                    <input type="text" id="pur-supplier" required placeholder="ဥပမာ - ရွှေမန္တလေး ပွဲရုံ" class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပေးသွင်းသူ / ပွဲရုံ အမည် *</label>
+                    <input type="text" id="pur-supplier" placeholder="ဥပမာ - ရွှေမန်းပွဲရုံ" required
+                        class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ငွေပေးချေမှု ပုံစံ *</label>
-                    <select id="pur-payment-method" class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပေးချေမှု ပုံစံ *</label>
+                    <select id="pur-payment-method" class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                         <option value="cash">လက်ငင်း (Cash)</option>
-                        <option value="bank">ဘဏ်လွှဲ (Bank Transfer)</option>
-                        <option value="credit">အကြွေးဝယ် (Credit)</option>
+                        <option value="bank">ဘဏ်လွှဲ (Bank / KPay)</option>
+                        <option value="credit">အကြွေး (Credit Purchase)</option>
                     </select>
                 </div>
                 <div id="pur-bank-container" class="hidden">
-                    <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ဘဏ်အကောင့် (Bank)</label>
-                    <input type="text" id="pur-bank-name" placeholder="KPay / CB / KBZ" class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ဘဏ် / အကောင့်အမည် *</label>
+                    <input type="text" id="pur-bank-name" placeholder="ဥပမာ - KBZ Pay (09...)"
+                        class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
             </div>
 
-            <!-- Items Table Section -->
-            <div>
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">ဝယ်ယူမည့် ပစ္စည်းစာရင်း နှင့် ဈေးနှုန်းသတ်မှတ်ချက်များ</h3>
-                    <button type="button" id="btn-add-pur-item" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm">
+            <!-- Items Table Section inside Modal -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-boxes-stacked text-emerald-500"></i>
+                        <span>ဝယ်ယူမည့် ပစ္စည်းများစာရင်း</span>
+                    </span>
+                    <button type="button" id="btn-add-pur-item" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 font-bold text-xs rounded-xl border border-emerald-500/30 transition cursor-pointer flex items-center gap-1.5">
                         <i class="fa-solid fa-plus"></i>
-                        <span>အတန်းသစ် ထပ်တိုးမည်</span>
+                        <span>ပစ္စည်းစာကြောင်း ထပ်ထည့်မည်</span>
                     </button>
                 </div>
-                
-                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-x-auto min-h-[220px]">
-                    <table class="w-full text-left border-collapse min-w-[1050px]">
-                        <thead class="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-xs font-bold">
+
+                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
                             <tr>
-                                <th class="p-3 w-[34%]">ပစ္စည်းရှာဖွေခြင်း (Barcode / ကုတ် / အမည် / အသစ်)</th>
-                                <th class="p-3 w-[10%] text-center">အရေအတွက်</th>
-                                <th class="p-3 w-[13%] text-right">ဝယ်ဈေး</th>
-                                <th class="p-3 w-[17%]">လက်လီဈေး (+% or တိုက်ရိုက်) *</th>
-                                <th class="p-3 w-[17%]">လက်ကားဈေး (+% or တိုက်ရိုက်) *</th>
-                                <th class="p-3 w-[11%] text-right">သင့်ငွေ</th>
-                                <th class="p-3 text-center w-[4%]">#</th>
+                                <th class="p-3">ပစ္စည်း ရွေးချယ်ရန် / အသစ်ထည့်ရန်</th>
+                                <th class="p-3 w-28 text-center">အရေအတွက်</th>
+                                <th class="p-3 w-32 text-right">ဝယ်ဈေး (Cost)</th>
+                                <th class="p-3 w-36 text-right">လက်လီဈေး / %</th>
+                                <th class="p-3 w-36 text-right">လက်ကားဈေး / %</th>
+                                <th class="p-3 w-28 text-right">သင့်ငွေ</th>
+                                <th class="p-3 w-12 text-center">ဖျက်</th>
                             </tr>
                         </thead>
-                        <tbody id="pur-items-container" class="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-                            <!-- Dynamic Autocomplete Rows -->
+                        <tbody id="pur-items-container" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                            <!-- Dynamic Rows -->
                         </tbody>
-                        <tfoot class="bg-slate-50 dark:bg-slate-950 font-bold border-t border-slate-200 dark:border-slate-800">
-                            <tr>
-                                <td colspan="5" class="p-4 text-right text-slate-600 dark:text-slate-300 text-sm">စုစုပေါင်း ကုန်ကျငွေ (Total Amount) :</td>
-                                <td class="p-4 text-right text-emerald-600 dark:text-emerald-400 text-xl font-black font-mono tracking-tight" id="pur-total-amount">0</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
             </div>
         </div>
 
         <!-- Modal Footer -->
-        <div class="p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap justify-between items-center gap-3 shrink-0">
-            <div class="text-xs font-bold text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2 rounded-xl border border-amber-200 dark:border-amber-500/30">
-                <i class="fa-solid fa-circle-info mr-1.5"></i> လက်လီ/လက်ကားဈေး မပါလျှင် သိမ်း၍မရပါ။ ပစ္စည်းအသစ်အတွက် SKU ကို စနစ်က Auto သတ်မှတ်ပေးပါမည်။
+        <div class="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div class="text-base font-bold text-slate-700 dark:text-slate-300">
+                စုစုပေါင်းကျသင့်ငွေ: <span id="pur-total-amount" class="font-mono font-black text-emerald-600 dark:text-emerald-400 text-xl ml-1">0</span> ကျပ်
             </div>
-            <button type="button" id="btn-submit-purchase" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg transition cursor-pointer">
-                အတည်ပြု၍ စာရင်းသွင်းမည်
-            </button>
+            <div class="flex items-center gap-3">
+                <button type="button" id="btn-close-purchase-modal-2" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-sm rounded-xl transition cursor-pointer">
+                    ပယ်ဖျက်မည်
+                </button>
+                <button type="button" id="btn-submit-purchase" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition cursor-pointer">
+                    အတည်ပြု၍ စာရင်းသွင်းမည်
+                </button>
+            </div>
         </div>
     </div>
 </div>

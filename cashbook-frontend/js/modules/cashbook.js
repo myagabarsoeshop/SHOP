@@ -6,16 +6,16 @@ import { setKPI, getLocalTodayDate } from "../app.js";
 let entries = [];
 let categories = [];
 
-// Backend တွင် Category မရှိသေးပါက အသုံးပြုရန် Fallback Categories
+// Fallback Categories (English စာသားများ ဖယ်ရှားပြီး မြန်မာလိုသီးသန့် ပြုလုပ်ထားပါသည်)
 const FALLBACK_CATEGORIES = [
-    { id: 1, name: "အထည်ရောင်းရငွေ (POS Sale)", type: "INCOME" },
-    { id: 2, name: "အကြွေးပြန်ရငွေ (Debt Recovery)", type: "INCOME" },
-    { id: 3, name: "အခြားဝင်ငွေ (Other Income)", type: "INCOME" },
-    { id: 4, name: "ချည်ဝယ်ယူစရိတ် (Yarn Purchase)", type: "EXPENSE" },
-    { id: 5, name: "ရက်ကန်းလက်ခ / လုပ်အားခ (Weaving Wage)", type: "EXPENSE" },
-    { id: 6, name: "ဆိုင်အသုံးစရိတ် / မီးဖိုချောင် (Shop Expense)", type: "EXPENSE" },
-    { id: 7, name: "သယ်ယူပို့ဆောင်ခ / ကားခ (Transport)", type: "EXPENSE" },
-    { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ (Salary)", type: "EXPENSE" }
+    { id: 1, name: "အထည်ရောင်းရငွေ", type: "INCOME" },
+    { id: 2, name: "အကြွေးပြန်ရငွေ", type: "INCOME" },
+    { id: 3, name: "အခြားဝင်ငွေ", type: "INCOME" },
+    { id: 4, name: "ချည်ဝယ်ယူစရိတ်", type: "EXPENSE" },
+    { id: 5, name: "ရက်ကန်းလက်ခ / လုပ်အားခ", type: "EXPENSE" },
+    { id: 6, name: "ဆိုင်အသုံးစရိတ် / မီးဖိုချောင်", type: "EXPENSE" },
+    { id: 7, name: "သယ်ယူပို့ဆောင်ခ / ကားခ", type: "EXPENSE" },
+    { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ", type: "EXPENSE" }
 ];
 
 function escapeHtml(str) {
@@ -88,7 +88,6 @@ async function loadEntries() {
 
         const totalOut = Number(s.cash?.out || 0) + Number(s.bank?.out || 0);
 
-        // Update Top 4 Global KPI Boxes with proper color themes
         setKPI(1, "လက်ကျန် ငွေသား (Cash Net)", s.cash?.net || 0, "fa-money-bill-wave", "emerald");
         setKPI(2, "လက်ကျန် ဘဏ်ငွေ (Bank Net)", s.bank?.net || 0, "fa-building-columns", "blue");
         setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalOut, "fa-arrow-trend-down", "rose");
@@ -121,24 +120,31 @@ function renderTable(data) {
         const colorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
         const sign = isIncome ? "+" : "-";
 
+        // Inventory ကဲ့သို့ Edit နှင့် အနီရောင် Delete Icon ပါဝင်သော လုပ်ဆောင်ချက်ခလုတ်များ
+        const actionButtons = canDelete ? `
+            <div class="flex items-center justify-center gap-2">
+                <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-entry w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                </button>
+                <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-rose-500 hover:text-white transition cursor-pointer shadow-sm">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+            </div>
+        ` : `<span class="text-xs text-slate-400">-</span>`;
+
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition text-sm";
         row.innerHTML = `
             <td class="p-4 font-mono text-slate-500 dark:text-slate-400">${escapeHtml(item.entry_date || item.date)}</td>
             <td class="p-4">
-                <span class="px-3 py-1 rounded-lg text-xs font-bold ${isIncome ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'}">
+                <span class="px-3 py-1.5 rounded-lg text-sm font-bold ${isIncome ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'}">
                     ${escapeHtml(item.category_name || item.category || "General")}
                 </span>
             </td>
             <td class="p-4 max-w-xs truncate" title="${escapeHtml(item.description || '')}">${escapeHtml(item.description || '-')}</td>
             <td class="p-4 uppercase text-xs font-extrabold text-slate-500">${escapeHtml(item.payment_method || "cash")}</td>
             <td class="p-4 text-right font-black font-mono text-base ${colorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <td class="p-4 text-center">
-                ${canDelete ? `
-                <button data-id="${item.id}" class="btn-delete px-3 py-1.5 bg-slate-100 dark:bg-slate-900 hover:bg-rose-600 hover:text-white rounded-lg transition text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer">
-                    <i class="fa-solid fa-trash-can mr-1"></i> ဖျက်မည်
-                </button>` : `<span class="text-xs text-slate-400">-</span>`}
-            </td>
+            <td class="p-4 text-center">${actionButtons}</td>
         `;
         tbody.appendChild(row);
     });
@@ -171,7 +177,7 @@ function openModal(type) {
 
     const filteredCats = categories.filter(c => (c.type || c.entry_type || "").toUpperCase() === type);
     if (select) {
-        select.innerHTML = '<option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ ▼</option>';
+        select.innerHTML = '<option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>';
         filteredCats.forEach(c => {
             const opt = document.createElement("option");
             opt.value = c.id;

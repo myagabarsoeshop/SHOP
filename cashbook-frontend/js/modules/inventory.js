@@ -2,9 +2,17 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let products = [];
+let currentFilteredProducts = [];
 let branchesList = [];
+
+// စတော့စာရင်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -114,27 +122,32 @@ function filterAndRender() {
     const cat = document.getElementById("inv-category-filter")?.value || "";
     const kw = (document.getElementById("inv-search")?.value || "").trim().toLowerCase();
 
-    const filtered = products.filter(p => {
+    currentFilteredProducts = products.filter(p => {
         if (cat && p.category !== cat) return false;
         if (!kw) return true;
         const hay = `${p.sku || ""} ${p.barcode || ""} ${p.category || ""} ${p.item_name || ""} ${p.pattern || ""} ${p.color || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
-    renderTable(filtered);
+    pagination.reset();
+    renderTable();
 }
 
-function renderTable(list) {
+function renderTable() {
     const tbody = document.getElementById("inv-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (currentFilteredProducts.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-slate-400 font-bold text-base">အထည်စာရင်း မတွေ့ရှိပါ</td></tr>`;
+        pagination.renderControls("inventory-pagination");
         return;
     }
 
-    list.forEach(item => {
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredProducts);
+
+    pageItems.forEach(item => {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
         const unit = item.size || "ထည်";
@@ -226,6 +239,9 @@ function renderTable(list) {
             };
         });
     }
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("inventory-pagination");
 }
 
 // --- Stock Transfer Logic (ဆိုင်ခွဲအချင်းချင်း ပို့ဆောင်ခြင်း) ---
@@ -246,7 +262,6 @@ function openTransferModal(prod) {
         qtyInput.value = 1;
     }
 
-    // ဆိုင်ခွဲရွေးချယ်မှုတွင် လက်ရှိဆိုင်ကို ဖယ်ထုတ်ပြီး ကျန်ဆိုင်များကိုသာ ထည့်ပေးခြင်း
     if (destSelect) {
         destSelect.innerHTML = `<option value="">-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
@@ -439,14 +454,15 @@ async function submitProduct(e) {
 
 // --- CSV Export Logic ---
 function exportToCSV() {
-    if (products.length === 0) {
+    const dataToExport = currentFilteredProducts.length > 0 ? currentFilteredProducts : products;
+    if (dataToExport.length === 0) {
         alert("ထုတ်ယူရန် စာရင်းမရှိပါ။");
         return;
     }
     const currentYear = new Date().getFullYear();
     let csvContent = "SKU,Barcode,Category,Item Name,Pattern,Color,Unit/Size,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
     
-    products.forEach(p => {
+    dataToExport.forEach(p => {
         const row = [
             `"${escapeHtml(p.sku || '')}"`,
             `"${escapeHtml(p.barcode || '')}"`,

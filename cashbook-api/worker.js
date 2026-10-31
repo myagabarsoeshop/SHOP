@@ -1157,7 +1157,20 @@ export default {
             // =================================================================
             if (path === "/api/reports/monthly-stock" && method === "GET") {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
-                const branchId = url.searchParams.get("branch_id"); // null သို့မဟုတ် branch_id
+                const branchId = url.searchParams.get("branch_id");
+
+                // waste_records ဇယား မရှိသေးပါက Auto ဖန်တီးပေးခြင်း
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS waste_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        branch_id INTEGER NOT NULL DEFAULT 1,
+                        product_id INTEGER NOT NULL,
+                        quantity REAL NOT NULL,
+                        reason TEXT,
+                        created_by INTEGER DEFAULT 1,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run();
 
                 // ၁။ ပစ္စည်းများ အားလုံးနှင့် လက်ရှိ စတော့လက်ကျန်များ ဆွဲယူခြင်း
                 let prodSql = `
@@ -1176,57 +1189,75 @@ export default {
                 const { results: products } = await env.DB.prepare(prodSql).bind(...prodBindings).all();
 
                 // ၂။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အဝင် (Purchases) တွက်ချက်ခြင်း
-                let purchSql = `
-                    SELECT 
-                        pi.product_id,
-                        CAST(strftime('%m', p.created_at) AS INTEGER) AS m,
-                        SUM(pi.quantity) AS qty
-                    FROM purchase_items pi
-                    JOIN purchases p ON pi.purchase_id = p.id
-                    WHERE strftime('%Y', p.created_at) = ?
-                `;
-                const purchBindings = [year];
-                if (branchId && branchId !== "ALL") {
-                    purchSql += ` AND p.branch_id = ? `;
-                    purchBindings.push(Number(branchId));
+                let purchases = [];
+                try {
+                    let purchSql = `
+                        SELECT 
+                            pi.product_id,
+                            CAST(strftime('%m', p.created_at) AS INTEGER) AS m,
+                            SUM(pi.quantity) AS qty
+                        FROM purchase_items pi
+                        JOIN purchases p ON pi.purchase_id = p.id
+                        WHERE strftime('%Y', p.created_at) = ?
+                    `;
+                    const purchBindings = [year];
+                    if (branchId && branchId !== "ALL") {
+                        purchSql += ` AND p.branch_id = ? `;
+                        purchBindings.push(Number(branchId));
+                    }
+                    purchSql += ` GROUP BY pi.product_id, m `;
+                    const res = await env.DB.prepare(purchSql).bind(...purchBindings).all();
+                    purchases = res.results || [];
+                } catch (e) {
+                    purchases = [];
                 }
-                purchSql += ` GROUP BY pi.product_id, m `;
-                const { results: purchases } = await env.DB.prepare(purchSql).bind(...purchBindings).all();
 
                 // ၃။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အထွက် (Sales) တွက်ချက်ခြင်း
-                let saleSql = `
-                    SELECT 
-                        si.product_id,
-                        CAST(strftime('%m', s.created_at) AS INTEGER) AS m,
-                        SUM(si.quantity) AS qty
-                    FROM sale_items si
-                    JOIN sales s ON si.sale_id = s.id
-                    WHERE strftime('%Y', s.created_at) = ?
-                `;
-                const saleBindings = [year];
-                if (branchId && branchId !== "ALL") {
-                    saleSql += ` AND s.branch_id = ? `;
-                    saleBindings.push(Number(branchId));
+                let sales = [];
+                try {
+                    let saleSql = `
+                        SELECT 
+                            si.product_id,
+                            CAST(strftime('%m', s.created_at) AS INTEGER) AS m,
+                            SUM(si.quantity) AS qty
+                        FROM sale_items si
+                        JOIN sales s ON si.sale_id = s.id
+                        WHERE strftime('%Y', s.created_at) = ?
+                    `;
+                    const saleBindings = [year];
+                    if (branchId && branchId !== "ALL") {
+                        saleSql += ` AND s.branch_id = ? `;
+                        saleBindings.push(Number(branchId));
+                    }
+                    saleSql += ` GROUP BY si.product_id, m `;
+                    const res = await env.DB.prepare(saleSql).bind(...saleBindings).all();
+                    sales = res.results || [];
+                } catch (e) {
+                    sales = [];
                 }
-                saleSql += ` GROUP BY si.product_id, m `;
-                const { results: sales } = await env.DB.prepare(saleSql).bind(...saleBindings).all();
 
                 // ၄။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် ပျက်စီး/အလေအလွင့် (Waste) တွက်ချက်ခြင်း
-                let wasteSql = `
-                    SELECT 
-                        product_id,
-                        CAST(strftime('%m', created_at) AS INTEGER) AS m,
-                        SUM(quantity) AS qty
-                    FROM waste_records
-                    WHERE strftime('%Y', created_at) = ?
-                `;
-                const wasteBindings = [year];
-                if (branchId && branchId !== "ALL") {
-                    wasteSql += ` AND branch_id = ? `;
-                    wasteBindings.push(Number(branchId));
+                let waste = [];
+                try {
+                    let wasteSql = `
+                        SELECT 
+                            product_id,
+                            CAST(strftime('%m', created_at) AS INTEGER) AS m,
+                            SUM(quantity) AS qty
+                        FROM waste_records
+                        WHERE strftime('%Y', created_at) = ?
+                    `;
+                    const wasteBindings = [year];
+                    if (branchId && branchId !== "ALL") {
+                        wasteSql += ` AND branch_id = ? `;
+                        wasteBindings.push(Number(branchId));
+                    }
+                    wasteSql += ` GROUP BY product_id, m `;
+                    const res = await env.DB.prepare(wasteSql).bind(...wasteBindings).all();
+                    waste = res.results || [];
+                } catch (e) {
+                    waste = [];
                 }
-                wasteSql += ` GROUP BY product_id, m `;
-                const { results: waste } = await env.DB.prepare(wasteSql).bind(...wasteBindings).all();
 
                 // ၅။ Memory ထဲတွင် Map ပြုလုပ်၍ လစဉ် လက်ကျန် Matrix တွက်ချက်ခြင်း
                 const report = (products || []).map(prod => {
@@ -1235,17 +1266,17 @@ export default {
                     const outMap = {};
 
                     // Purchases Add
-                    (purchases || []).filter(r => r.product_id === pid).forEach(r => {
+                    purchases.filter(r => r.product_id === pid).forEach(r => {
                         inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
                     // Sales Add
-                    (sales || []).filter(r => r.product_id === pid).forEach(r => {
+                    sales.filter(r => r.product_id === pid).forEach(r => {
                         outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
                     // Waste Add
-                    (waste || []).filter(r => r.product_id === pid).forEach(r => {
+                    waste.filter(r => r.product_id === pid).forEach(r => {
                         outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
@@ -1253,7 +1284,6 @@ export default {
                     let totalOut = 0;
                     const monthlyBalances = {};
 
-                    // လစဉ် အဝင်/အထွက် ပေါင်းလဒ်
                     for (let m = 1; m <= 12; m++) {
                         const mIn = inMap[m] || 0;
                         const mOut = outMap[m] || 0;
@@ -1261,9 +1291,7 @@ export default {
                         totalOut += mOut;
                     }
 
-                    // လစဉ် Cumulative လက်ကျန် ခန့်မှန်းတွက်ချက်ခြင်း
                     let running = Number(prod.current_balance || 0);
-                    // လက်ရှိလက်ကျန်မှ နောက်ပြန်ဆွဲ၍ လအလိုက် ပုံဖော်ခြင်း
                     for (let m = 12; m >= 1; m--) {
                         monthlyBalances[m] = Math.max(0, running);
                         const mIn = inMap[m] || 0;
@@ -1286,14 +1314,3 @@ export default {
 
                 return jsonResponse(report);
             }
-
-            return errorResponse(`Route မတွေ့ပါ: ${method} ${path}`, 404);
-        } catch (err) {
-            return errorResponse(`Server Error: ${err.message}`, 500);
-        }
-    },
-
-    async scheduled(event, env, ctx) {
-        console.log(`[Cron] Daily maintenance triggered at ${new Date().toISOString()}`);
-    }
-};

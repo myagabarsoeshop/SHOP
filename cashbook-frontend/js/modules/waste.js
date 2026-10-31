@@ -2,8 +2,16 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let wasteLogs = [];
+let currentFilteredWaste = [];
+
+// အလေအလွင့်မှတ်တမ်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -19,6 +27,7 @@ export async function initWaste() {
 }
 
 function bindEvents() {
+    // Search Box (စာရင်းရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
     document.getElementById("waste-search")?.addEventListener("input", filterAndRender);
     document.getElementById("btn-export-waste-csv")?.addEventListener("click", exportWasteToCSV);
     
@@ -40,9 +49,11 @@ async function loadWasteLogs() {
     try {
         const res = await api.get("/waste", { branch_id: branchId });
         wasteLogs = res.data || [];
+        currentFilteredWaste = [...wasteLogs];
 
         updateWasteKPIs();
-        renderTable(wasteLogs);
+        pagination.reset();
+        renderTable();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
@@ -65,30 +76,34 @@ function updateWasteKPIs() {
 function filterAndRender() {
     const kw = (document.getElementById("waste-search")?.value || "").trim().toLowerCase();
 
-    const filtered = wasteLogs.filter(w => {
+    currentFilteredWaste = wasteLogs.filter(w => {
         if (!kw) return true;
         const hay = `${w.reference_no || ""} ${w.sku || ""} ${w.barcode || ""} ${w.category || ""} ${w.item_name || ""} ${w.pattern || ""} ${w.color || ""} ${w.reason || ""} ${w.recorded_by_name || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
-    renderTable(filtered);
+    pagination.reset();
+    renderTable();
 }
 
-function renderTable(list) {
+function renderTable() {
     const tbody = document.getElementById("waste-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (currentFilteredWaste.length === 0) {
         tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-slate-400 font-bold text-base">ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</td></tr>`;
+        pagination.renderControls("waste-pagination");
         return;
     }
 
-    list.forEach(w => {
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredWaste);
+
+    pageItems.forEach(w => {
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
         const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
 
-        // Admin ဖြစ်မှသာ ပြင်ဆင်ခွင့် / ဖျက်ခွင့် ခလုတ်များ ပေါ်မည်
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
                 <button type="button" data-id="${w.id}" title="ပြင်ဆင်မည်" class="btn-edit-waste w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
@@ -160,6 +175,9 @@ function renderTable(list) {
             btn.onclick = () => deleteWasteLog(Number(btn.dataset.id));
         });
     }
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("waste-pagination");
 }
 
 function openEditWasteModal(log) {
@@ -208,14 +226,15 @@ async function deleteWasteLog(id) {
 }
 
 function exportWasteToCSV() {
-    if (wasteLogs.length === 0) {
+    const dataToExport = currentFilteredWaste.length > 0 ? currentFilteredWaste : wasteLogs;
+    if (dataToExport.length === 0) {
         alert("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
         return;
     }
     const currentYear = new Date().getFullYear();
     let csvContent = "Reference No,Date,SKU,Barcode,Category,Item Name,Color,Size,Quantity,Unit Cost,Total Loss,Reason,Recorded By\n";
 
-    wasteLogs.forEach(w => {
+    dataToExport.forEach(w => {
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
         const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
 

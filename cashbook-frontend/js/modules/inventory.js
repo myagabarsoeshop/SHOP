@@ -33,6 +33,13 @@ function bindEvents() {
         document.getElementById("product-modal")?.classList.add("hidden");
     });
     document.getElementById("product-form")?.addEventListener("submit", submitProduct);
+    
+    // Waste Modal Events
+    document.getElementById("btn-close-waste-modal")?.addEventListener("click", () => {
+        document.getElementById("waste-modal")?.classList.add("hidden");
+    });
+    document.getElementById("waste-form")?.addEventListener("submit", submitWaste);
+
     document.getElementById("inv-category-filter")?.addEventListener("change", filterAndRender);
     document.getElementById("inv-search")?.addEventListener("input", filterAndRender);
 }
@@ -113,14 +120,28 @@ function renderTable(list) {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
 
-        const adminActions = state.isAdmin() ? `
+        // Admin ဖြစ်မှသာ ခလုတ်များ နှိပ်ခွင့်ရှိမည်၊ မဟုတ်လျှင် Disabled ပုံစံ အရောင်မှိန်မည်
+        const actionButtons = state.isAdmin() ? `
             <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                 <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button type="button" data-id="${item.id}" title="အလေအလွင့်/ပျက်စီး စာရင်းသွင်းမည်" class="btn-waste-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-box-open"></i>
             </button>
             <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
-        ` : "";
+        ` : `
+            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
+                <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
+                <i class="fa-solid fa-box-open"></i>
+            </button>
+            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        `;
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
@@ -152,35 +173,35 @@ function renderTable(list) {
             </td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    ${adminActions}
-                    <button type="button" data-id="${item.id}" title="အလေအလွင့်/ပျက်စီး စာရင်းသွင်းမည်" class="btn-waste-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                        <i class="fa-solid fa-box-open"></i>
-                    </button>
+                    ${actionButtons}
                 </div>
             </td>
         `;
         tbody.appendChild(tr);
     });
 
-    tbody.querySelectorAll(".btn-edit-prod").forEach(btn => {
-        btn.onclick = () => {
-            const prod = products.find(p => p.id === Number(btn.dataset.id));
-            if (prod) openProductModal(prod);
-        };
-    });
+    if (state.isAdmin()) {
+        tbody.querySelectorAll(".btn-edit-prod").forEach(btn => {
+            btn.onclick = () => {
+                const prod = products.find(p => p.id === Number(btn.dataset.id));
+                if (prod) openProductModal(prod);
+            };
+        });
 
-    tbody.querySelectorAll(".btn-waste-prod").forEach(btn => {
-        btn.onclick = () => {
-            alert("အလေအလွင့်/ပျက်စီး (Waste Stock) စာရင်းသွင်းရန် မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။");
-        };
-    });
+        tbody.querySelectorAll(".btn-waste-prod").forEach(btn => {
+            btn.onclick = () => {
+                const prod = products.find(p => p.id === Number(btn.dataset.id));
+                if (prod) openWasteModal(prod);
+            };
+        });
 
-    tbody.querySelectorAll(".btn-delete-prod").forEach(btn => {
-        btn.onclick = () => {
-            const id = Number(btn.dataset.id);
-            deleteProduct(id);
-        };
-    });
+        tbody.querySelectorAll(".btn-delete-prod").forEach(btn => {
+            btn.onclick = () => {
+                const id = Number(btn.dataset.id);
+                deleteProduct(id);
+            };
+        });
+    }
 }
 
 async function deleteProduct(id) {
@@ -198,6 +219,56 @@ function safeSetValue(id, value) {
     if (el) el.value = value;
 }
 
+// --- Waste Modal Logic ---
+function openWasteModal(prod) {
+    const modal = document.getElementById("waste-modal");
+    document.getElementById("waste-form")?.reset();
+
+    safeSetValue("waste-prod-id", prod.id);
+    safeSetValue("waste-unit-cost", prod.cost_price || 0);
+    safeSetValue("waste-prod-name", `${prod.item_name} (${prod.sku || "-"})`);
+    safeSetValue("waste-current-stock", prod.current_stock || 0);
+    
+    const qtyInput = document.getElementById("waste-qty");
+    if (qtyInput) {
+        qtyInput.max = prod.current_stock || 0;
+    }
+
+    modal?.classList.remove("hidden");
+}
+
+async function submitWaste(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-submit-waste");
+    if (btn) btn.disabled = true;
+
+    const prodId = document.getElementById("waste-prod-id")?.value;
+    const branchId = state.currentBranch?.id || 1;
+    const qty = parseInt(document.getElementById("waste-qty")?.value, 10);
+    const unitCost = parseFloat(document.getElementById("waste-unit-cost")?.value) || 0;
+    const reason = document.getElementById("waste-reason")?.value.trim();
+
+    const payload = {
+        branch_id: branchId,
+        product_id: parseInt(prodId, 10),
+        quantity: qty,
+        unit_cost: unitCost,
+        reason: reason
+    };
+
+    try {
+        await api.post("/waste", payload); 
+        document.getElementById("waste-modal")?.classList.add("hidden");
+        await loadInventory(); 
+        alert("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ လက်ကျန်ထဲမှ နှုတ်ပြီးပါပြီ။");
+    } catch (err) {
+        alert("စာရင်းသွင်း၍မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+// --- Edit Product Logic (Admin) ---
 function openProductModal(prod = null) {
     const modal = document.getElementById("product-modal");
     const title = document.getElementById("product-modal-title");

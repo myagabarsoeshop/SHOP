@@ -396,30 +396,70 @@ export default {
             }
 
             // =================================================================
-            // 6. WASTE / DAMAGE LOGS (အလေအလွင့်)
+            // 6. WASTE / DAMAGE LOGS (အလေအလွင့် စာရင်း ရယူခြင်း နှင့် မှတ်တမ်းတင်ခြင်း)
             // =================================================================
+            
+            // (၁) အလေအလွင့် စာရင်းများကို ဆွဲယူပြသပေးမည့် GET Route
+            if (path === "/api/waste" && method === "GET") {
+                const branchId = url.searchParams.get("branch_id") || 1;
+                const sql = `
+                    SELECT 
+                        w.id, w.reference_no, w.branch_id, w.quantity, w.unit_cost, w.reason, w.created_at,
+                        p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
+                        COALESCE(u.full_name, 'Admin') AS recorded_by_name
+                    FROM waste_logs w
+                    INNER JOIN products p ON w.product_id = p.id
+                    LEFT JOIN users u ON w.recorded_by = u.id
+                    WHERE w.branch_id = ?
+                    ORDER BY w.id DESC LIMIT 300
+                `;
+                const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all();
+                return jsonResponse(results || []);
+            }
+
+            // (၂) အလေအလွင့် စာရင်း အသစ်သွင်းမည့် POST Route
             if (path === "/api/waste" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const userId = 1;
-                
+                const branchId = Number(body.branch_id);
+                const productId = Number(body.product_id);
+                const quantity = parseInt(body.quantity, 10);
+                const unitCost = parseFloat(body.unit_cost) || 0;
+                const reason = String(body.reason || "").trim();
+                const userId = Number(body.recorded_by || body.userId || 1);
+
+                // Validation စစ်ဆေးခြင်း
+                if (!branchId || !productId || isNaN(quantity) || quantity <= 0) {
+                    return errorResponse("ဆိုင်ခွဲ၊ ပစ္စည်းနှင့် အလေအလွင့် အရေအတွက် မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
+                }
+
+                // ဆိုင်ခွဲရှိ လက်ကျန်စတော့ စစ်ဆေးခြင်း
+                const inv = await env.DB.prepare(`
+                    SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
+                `).bind(branchId, productId).first();
+
+                const currentStock = Number(inv?.quantity || 0);
+                if (currentStock < quantity) {
+                    return errorResponse(`လက်ကျန်စတော့ (${currentStock}) ထက် ပိုမို၍ အလေအလွင့် သွင်း၍မရပါ`, 400);
+                }
+
                 const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-                const refNo = `WST-${body.branch_id}-${dateStr}`;
+                const refNo = `WST-${branchId}-${dateStr}`;
 
                 const batchStatements = [
                     env.DB.prepare(`
                         INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, recorded_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `).bind(refNo, Number(body.branch_id), Number(body.product_id), Number(body.quantity), parseFloat(body.unit_cost), String(body.reason), userId),
+                    `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ပျက်စီး/အလေအလွင့်", userId),
                     
                     env.DB.prepare(`
                         UPDATE branch_inventory 
                         SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
                         WHERE branch_id = ? AND product_id = ?
-                    `).bind(Number(body.quantity), Number(body.branch_id), Number(body.product_id))
+                    `).bind(quantity, branchId, productId)
                 ];
 
                 await env.DB.batch(batchStatements);
-                return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။" }, 201);
+                return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
             }
 
             // =================================================================

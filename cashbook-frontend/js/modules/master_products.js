@@ -1,20 +1,14 @@
-// cashbook-frontend/js/modules/stock_report.js
+// cashbook-frontend/js/modules/master_products.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
-let rawReportData = [];
-let currentFilteredReport = [];
-let branchesList = [];
-let selectedYear = new Date().getFullYear();
+let masterProducts = [];
+let currentFilteredMaster = [];
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-// စတော့အစီရင်ခံစာအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
-    onPageChange: () => renderTable()
+    onPageChange: () => renderMasterTable()
 });
 
 function escapeHtml(str) {
@@ -25,294 +19,200 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;");
 }
 
-export async function initStockReport() {
-    setupYearOptions();
-    bindEvents();
-    await loadBranches();
-    await fetchReportData();
-}
-
-function setupYearOptions() {
-    const yearSelect = document.getElementById("sr-year-select");
-    if (!yearSelect) return;
-    yearSelect.innerHTML = "";
-    
-    const currYear = new Date().getFullYear();
-    for (let y = currYear - 1; y <= currYear + 2; y++) {
-        const opt = document.createElement("option");
-        opt.value = y;
-        opt.textContent = `${y} ခုနှစ်`;
-        if (y === currYear) opt.selected = true;
-        yearSelect.appendChild(opt);
+export async function initMasterProducts() {
+    if (!state.isAdmin()) {
+        alert("ဤစာမျက်နှာကို Admin သာလျှင် အသုံးပြုခွင့်ရှိပါသည်။");
+        return;
     }
-    selectedYear = currYear;
+    bindEvents();
+    await loadMasterProducts();
 }
 
 function bindEvents() {
-    document.getElementById("sr-search")?.addEventListener("input", filterAndRender);
-    document.getElementById("sr-category-select")?.addEventListener("change", filterAndRender);
-
-    document.getElementById("sr-branch-select")?.addEventListener("change", () => {
-        fetchReportData();
+    document.getElementById("btn-add-master-product")?.addEventListener("click", () => openMasterModal(null));
+    document.getElementById("btn-close-master-modal")?.addEventListener("click", () => {
+        document.getElementById("master-product-modal")?.classList.add("hidden");
     });
-
-    document.getElementById("sr-year-select")?.addEventListener("change", (e) => {
-        selectedYear = parseInt(e.target.value, 10);
-        updateTableHeaderYears();
-        fetchReportData();
-    });
-
-    document.getElementById("btn-export-sr-csv")?.addEventListener("click", exportStockReportToCSV);
+    document.getElementById("master-product-form")?.addEventListener("submit", submitMasterProduct);
+    document.getElementById("master-search")?.addEventListener("input", filterAndRenderMaster);
 }
 
-async function loadBranches() {
-    const select = document.getElementById("sr-branch-select");
-    if (!select) return;
-
-    try {
-        const res = await api.get("/branches");
-        branchesList = res.data || [];
-        select.innerHTML = "";
-
-        if (state.isAdmin()) {
-            select.innerHTML = `<option value="ALL">🏢 ဆိုင်အားလုံး စုစုပေါင်း</option>`;
-            branchesList.forEach(b => {
-                select.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`;
-            });
-            select.disabled = false;
-        } else {
-            const currentBranch = state.currentBranch || branchesList[0];
-            select.innerHTML = `<option value="${currentBranch.id}">${escapeHtml(currentBranch.name)}</option>`;
-            select.disabled = true;
-        }
-    } catch (err) {
-        console.error("Failed to load branches for report:", err);
-    }
-}
-
-function updateTableHeaderYears() {
-    const theadRow = document.getElementById("sr-table-header");
-    if (!theadRow) return;
-
-    const shortYear = String(selectedYear).slice(-2);
-    let html = `
-        <th class="p-4 w-14 text-center">NO</th>
-        <th class="p-4 w-32">Category</th>
-        <th class="p-4 w-56">Item Name</th>
-    `;
-
-    MONTH_NAMES.forEach(m => {
-        html += `<th class="p-3 text-center bg-slate-100/70 dark:bg-slate-900/80 font-mono">${m} ${shortYear}</th>`;
-    });
-
-    html += `
-        <th class="p-4 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400">စုစုပေါင်းအဝင်</th>
-        <th class="p-4 text-right bg-rose-50/50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400">စုစုပေါင်းအထွက်</th>
-        <th class="p-4 text-right bg-blue-50/50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400">လက်ရှိလက်ကျန်</th>
-        <th class="p-4 text-right bg-amber-50/50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400">စတော့တန်ဖိုး</th>
-    `;
-    theadRow.innerHTML = html;
-}
-
-async function fetchReportData() {
-    const tbody = document.getElementById("sr-table-body");
+async function loadMasterProducts() {
+    const tbody = document.getElementById("master-table-body");
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>`;
     }
 
-    const branchVal = document.getElementById("sr-branch-select")?.value || "ALL";
-
     try {
-        updateTableHeaderYears();
-
-        const params = { year: selectedYear };
-        if (branchVal !== "ALL") params.branch_id = branchVal;
-
-        const res = await api.get("/reports/monthly-stock", params);
-        rawReportData = res.data || [];
-        currentFilteredReport = [...rawReportData];
-
-        populateCategoryDropdown(rawReportData);
-        updateStockReportKPIs(rawReportData);
+        const res = await api.get("/products");
+        masterProducts = res.data || [];
+        currentFilteredMaster = [...masterProducts];
         pagination.reset();
-        filterAndRender();
+        renderMasterTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center text-rose-500 font-bold">စာရင်းဆွဲယူ၍ မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center text-rose-500 font-bold">ဗဟိုစာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
-}
-
-function populateCategoryDropdown(data) {
-    const select = document.getElementById("sr-category-select");
-    if (!select) return;
-    const currentVal = select.value;
-    const cats = [...new Set(data.map(i => i.category).filter(Boolean))];
-    select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${data.length})</option>`;
-    cats.forEach(c => {
-        select.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
-    });
-    if (currentVal) select.value = currentVal;
-}
-
-function updateStockReportKPIs(data) {
-    const totalCurrentStock = data.reduce((sum, item) => sum + Number(item.current_balance || 0), 0);
-    const totalStockValue = data.reduce((sum, item) => sum + (Number(item.current_balance || 0) * Number(item.cost_price || 0)), 0);
-    const totalInbound = data.reduce((sum, item) => sum + Number(item.total_in || 0), 0);
-    const totalOutbound = data.reduce((sum, item) => sum + Number(item.total_out || 0), 0);
-
-    setKPI(1, "လက်ရှိ စုစုပေါင်း လက်ကျန်", totalCurrentStock, "fa-boxes-stacked", "emerald");
-    setKPI(2, "စုစုပေါင်း စတော့တန်ဖိုး", totalStockValue, "fa-sack-dollar", "blue");
-    setKPI(3, "ယခုနှစ် စုစုပေါင်း အဝင်", totalInbound, "fa-dolly", "purple");
-    setKPI(4, "ယခုနှစ် စုစုပေါင်း အထွက်", totalOutbound, "fa-truck-ramp-box", "amber");
 }
 
 function updateFooterTotals(list) {
-    const totalIn = list.reduce((sum, item) => sum + Number(item.total_in || 0), 0);
-    const totalOut = list.reduce((sum, item) => sum + Number(item.total_out || 0), 0);
-    const totalStock = list.reduce((sum, item) => sum + Number(item.current_balance || 0), 0);
-    const totalValue = list.reduce((sum, item) => sum + (Number(item.current_balance || 0) * Number(item.cost_price || 0)), 0);
+    const totalCount = list.length;
+    const totalCost = list.reduce((sum, item) => sum + Number(item.cost_price || 0), 0);
+    const totalRetail = list.reduce((sum, item) => sum + Number(item.retail_price || 0), 0);
+    const totalWholesale = list.reduce((sum, item) => sum + Number(item.wholesale_price || 0), 0);
 
-    const inEl = document.getElementById("sr-grand-in");
-    const outEl = document.getElementById("sr-grand-out");
-    const stockEl = document.getElementById("sr-grand-stock");
-    const valEl = document.getElementById("sr-grand-value");
+    const countEl = document.getElementById("master-total-count");
+    const costEl = document.getElementById("master-total-cost");
+    const retailEl = document.getElementById("master-total-retail");
+    const wholesaleEl = document.getElementById("master-total-wholesale");
 
-    if (inEl) inEl.textContent = `+${totalIn.toLocaleString()}`;
-    if (outEl) outEl.textContent = `-${totalOut.toLocaleString()}`;
-    if (stockEl) stockEl.textContent = totalStock.toLocaleString();
-    if (valEl) valEl.textContent = `${totalValue.toLocaleString()} Ks`;
+    if (countEl) countEl.textContent = totalCount.toLocaleString();
+    if (costEl) costEl.textContent = totalCost.toLocaleString();
+    if (retailEl) retailEl.textContent = totalRetail.toLocaleString();
+    if (wholesaleEl) wholesaleEl.textContent = totalWholesale.toLocaleString();
 }
 
-function filterAndRender() {
-    const kw = (document.getElementById("sr-search")?.value || "").trim().toLowerCase();
-    const cat = document.getElementById("sr-category-select")?.value || "";
+function filterAndRenderMaster() {
+    const kw = (document.getElementById("master-search")?.value || "").trim().toLowerCase();
 
-    currentFilteredReport = rawReportData.filter(item => {
-        if (cat && item.category !== cat) return false;
+    currentFilteredMaster = masterProducts.filter(p => {
         if (!kw) return true;
-        const hay = `${item.sku || ""} ${item.item_name || ""} ${item.category || ""}`.toLowerCase();
+        const hay = `${p.sku || ""} ${p.barcode || ""} ${p.category || ""} ${p.item_name || ""} ${p.pattern || ""} ${p.color || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
     pagination.reset();
-    renderTable();
+    renderMasterTable();
 }
 
-function renderTable() {
-    const tbody = document.getElementById("sr-table-body");
+function renderMasterTable() {
+    const tbody = document.getElementById("master-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    updateFooterTotals(currentFilteredReport);
+    // Footer Total တွက်ချက်မှု Update လုပ်ခြင်း
+    updateFooterTotals(currentFilteredMaster);
 
-    if (currentFilteredReport.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center text-slate-400 font-bold text-base">စတော့မှတ်တမ်း မတွေ့ရှိပါ</td></tr>`;
-        pagination.renderControls("stock-report-pagination");
+    if (currentFilteredMaster.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-slate-400 font-bold text-base">ဗဟိုကုန်ပစ္စည်းစာရင်း မတွေ့ရှိပါ</td></tr>`;
+        pagination.renderControls("master-products-pagination");
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
-    const pageItems = pagination.getPageItems(currentFilteredReport);
-    const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
+    const pageItems = pagination.getPageItems(currentFilteredMaster);
 
-    pageItems.forEach((item, index) => {
+    pageItems.forEach(item => {
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
-
-        const currentBal = Number(item.current_balance || 0);
-        const costPrice = Number(item.cost_price || 0);
-        const valuation = currentBal * costPrice;
-
-        let rowHtml = `
-            <td class="p-4 text-center text-slate-400 font-mono text-sm">${startIdx + index + 1}</td>
+        tr.innerHTML = `
+            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
+                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(item.sku || "-")}</div>
+                <div>${escapeHtml(item.barcode || "")}</div>
+            </td>
             <td class="p-4">
-                <span class="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
-                    ${escapeHtml(item.category || "-")}
+                <span class="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-sm font-bold">
+                    ${escapeHtml(item.category)}
                 </span>
             </td>
             <td class="p-4">
                 <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(item.item_name)}</div>
-                <div class="text-xs text-slate-400 font-mono">${escapeHtml(item.sku || "-")}</div>
+                <div class="text-sm text-slate-400">${escapeHtml(item.pattern || "-")}</div>
+            </td>
+            <td class="p-4 text-sm">
+                <div>${escapeHtml(item.color || "-")}</div>
+                <div class="text-slate-400">${escapeHtml(item.size || "Free Size")}</div>
+            </td>
+            <td class="p-4 text-right font-mono text-base text-slate-500">${Number(item.cost_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(item.retail_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(item.wholesale_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-center">
+                <button type="button" data-id="${item.id}" title="ဈေးနှုန်းနှင့် အချက်အလက် ပြင်မည်" class="btn-edit-master w-9 h-9 inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
             </td>
         `;
-
-        // 12 Months Closing Balances (m1 to m12)
-        for (let m = 1; m <= 12; m++) {
-            const mQty = Number(item.monthly_balances?.[m] ?? item[`m${m}`] ?? 0);
-            rowHtml += `
-                <td class="p-3 text-center font-mono ${mQty === 0 ? 'text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-200 font-bold'} text-sm">
-                    ${mQty.toLocaleString()}
-                </td>
-            `;
-        }
-
-        rowHtml += `
-            <td class="p-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10 text-base">
-                +${Number(item.total_in || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50/30 dark:bg-rose-950/10 text-base">
-                -${Number(item.total_out || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-black text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/10 text-base">
-                ${currentBal.toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/10 text-base">
-                ${valuation.toLocaleString()} Ks
-            </td>
-        `;
-
-        tr.innerHTML = rowHtml;
         tbody.appendChild(tr);
     });
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
-    pagination.renderControls("stock-report-pagination");
-}
-
-function exportStockReportToCSV() {
-    const dataToExport = currentFilteredReport.length > 0 ? currentFilteredReport : rawReportData;
-    if (!dataToExport || dataToExport.length === 0) {
-        return alert("ထုတ်ယူရန် အချက်အလက် မရှိသေးပါ");
-    }
-
-    const shortYear = String(selectedYear).slice(-2);
-    let csv = `NO,Category,Item Name,SKU,`;
-    MONTH_NAMES.forEach(m => { csv += `${m} ${shortYear},`; });
-    csv += `Total In,Total Out,Current Balance,Cost Price,Stock Value (MMK)\n`;
-
-    dataToExport.forEach((item, idx) => {
-        const bal = Number(item.current_balance || 0);
-        const cost = Number(item.cost_price || 0);
-        const val = bal * cost;
-
-        let row = [
-            idx + 1,
-            `"${(item.category || '').replace(/"/g, '""')}"`,
-            `"${(item.item_name || '').replace(/"/g, '""')}"`,
-            `"${(item.sku || '').replace(/"/g, '""')}"`
-        ];
-
-        for (let m = 1; m <= 12; m++) {
-            const mQty = Number(item.monthly_balances?.[m] ?? item[`m${m}`] ?? 0);
-            row.push(mQty);
-        }
-
-        row.push(Number(item.total_in || 0));
-        row.push(Number(item.total_out || 0));
-        row.push(bal);
-        row.push(cost);
-        row.push(val);
-
-        csv += row.join(",") + "\n";
+    tbody.querySelectorAll(".btn-edit-master").forEach(btn => {
+        btn.onclick = () => {
+            const prod = masterProducts.find(p => p.id === Number(btn.dataset.id));
+            if (prod) openMasterModal(prod);
+        };
     });
 
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Stock_Movement_Report_${selectedYear}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    pagination.renderControls("master-products-pagination");
+}
+
+function safeSetValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+}
+
+function openMasterModal(prod = null) {
+    const modal = document.getElementById("master-product-modal");
+    const title = document.getElementById("master-modal-title");
+    document.getElementById("master-product-form")?.reset();
+
+    if (prod) {
+        if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်း အချက်အလက်နှင့် ဈေးနှုန်း ပြင်ဆင်မည်";
+        safeSetValue("master-prod-id", prod.id);
+        safeSetValue("master-prod-sku", prod.sku || "");
+        safeSetValue("master-prod-barcode", prod.barcode || "");
+        safeSetValue("master-prod-category", prod.category || "");
+        safeSetValue("master-prod-name", prod.item_name || "");
+        safeSetValue("master-prod-pattern", prod.pattern || "");
+        safeSetValue("master-prod-color", prod.color || "");
+        safeSetValue("master-prod-size", prod.size || "Free Size");
+        safeSetValue("master-prod-cost", prod.cost_price || 0);
+        safeSetValue("master-prod-retail", prod.retail_price || 0);
+        safeSetValue("master-prod-wholesale", prod.wholesale_price || 0);
+    } else {
+        if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်းအမည်သစ် မှတ်ပုံတင်မည်";
+        safeSetValue("master-prod-id", "");
+        safeSetValue("master-prod-size", "Free Size");
+    }
+
+    modal?.classList.remove("hidden");
+}
+
+async function submitMasterProduct(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-submit-master-product");
+    if (btn) btn.disabled = true;
+
+    const prodId = document.getElementById("master-prod-id")?.value;
+
+    const payload = {
+        sku: document.getElementById("master-prod-sku")?.value.trim() || null,
+        barcode: document.getElementById("master-prod-barcode")?.value.trim() || null,
+        category: document.getElementById("master-prod-category")?.value.trim(),
+        itemName: document.getElementById("master-prod-name")?.value.trim(),
+        pattern: document.getElementById("master-prod-pattern")?.value.trim() || null,
+        color: document.getElementById("master-prod-color")?.value.trim() || null,
+        size: document.getElementById("master-prod-size")?.value.trim() || "Free Size",
+        costPrice: parseFloat(document.getElementById("master-prod-cost")?.value) || 0,
+        retailPrice: parseFloat(document.getElementById("master-prod-retail")?.value) || 0,
+        wholesalePrice: parseFloat(document.getElementById("master-prod-wholesale")?.value) || 0
+    };
+
+    try {
+        if (prodId) {
+            await api.put(`/products/${prodId}`, payload);
+        } else {
+            payload.initialStock = 0; 
+            payload.quantity = 0;
+            payload.targetBranchId = 1;
+            payload.branchId = 1;
+            await api.post("/products", payload);
+        }
+        document.getElementById("master-product-modal")?.classList.add("hidden");
+        await loadMasterProducts();
+        alert("ဗဟိုကုန်ပစ္စည်းစာရင်းနှင့် ဈေးနှုန်းများ အောင်မြင်စွာ Update ဖြစ်သွားပါပြီ။ ဆိုင်ခွဲအားလုံးတွင် သက်ရောက်မည်ဖြစ်ပါသည်။");
+    } catch (err) {
+        alert("သိမ်းဆည်း၍မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }

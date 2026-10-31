@@ -190,10 +190,10 @@ function renderAdminDashboard(data) {
     const a = data.admin || {};
 
     // 4 Top Cards (Admin Mode)
-    updateCard(1, "တစ်နှစ်တာ စုစုပေါင်း ဝင်ငွေ (Revenue)", a.total_revenue || 0, `${selectedYear} ခုနှစ် အရောင်းစုစုပေါင်း`, "fa-sack-dollar", "emerald");
-    updateCard(2, "တစ်နှစ်တာ အသားတင် အမြတ် (Net Profit)", a.net_profit || 0, "အဝယ်နှင့် စရိတ်နုတ်ပြီး အမြတ်", "fa-chart-line", a.net_profit >= 0 ? "blue" : "rose");
-    updateCard(3, "ရရန်ကျန် စုစုပေါင်း အကြွေး", a.total_outstanding_debt || 0, "Customer Liabilities", "fa-hand-holding-dollar", "purple");
-    updateCard(4, "စတော့စုစုပေါင်း တန်ဖိုး (Valuation)", a.total_stock_value || 0, "ပစ္စည်းရင်းနှီးမြှုပ်နှံမှု တန်ဖိုး", "fa-boxes-stacked", "amber");
+    updateCard(1, "တစ်နှစ်တာ ဝင်ငွေ (Revenue)", a.total_revenue || 0, `${selectedYear} ခုနှစ် အရောင်းစုစုပေါင်း`, "fa-sack-dollar", "emerald");
+    updateCard(2, "တစ်နှစ်တာ အမြတ် (Net Profit)", a.net_profit || 0, "အဝယ်နှင့် စရိတ်နုတ်ပြီး အမြတ်", "fa-chart-line", a.net_profit >= 0 ? "blue" : "rose");
+    updateCard(3, "ရရန်ကျန် အကြွေး", a.total_outstanding_debt || 0, "Customer Liabilities", "fa-hand-holding-dollar", "purple");
+    updateCard(4, "စတော့ တန်ဖိုး (Valuation)", a.total_stock_value || 0, "ပစ္စည်းရင်းနှီးမြှုပ်နှံမှု တန်ဖိုး", "fa-boxes-stacked", "amber");
 
     // Admin: Expense Breakdown by Category
     const expenseList = document.getElementById("dash-expense-list");

@@ -8,6 +8,7 @@ import { initInventory } from "./modules/inventory.js";
 import { initYarn } from "./modules/yarn.js";
 import { initCustomers } from "./modules/customers.js";
 import { initPurchases } from "./modules/purchases.js";
+// Master Products ကို ဖွင့်လိုက်ပါပြီ
 import { initMasterProducts } from "./modules/master_products.js";
 
 const VIEW_TITLES = {
@@ -226,8 +227,8 @@ export async function navigateTo(viewName) {
         } else if (viewName === "purchases") {
             await initPurchases(); 
         } else if (viewName === "master_products") {
-            // await initMasterProducts(); // TODO: Master Products Module ရေးပြီးလျှင် Uncomment လုပ်မည်
-            container.innerHTML = `<div class="p-12 text-center text-slate-400">Product Master မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။</div>`;
+            // Master Products မျက်နှာပြင်ကို ဖွင့်ပေးလိုက်ပါပြီ
+            await initMasterProducts(); 
         }
     } catch (err) {
         container.innerHTML = `

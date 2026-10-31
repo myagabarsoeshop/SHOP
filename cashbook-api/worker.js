@@ -902,22 +902,6 @@ export default {
             if (path === "/api/transfers" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id");
 
-                // stock_transfers ဇယား မရှိသေးပါက Auto ဖန်တီးပေးခြင်း
-                await env.DB.prepare(`
-                    CREATE TABLE IF NOT EXISTS stock_transfers (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        transfer_no TEXT UNIQUE,
-                        from_branch_id INTEGER NOT NULL,
-                        to_branch_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity REAL NOT NULL,
-                        status TEXT DEFAULT 'COMPLETED',
-                        notes TEXT,
-                        created_by INTEGER DEFAULT 1,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                `).run();
-
                 let sql = `
                     SELECT 
                         t.id, t.transfer_no, t.from_branch_id, t.to_branch_id, t.product_id, t.quantity, t.status, t.notes, t.created_at,
@@ -970,21 +954,6 @@ export default {
                     return errorResponse(`လွှဲပြောင်းမည့်ဆိုင်တွင် လက်ကျန်ပစ္စည်း မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
                 }
 
-                await env.DB.prepare(`
-                    CREATE TABLE IF NOT EXISTS stock_transfers (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        transfer_no TEXT UNIQUE,
-                        from_branch_id INTEGER NOT NULL,
-                        to_branch_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity REAL NOT NULL,
-                        status TEXT DEFAULT 'COMPLETED',
-                        notes TEXT,
-                        created_by INTEGER DEFAULT 1,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                `).run();
-
                 const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
                 const transferNo = `TRF-B${fromBranchId}TO${toBranchId}-${dateStr}`;
 
@@ -1014,7 +983,71 @@ export default {
                 return jsonResponse({ message: "ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းခြင်း အောင်မြင်ပါသည်", transferNo }, 201);
             }
 
-            // (၃) လွှဲပြောင်းမှု မှားယွင်းပါက ပြန်လည်ပယ်ဖျက်ခြင်း (Admin Delete & Stock Rollback)
+            // (၃) လွှဲပြောင်းမှု မှတ်တမ်း ပြင်ဆင်ခြင်း (စတော့လက်ကျန် ကွာခြားချက်ကို ဆိုင်နှစ်ဖက်စလုံးတွင် Auto ပြန်ညှိမည်)
+            if (path.startsWith("/api/transfers/") && method === "PUT") {
+                const id = Number(path.split("/").pop());
+                const body = await request.json().catch(() => ({}));
+                const newQty = parseFloat(body.quantity);
+                const notes = String(body.notes || "").trim();
+
+                if (!id || isNaN(newQty) || newQty <= 0) {
+                    return errorResponse("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပေးပါ", 400);
+                }
+
+                const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
+                if (!trf) return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+                const oldQty = Number(trf.quantity || 0);
+                const diff = Math.round((newQty - oldQty) * 1000) / 1000;
+
+                // အရေအတွက် ပိုတိုး၍ လွှဲပြောင်းလိုပါက မူလဆိုင်တွင် လက်ကျန် ရှိ/မရှိ စစ်ဆေးခြင်း
+                if (diff > 0) {
+                    const fromInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(trf.from_branch_id), Number(trf.product_id)).first();
+                    const fromStock = Number(fromInv?.quantity || 0);
+                    if (fromStock < diff) {
+                        return errorResponse(`မူလပေးပို့သည့်ဆိုင်တွင် လက်ကျန် (${fromStock}) မလုံလောက်သဖြင့် အရေအတွက် တိုး၍မရပါ`, 400);
+                    }
+                } else if (diff < 0) {
+                    // အရေအတွက် လျှော့ချမည်ဆိုပါက လက်ခံဆိုင်တွင် လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
+                    const toInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(trf.to_branch_id), Number(trf.product_id)).first();
+                    const toStock = Number(toInv?.quantity || 0);
+                    if (toStock < Math.abs(diff)) {
+                        return errorResponse(`လက်ခံရရှိသည့်ဆိုင်တွင် လက်ကျန် (${toStock}) လျော့နည်းနေသဖြင့် အရေအတွက် လျှော့ချ၍မရပါ`, 400);
+                    }
+                }
+
+                const batchStatements = [
+                    env.DB.prepare("UPDATE stock_transfers SET quantity = ?, notes = ? WHERE id = ?")
+                        .bind(newQty, notes, id)
+                ];
+
+                if (diff !== 0) {
+                    // မူလပေးပို့သည့်ဆိုင်မှ စတော့ပြန်ညှိခြင်း
+                    batchStatements.push(
+                        env.DB.prepare(`
+                            UPDATE branch_inventory 
+                            SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
+                            WHERE branch_id = ? AND product_id = ?
+                        `).bind(diff, Number(trf.from_branch_id), Number(trf.product_id))
+                    );
+
+                    // လက်ခံရရှိသည့်ဆိုင်တွင် စတော့ပြန်ညှိခြင်း
+                    batchStatements.push(
+                        env.DB.prepare(`
+                            UPDATE branch_inventory 
+                            SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP 
+                            WHERE branch_id = ? AND product_id = ?
+                        `).bind(diff, Number(trf.to_branch_id), Number(trf.product_id))
+                    );
+                }
+
+                await env.DB.batch(batchStatements);
+                return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်း ပြင်ဆင်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့လက်ကျန်များကို အလိုအလျောက် ပြန်ညှိပြီးပါပြီ။" });
+            }
+
+            // (၄) လွှဲပြောင်းမှု မှားယွင်းပါက ပြန်လည်ပယ်ဖျက်ခြင်း (Admin Delete & Stock Rollback)
             if (path.startsWith("/api/transfers/") && method === "DELETE") {
                 const id = Number(path.split("/").pop());
                 const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();

@@ -86,50 +86,66 @@ function renderPurchasesTable() {
         
         let paymentBadge = "";
         if (pur.payment_method === "cash") {
-            paymentBadge = `<span class="px-2.5 py-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold">လက်ငင်း</span>`;
+            paymentBadge = `<span class="px-3 py-1.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold">လက်ငင်း</span>`;
         } else if (pur.payment_method === "bank") {
-            paymentBadge = `<span class="px-2.5 py-1 bg-blue-500/15 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold">ဘဏ် (${escapeHtml(pur.bank_account_name || "Bank")})</span>`;
+            paymentBadge = `<span class="px-3 py-1.5 bg-blue-500/15 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold">ဘဏ် (${escapeHtml(pur.bank_account_name || "Bank")})</span>`;
         } else {
-            paymentBadge = `<span class="px-2.5 py-1 bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
+            paymentBadge = `<span class="px-3 py-1.5 bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
         }
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
         tr.innerHTML = `
-            <td class="p-3.5 font-mono text-slate-500 dark:text-slate-400">${dateStr}</td>
-            <td class="p-3.5 font-mono font-bold text-slate-800 dark:text-slate-200">${escapeHtml(pur.sku || pur.barcode || "-")}</td>
-            <td class="p-3.5">
-                <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
+                <div class="font-bold text-blue-600 dark:text-blue-400 text-sm">${escapeHtml(pur.purchase_no || "-")}</div>
+                <div class="text-xs text-slate-400">${dateStr}</div>
+            </td>
+            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
+                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(pur.sku || "-")}</div>
+                <div class="text-xs">${escapeHtml(pur.barcode || "")}</div>
+            </td>
+            <td class="p-4">
+                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
                     ${escapeHtml(pur.category || "-")}
                 </span>
             </td>
-            <td class="p-3.5">
-                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(pur.item_name || "-")}</div>
-                <div class="text-xs text-slate-400">${escapeHtml(pur.pattern || "-")}</div>
+            <td class="p-4">
+                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(pur.item_name || "-")}</div>
+                <div class="text-sm text-slate-400">${escapeHtml(pur.pattern || "-")}</div>
             </td>
-            <td class="p-3.5">
+            <td class="p-4 text-sm">
                 <div>${escapeHtml(pur.color || "-")}</div>
-                <div class="text-xs text-slate-400">${escapeHtml(pur.size || "Free Size")}</div>
+                <div class="text-slate-400">${escapeHtml(pur.size || "Free Size")}</div>
             </td>
-            <td class="p-3.5 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
-                ${Number(pur.quantity || 0).toLocaleString()}
+            <td class="p-4 text-center">
+                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                    ${Number(pur.quantity || 0).toLocaleString()}
+                </span>
             </td>
-            <td class="p-3.5 text-center">${paymentBadge}</td>
-            <td class="p-3.5 text-right font-mono text-slate-500">${Number(pur.unit_cost || 0).toLocaleString()}</td>
-            <td class="p-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(pur.retail_price || 0).toLocaleString()}</td>
-            <td class="p-3.5 text-right font-mono font-bold text-blue-600 dark:text-blue-400">${Number(pur.wholesale_price || 0).toLocaleString()}</td>
-            <td class="p-3.5 font-bold text-slate-800 dark:text-slate-200">${escapeHtml(pur.supplier_name || "-")}</td>
-            <td class="p-3.5 text-center">
-                <span class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold uppercase">
+            <td class="p-4 text-center">${paymentBadge}</td>
+            <td class="p-4 text-right font-mono text-base text-slate-500">
+                ${Number(pur.unit_cost || 0).toLocaleString()}
+            </td>
+            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
+                ${Number(pur.retail_price || 0).toLocaleString()}
+            </td>
+            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">
+                ${Number(pur.wholesale_price || 0).toLocaleString()}
+            </td>
+            <td class="p-4 font-bold text-slate-800 dark:text-slate-200 text-base">
+                ${escapeHtml(pur.supplier_name || "-")}
+            </td>
+            <td class="p-4 text-center">
+                <span class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold uppercase">
                     ${escapeHtml(pur.status || "COMPLETED")}
                 </span>
             </td>
-            <td class="p-3.5 text-center">
+            <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-1.5">
-                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" class="btn-edit-pur w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-lg text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" class="btn-edit-pur w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                     </button>
-                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်မည်" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 hover:text-white transition cursor-pointer shadow-sm">
+                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်မည် (စတော့နှင့် ငွေစာရင်း ပြန်ညှိမည်)" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-trash-can text-xs"></i>
                     </button>
                 </div>
@@ -208,12 +224,11 @@ function addPurchaseRow(existingData = null) {
     const tr = document.createElement("tr");
     tr.className = "pur-item-row group border-b border-slate-200 dark:border-slate-700";
     tr.innerHTML = `
-        <td class="p-2.5 align-top">
+        <td class="p-3 align-top">
             <select class="pur-item-select w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                 ${productOptions}
             </select>
             
-            <!-- ပစ္စည်းအသစ်အတွက် Inline Form -->
             <div class="new-product-fields hidden mt-2 space-y-2 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-emerald-500/30">
                 <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                 <input type="text" placeholder="ပစ္စည်းအမည် (Item Name) *" class="new-name w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
@@ -224,13 +239,13 @@ function addPurchaseRow(existingData = null) {
                 </div>
             </div>
         </td>
-        <td class="p-2.5 align-top">
+        <td class="p-3 align-top">
             <input type="number" min="1" value="${existingData?.quantity || 1}" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
         </td>
-        <td class="p-2.5 align-top">
+        <td class="p-3 align-top">
             <input type="number" min="0" value="${existingData?.unit_cost || 0}" step="any" class="pur-item-cost w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="ဝယ်ဈေး">
         </td>
-        <td class="p-2.5 align-top space-y-1.5">
+        <td class="p-3 align-top space-y-1.5">
             <div class="flex items-center gap-1">
                 <input type="number" min="0" value="${existingData?.retail_price || 0}" step="any" class="pur-item-retail w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်လီဈေး *">
             </div>
@@ -239,7 +254,7 @@ function addPurchaseRow(existingData = null) {
                 <input type="number" placeholder="30" class="pur-retail-pct w-full text-[11px] px-2 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-center font-mono font-bold" title="ဝယ်ဈေးပေါ် ရာခိုင်နှုန်းထည့်ပါ">
             </div>
         </td>
-        <td class="p-2.5 align-top space-y-1.5">
+        <td class="p-3 align-top space-y-1.5">
             <div class="flex items-center gap-1">
                 <input type="number" min="0" value="${existingData?.wholesale_price || 0}" step="any" class="pur-item-wholesale w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-blue-600 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်ကားဈေး *">
             </div>
@@ -248,10 +263,10 @@ function addPurchaseRow(existingData = null) {
                 <input type="number" placeholder="15" class="pur-wholesale-pct w-full text-[11px] px-2 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-center font-mono font-bold" title="ဝယ်ဈေးပေါ် ရာခိုင်နှုန်းထည့်ပါ">
             </div>
         </td>
-        <td class="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm pur-item-subtotal align-top pt-4">
+        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm pur-item-subtotal align-top pt-4">
             0
         </td>
-        <td class="p-2.5 text-center align-top pt-3">
+        <td class="p-3 text-center align-top pt-3">
             <button type="button" class="btn-remove-row text-slate-400 hover:text-rose-500 transition cursor-pointer">
                 <i class="fa-solid fa-circle-minus text-lg"></i>
             </button>
@@ -271,7 +286,6 @@ function addPurchaseRow(existingData = null) {
     const wholesalePct = tr.querySelector(".pur-wholesale-pct");
     const removeBtn = tr.querySelector(".btn-remove-row");
 
-    // ပစ္စည်းအသစ် ရွေးချယ်မှု
     select.addEventListener("change", (e) => {
         if (e.target.value === "NEW") {
             newFields.classList.remove("hidden");
@@ -295,7 +309,6 @@ function addPurchaseRow(existingData = null) {
         newSkuInput.value = generateAutoSKU(newCatInput.value);
     });
 
-    // Live % တွက်ချက်ခြင်း (ခလုတ်နှိပ်စရာမလိုဘဲ ချက်ချင်း Auto ပြောင်းလဲခြင်း)
     const updatePricesLive = () => {
         const cost = parseFloat(costInput.value) || 0;
         const rPct = parseFloat(retailPct.value);
@@ -379,7 +392,6 @@ async function submitPurchase() {
             return;
         }
 
-        // လက်လီ/လက်ကားဈေး မပါဘဲ စာရင်းသွင်းခွင့် မပြုခြင်း
         if (retail <= 0 || wholesale <= 0) {
             hasError = true;
             errMsg = "ပစ္စည်းတိုင်းအတွက် လက်လီဈေးနှင့် လက်ကားဈေးများကို မဖြစ်မနေ ထည့်သွင်းပေးရပါမည်။";

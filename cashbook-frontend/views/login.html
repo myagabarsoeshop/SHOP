@@ -8,9 +8,20 @@
     <div class="w-full max-w-[460px] bg-slate-900 border border-slate-800 shadow-2xl rounded-3xl p-8 relative z-10">
         
         <!-- Brand Header -->
-        <div class="text-center mb-7">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mb-3 shadow-inner">
-                <i class="fa-solid fa-shirt text-3xl"></i>
+        <div class="text-center mb-7 flex flex-col items-center">
+            <!-- 1. Minimal Emerald Logo အသစ် (အင်္ကျီပုံနေရာတွင် အစားထိုးထားသည်) -->
+            <div class="w-16 h-16 mb-4 rounded-2xl shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="emerald" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#064e3b"/>
+                            <stop offset="100%" stop-color="#022c22"/>
+                        </linearGradient>
+                    </defs>
+                    <rect width="120" height="120" rx="26" fill="url(#emerald)"/>
+                    <rect x="5" y="5" width="110" height="110" rx="22" fill="none" stroke="#c9a85c" stroke-width="1.3"/>
+                    <text x="60" y="62" text-anchor="middle" dominant-baseline="central" font-family="'Padauk', 'Pyidaungsu', 'Myanmar Text', sans-serif" font-size="58" font-weight="600" fill="#e8d19a">မြ</text>
+                </svg>
             </div>
             <h1 class="text-2xl font-extrabold text-white tracking-wide">မြကမ္ဘာစိုး ပိုးထည်တိုက်</h1>
             <p class="text-sm text-emerald-400/90 mt-1 font-bold">POS & Multi-Store Garment ERP</p>
@@ -24,16 +35,18 @@
 
         <!-- Login Form -->
         <form id="login-form" class="space-y-5">
-            <!-- User Dropdown Selection -->
+            <!-- 2. User Dropdown Selection -->
             <div>
                 <label for="login-user-select" class="block text-sm font-semibold text-slate-200 mb-2">အသုံးပြုသူ ရွေးချယ်ပါ (Select User)</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-emerald-400 pointer-events-none">
-                        <i class="fa-solid fa-user-circle text-lg"></i>
+                <div class="relative text-slate-400 focus-within:text-emerald-500">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none transition-colors">
+                        <i class="fa-solid fa-circle-user text-lg"></i>
                     </span>
+                    
+                    <!-- appearance-none ကိုသုံးထားပြီး ညာဘက်အစွန်ကို Arrow ကပ်ပေးထားသည် -->
                     <select id="login-user-select" required
-                        class="w-full pl-12 pr-10 py-3.5 text-sm font-semibold bg-slate-800 border border-slate-700 text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition cursor-pointer appearance-none">
-                        <option value="" disabled selected>အသုံးပြုသူအမည် ရွေးချယ်ပါ ▼</option>
+                        class="w-full pl-12 pr-10 py-3.5 text-sm font-semibold bg-slate-800 border border-slate-700 text-white rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition cursor-pointer appearance-none">
+                        <option value="" disabled selected>အသုံးပြုသူအမည် ရွေးချယ်ပါ</option>
                         <optgroup label="🏢 ဗဟိုစီမံခန့်ခွဲမှု (Head Office)" class="bg-slate-900 text-slate-400">
                             <option value="admin" class="text-white py-1">စနစ်ပိုင်ရှင် (Admin)</option>
                             <option value="finance" class="text-white py-1">စာရင်းကိုင်/စာရင်းစစ် (Finance)</option>
@@ -46,22 +59,26 @@
                             <option value="cashier_sh4" class="text-white py-1">Shop 4 (ဆိုင်ခွဲ ၄)</option>
                         </optgroup>
                     </select>
-                    <span class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 pointer-events-none">
+
+                    <span class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none transition-colors">
                         <i class="fa-solid fa-chevron-down text-sm"></i>
                     </span>
                 </div>
             </div>
 
-            <!-- Password Input -->
+            <!-- 3 & 4. Password Input (Dark Mode Professional Style) -->
             <div>
                 <label for="login-password" class="block text-sm font-semibold text-slate-200 mb-2">စကားဝှက် (Password)</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 pointer-events-none">
+                <div class="relative text-slate-400 focus-within:text-emerald-500">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none transition-colors">
                         <i class="fa-solid fa-lock text-base"></i>
                     </span>
-                    <input type="password" id="login-password" required autocomplete="current-password" placeholder="စကားဝှက် ရိုက်ထည့်ပါ"
-                        class="w-full pl-12 pr-12 py-3.5 text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition" />
-                    <button type="button" id="toggle-password" title="စကားဝှက် ကြည့်ရန်/ဖျောက်ရန်" class="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 hover:text-slate-200 cursor-pointer">
+                    
+                    <!-- bg-slate-800 ကိုဆက်သုံးထားပြီး Auto-fill Yellow မဖြစ်စေရန် ပြင်ဆင်ထားသည် -->
+                    <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••"
+                        class="w-full pl-12 pr-12 py-3.5 text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition [&:-webkit-autofill]:bg-slate-800 [&:-webkit-autofill]:text-white [&:-webkit-autofill]:transition-all [&:-webkit-autofill]:duration-5000" />
+                        
+                    <button type="button" id="toggle-password" title="စကားဝှက် ကြည့်ရန်/ဖျောက်ရန်" class="absolute inset-y-0 right-0 flex items-center pr-4 hover:text-slate-200 cursor-pointer transition-colors">
                         <i class="fa-regular fa-eye text-base" id="toggle-password-icon"></i>
                     </button>
                 </div>
@@ -76,7 +93,7 @@
         </form>
 
         <!-- System Footer -->
-        <div class="mt-8 pt-5 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+        <div class="mt-8 pt-5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
             <span>Version 2.1.0</span>
             <span class="flex items-center gap-2 text-emerald-400 font-medium">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>

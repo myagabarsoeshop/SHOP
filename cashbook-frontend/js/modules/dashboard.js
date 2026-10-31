@@ -1,336 +1,225 @@
-// cashbook-frontend/js/modules/dashboard.js
-import { api } from "../core/api.js";
-import { state } from "../core/state.js";
+<!-- cashbook-frontend/views/dashboard.html -->
+<div class="h-full w-full flex flex-col gap-4 overflow-y-auto pr-1">
 
-let dashboardData = null;
-let branchesList = [];
-let selectedYear = new Date().getFullYear();
+    <!-- 1. Top Controls & Filter Bar -->
+    <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-gauge-high"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>လုပ်ငန်းအနှစ်ချုပ် Dashboard</span>
+                </h3>
+                <p id="dash-greeting-text" class="text-xs text-slate-500 dark:text-slate-400 font-semibold">စာရင်းအင်း အချက်အလက်များ အချိန်နှင့်တပြေးညီ တင်ပြမှု</p>
+            </div>
+        </div>
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap items-center gap-2.5">
+            <div id="dash-branch-container" class="relative">
+                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3.5 top-3 pointer-events-none"></i>
+                <select id="dash-branch-select" class="pl-9 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none transition">
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
 
-export async function initDashboard() {
-    setupRoleUI();
-    bindEvents();
-    await loadBranches();
-    await fetchDashboardData();
-}
+            <div id="dash-year-container" class="relative hidden">
+                <i class="fa-regular fa-calendar text-blue-500 text-xs absolute left-3.5 top-3 pointer-events-none"></i>
+                <select id="dash-year-select" class="pl-9 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none transition">
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
 
-function setupRoleUI() {
-    const isAdmin = state.isAdmin();
-    const roleBadge = document.getElementById("dash-role-badge");
-    const yearContainer = document.getElementById("dash-year-container");
-    const exportBtn = document.getElementById("btn-export-dash-csv");
-    const staffView = document.getElementById("dash-staff-view");
-    const adminView = document.getElementById("dash-admin-view");
+            <button type="button" id="btn-refresh-dashboard" title="ဒေတာ ပြန်ဆွဲတင်မည်" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center transition border border-slate-200 dark:border-slate-800 cursor-pointer">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
 
-    if (roleBadge) {
-        roleBadge.textContent = isAdmin ? "Administrator" : "Cashier / Staff";
-        roleBadge.className = `text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md ${
-            isAdmin ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
-        }`;
-    }
+            <button type="button" id="btn-export-dash-csv" class="hidden px-3.5 py-2 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white font-bold text-xs rounded-xl transition items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-800">
+                <i class="fa-solid fa-file-export text-emerald-500"></i>
+                <span>Export CSV</span>
+            </button>
+        </div>
+    </div>
 
-    // Role အလိုက် UI ခွဲခြားဖွင့်လှစ်ခြင်း
-    if (isAdmin) {
-        yearContainer?.classList.remove("hidden");
-        exportBtn?.classList.remove("hidden");
-        exportBtn?.classList.add("flex");
-        staffView?.classList.add("hidden");
-        adminView?.classList.remove("hidden");
-        setupYearOptions();
-    } else {
-        yearContainer?.classList.add("hidden");
-        exportBtn?.classList.add("hidden");
-        exportBtn?.classList.remove("flex");
-        staffView?.classList.remove("hidden");
-        adminView?.classList.add("hidden");
-    }
-}
+    <!-- 2. Dynamic 4-Box Top Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        <!-- Card 1 -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-1-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၁</div>
+                <div id="dash-card-1-value" class="text-2xl font-black text-emerald-500 font-mono tracking-tight">0</div>
+                <div id="dash-card-1-sub" class="text-[11px] text-slate-400 font-semibold mt-1">--</div>
+            </div>
+            <div id="dash-card-1-icon-box" class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-1-icon" class="fa-solid fa-money-bill-wave"></i>
+            </div>
+        </div>
 
-function setupYearOptions() {
-    const yearSelect = document.getElementById("dash-year-select");
-    if (!yearSelect) return;
-    yearSelect.innerHTML = "";
-    
-    const currYear = new Date().getFullYear();
-    for (let y = currYear - 1; y <= currYear + 2; y++) {
-        const opt = document.createElement("option");
-        opt.value = y;
-        opt.textContent = `${y} ခုနှစ်`;
-        if (y === currYear) opt.selected = true;
-        yearSelect.appendChild(opt);
-    }
-    selectedYear = currYear;
-}
+        <!-- Card 2 -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-2-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၂</div>
+                <div id="dash-card-2-value" class="text-2xl font-black text-blue-500 font-mono tracking-tight">0</div>
+                <div id="dash-card-2-sub" class="text-[11px] text-slate-400 font-semibold mt-1">--</div>
+            </div>
+            <div id="dash-card-2-icon-box" class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-2-icon" class="fa-solid fa-building-columns"></i>
+            </div>
+        </div>
 
-function bindEvents() {
-    document.getElementById("btn-refresh-dashboard")?.addEventListener("click", fetchDashboardData);
+        <!-- Card 3 -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-3-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၃</div>
+                <div id="dash-card-3-value" class="text-2xl font-black text-purple-400 font-mono tracking-tight">0</div>
+                <div id="dash-card-3-sub" class="text-[11px] text-slate-400 font-semibold mt-1">--</div>
+            </div>
+            <div id="dash-card-3-icon-box" class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-3-icon" class="fa-solid fa-shirt"></i>
+            </div>
+        </div>
 
-    document.getElementById("dash-branch-select")?.addEventListener("change", () => {
-        fetchDashboardData();
-    });
+        <!-- Card 4 -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-4-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၄</div>
+                <div id="dash-card-4-value" class="text-2xl font-black text-amber-500 font-mono tracking-tight">0</div>
+                <div id="dash-card-4-sub" class="text-[11px] text-slate-400 font-semibold mt-1">--</div>
+            </div>
+            <div id="dash-card-4-icon-box" class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-4-icon" class="fa-solid fa-boxes-stacked"></i>
+            </div>
+        </div>
+    </div>
 
-    document.getElementById("dash-year-select")?.addEventListener("change", (e) => {
-        selectedYear = parseInt(e.target.value, 10);
-        fetchDashboardData();
-    });
+    <!-- 3. STAFF / CASHIER SPECIFIC SECTION -->
+    <div id="dash-staff-view" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-emerald-400"></i>
+                    <span>ယနေ့ ရောင်းရသော အမျိုးအစားများ</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Category Summary</span>
+            </div>
+            <div class="flex-1 overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                            <th class="py-2.5">အမျိုးအစား</th>
+                            <th class="py-2.5 text-center">အရေအတွက်</th>
+                            <th class="py-2.5 text-right">ရောင်းရငွေ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-staff-cat-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                        <tr><td colspan="3" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    document.getElementById("btn-export-dash-csv")?.addEventListener("click", exportDashboardToCSV);
-}
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-receipt text-blue-400"></i>
+                    <span>ယနေ့ နောက်ဆုံး ရောင်းချမှု (၅) စောင်</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Latest Sales</span>
+            </div>
+            <div class="flex-1 overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                            <th class="py-2.5">ဘောင်ချာ</th>
+                            <th class="py-2.5">ဖောက်သည်</th>
+                            <th class="py-2.5">နည်းလမ်း</th>
+                            <th class="py-2.5 text-right">သင့်ငွေ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-staff-recent-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                        <tr><td colspan="4" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-async function loadBranches() {
-    const select = document.getElementById("dash-branch-select");
-    if (!select) return;
+    <!-- 4. ADMIN SPECIFIC SECTION (အလယ်သို့ ဆိုင်ခွဲဇယား ရွှေ့ထားပြီး အောက်ဆုံးသို့ Expense & Top Items ရွှေ့ထားသည်) -->
+    <div id="dash-admin-view" class="hidden flex flex-col gap-4">
+        
+        <!-- (အလယ်ပိုင်း) Branch Valuation Table -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-scale-balanced text-blue-400"></i>
+                    <span>ဆိုင်ခွဲအလိုက် စတော့တန်ဖိုးနှင့် ငွေကြေးအခြေအနေ</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Branch Valuation Breakdown</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left whitespace-nowrap">
+                    <thead class="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase font-bold border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                            <th class="p-3">ဆိုင်ခွဲအမည်</th>
+                            <th class="p-3 text-right">ငွေသား (Cash Net)</th>
+                            <th class="p-3 text-right">ဘဏ်ငွေ (Bank Net)</th>
+                            <th class="p-3 text-right">စတော့တန်ဖိုး (Valuation)</th>
+                            <th class="p-3 text-right">ရရန်ကျန်အကြွေး (Debt)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-branch-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/80 font-semibold">
+                        <tr><td colspan="5" class="p-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-    try {
-        const res = await api.get("/branches");
-        branchesList = res.data || [];
-        select.innerHTML = "";
-
-        if (state.isAdmin()) {
-            select.innerHTML = `<option value="ALL">🏢 ဆိုင်အားလုံး စုစုပေါင်း (Consolidated)</option>`;
-            branchesList.forEach(b => {
-                select.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`;
-            });
-            select.disabled = false;
-        } else {
-            const currentBranch = state.currentBranch || branchesList[0];
-            select.innerHTML = `<option value="${currentBranch.id}">${escapeHtml(currentBranch.name)}</option>`;
-            select.disabled = true; // Cashier ဆိုပါက မိမိဆိုင်တစ်ခုတည်းသာ လော့ချထားမည်
-        }
-    } catch (err) {
-        console.error("Failed to load branches for dashboard:", err);
-    }
-}
-
-async function fetchDashboardData() {
-    const branchVal = document.getElementById("dash-branch-select")?.value || "ALL";
-
-    try {
-        const params = { year: selectedYear };
-        if (branchVal !== "ALL") params.branch_id = branchVal;
-
-        const res = await api.get("/dashboard/summary", params);
-        dashboardData = res.data || {};
-
-        if (state.isAdmin()) {
-            renderAdminDashboard(dashboardData);
-        } else {
-            renderStaffDashboard(dashboardData);
-        }
-    } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
-    }
-}
-
-// -------------------------------------------------------------
-// 1. Staff / Cashier View Rendering (ရိုးရှင်းသော နေ့စဉ်လုပ်ငန်းဆောင်ရွက်မှု)
-// -------------------------------------------------------------
-function renderStaffDashboard(data) {
-    const s = data.staff || {};
-
-    // 4 Top Cards (Staff Mode)
-    updateCard(1, "ယနေ့ လက်ငင်းရငွေ (Cash)", s.today_cash || 0, "ငွေသား အရောင်း", "fa-money-bill-wave", "emerald");
-    updateCard(2, "ယနေ့ ဘဏ်/KPay ရငွေ", s.today_bank || 0, "ဘဏ်လွှဲ အရောင်း", "fa-building-columns", "blue");
-    updateCard(3, "ယနေ့ ရောင်းရသည့် ဦးရေ", s.today_items_sold || 0, "ထည် / ခု", "fa-shirt", "purple");
-    updateCard(4, "ဆိုင်လက်ကျန် (Drawer + Bank)", (s.cash_drawer || 0) + (s.bank_balance || 0), "လက်ကျန်ငွေ စုစုပေါင်း", "fa-vault", "amber");
-
-    // Staff: Today Categories Breakdown
-    const catTbody = document.getElementById("dash-staff-cat-body");
-    if (catTbody) {
-        catTbody.innerHTML = "";
-        const categories = s.category_sales || [];
-        if (categories.length === 0) {
-            catTbody.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-slate-400">ယနေ့အတွက် အရောင်းမှတ်တမ်း မရှိသေးပါ</td></tr>`;
-        } else {
-            categories.forEach(c => {
-                catTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="py-2.5 font-bold text-slate-800 dark:text-slate-200">${escapeHtml(c.category)}</td>
-                        <td class="py-2.5 text-center font-mono font-bold">${Number(c.quantity).toLocaleString()}</td>
-                        <td class="py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(c.total_amount).toLocaleString()} Ks</td>
-                    </tr>
-                `;
-            });
-        }
-    }
-
-    // Staff: Recent 5 Sales
-    const recentTbody = document.getElementById("dash-staff-recent-body");
-    if (recentTbody) {
-        recentTbody.innerHTML = "";
-        const recent = s.recent_sales || [];
-        if (recent.length === 0) {
-            recentTbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400">အရောင်းဘောင်ချာ မရှိသေးပါ</td></tr>`;
-        } else {
-            recent.forEach(r => {
-                recentTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="py-2.5 font-mono font-bold text-emerald-600 dark:text-emerald-400">${escapeHtml(r.invoice_no)}</td>
-                        <td class="py-2.5 font-semibold text-slate-700 dark:text-slate-300">${escapeHtml(r.customer_name || "Walk-in")}</td>
-                        <td class="py-2.5 capitalize text-slate-500">${escapeHtml(r.payment_method)}</td>
-                        <td class="py-2.5 text-right font-mono font-black text-slate-900 dark:text-white">${Number(r.final_amount).toLocaleString()} Ks</td>
-                    </tr>
-                `;
-            });
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// 2. Admin View Rendering (အသားတင်အမြတ်၊ ကုန်ကျစရိတ်၊ စတော့တန်ဖိုး အပြည့်အစုံ)
-// -------------------------------------------------------------
-function renderAdminDashboard(data) {
-    const a = data.admin || {};
-
-    // 4 Top Cards (Admin Mode)
-    updateCard(1, "တစ်နှစ်တာ ဝင်ငွေ (Revenue)", a.total_revenue || 0, `${selectedYear} ခုနှစ် အရောင်းစုစုပေါင်း`, "fa-sack-dollar", "emerald");
-    updateCard(2, "တစ်နှစ်တာ အမြတ် (Net Profit)", a.net_profit || 0, "အဝယ်နှင့် စရိတ်နုတ်ပြီး အမြတ်", "fa-chart-line", a.net_profit >= 0 ? "blue" : "rose");
-    updateCard(3, "ရရန်ကျန် အကြွေး", a.total_outstanding_debt || 0, "Customer Liabilities", "fa-hand-holding-dollar", "purple");
-    updateCard(4, "စတော့ တန်ဖိုး (Valuation)", a.total_stock_value || 0, "ပစ္စည်းရင်းနှီးမြှုပ်နှံမှု တန်ဖိုး", "fa-boxes-stacked", "amber");
-
-    // Admin: Expense Breakdown by Category
-    const expenseList = document.getElementById("dash-expense-list");
-    const totalExpLabel = document.getElementById("dash-total-expense-label");
-    if (totalExpLabel) totalExpLabel.textContent = `${Number(a.total_expenses || 0).toLocaleString()} Ks`;
-
-    if (expenseList) {
-        expenseList.innerHTML = "";
-        const expenses = a.expense_breakdown || [];
-        if (expenses.length === 0) {
-            expenseList.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">အသုံးစရိတ်စာရင်း မရှိသေးပါ</div>`;
-        } else {
-            expenses.forEach(e => {
-                const percent = a.total_expenses > 0 ? Math.round((e.amount / a.total_expenses) * 100) : 0;
-                expenseList.innerHTML += `
-                    <div class="space-y-1">
-                        <div class="flex justify-between text-xs font-bold">
-                            <span class="text-slate-700 dark:text-slate-300">${escapeHtml(e.category_name)}</span>
-                            <span class="font-mono text-slate-900 dark:text-white">${Number(e.amount).toLocaleString()} Ks (${percent}%)</span>
-                        </div>
-                        <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                            <div class="bg-rose-500 h-1.5 rounded-full" style="width: ${percent}%"></div>
-                        </div>
+        <!-- (အောက်ဆုံးပိုင်း) Expense Breakdown & Top Items -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Expense Breakdown -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                    <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-rose-500"></i>
+                        <span>အသုံးစရိတ် ခေါင်းစဉ်များ</span>
                     </div>
-                `;
-            });
-        }
-    }
+                    <span id="dash-total-expense-label" class="text-xs font-mono font-black text-rose-500">0 Ks</span>
+                </div>
+                <div class="flex-1 overflow-y-auto max-h-60 pr-1">
+                    <div id="dash-expense-list" class="space-y-3">
+                        <div class="text-center py-6 text-slate-400 text-xs">အသုံးစရိတ်စာရင်း မရှိသေးပါ</div>
+                    </div>
+                </div>
+            </div>
 
-    // Admin: Top Selling Items
-    const topTbody = document.getElementById("dash-admin-top-items");
-    if (topTbody) {
-        topTbody.innerHTML = "";
-        const topItems = a.top_selling_items || [];
-        if (topItems.length === 0) {
-            topTbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400">အရောင်းရဆုံး ပစ္စည်းစာရင်း မရှိသေးပါ</td></tr>`;
-        } else {
-            topItems.forEach(i => {
-                topTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="py-2.5 font-bold text-slate-900 dark:text-white">${escapeHtml(i.item_name)}</td>
-                        <td class="py-2.5"><span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">${escapeHtml(i.category)}</span></td>
-                        <td class="py-2.5 text-center font-mono font-bold">${Number(i.quantity).toLocaleString()}</td>
-                        <td class="py-2.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">${Number(i.total_sales).toLocaleString()} Ks</td>
-                    </tr>
-                `;
-            });
-        }
-    }
+            <!-- Top Items -->
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:col-span-2">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+                    <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-crown text-amber-400"></i>
+                        <span>ရောင်းအားအကောင်းဆုံး အထည်များ (Top Items)</span>
+                    </div>
+                    <span class="text-xs text-slate-400 font-bold">Best Sellers</span>
+                </div>
+                <div class="flex-1 overflow-x-auto max-h-60">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                            <tr>
+                                <th class="py-2.5">အထည်အမည်</th>
+                                <th class="py-2.5">အမျိုးအစား</th>
+                                <th class="py-2.5 text-center">ဦးရေ</th>
+                                <th class="py-2.5 text-right">ရောင်းရငွေ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dash-admin-top-items" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                            <tr><td colspan="4" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    // Admin: Branch Breakdown Table
-    const branchTbody = document.getElementById("dash-branch-table-body");
-    if (branchTbody) {
-        branchTbody.innerHTML = "";
-        const branches = a.branch_metrics || [];
-        if (branches.length === 0) {
-            branchTbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400">ဆိုင်ခွဲစာရင်း မတွေ့ရှိပါ</td></tr>`;
-        } else {
-            branches.forEach(b => {
-                branchTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="p-3 font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <i class="fa-solid fa-store text-emerald-500 text-xs"></i>
-                            <span>${escapeHtml(b.name)}</span>
-                        </td>
-                        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(b.cash_net || 0).toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-bold text-blue-600 dark:text-blue-400">${Number(b.bank_net || 0).toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-black text-amber-600 dark:text-amber-400">${Number(b.stock_value || 0).toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-black text-rose-600 dark:text-rose-400">${Number(b.outstanding_debt || 0).toLocaleString()} Ks</td>
-                    </tr>
-                `;
-            });
-        }
-    }
-}
+    </div>
 
-function updateCard(num, title, val, sub, icon, theme) {
-    const titleEl = document.getElementById(`dash-card-${num}-title`);
-    const valEl = document.getElementById(`dash-card-${num}-value`);
-    const subEl = document.getElementById(`dash-card-${num}-sub`);
-    const iconEl = document.getElementById(`dash-card-${num}-icon`);
-    const iconBox = document.getElementById(`dash-card-${num}-icon-box`);
-
-    if (titleEl) titleEl.textContent = title;
-    if (valEl) valEl.textContent = Number(val || 0).toLocaleString();
-    if (subEl) subEl.textContent = sub;
-    if (iconEl && icon) iconEl.className = `fa-solid ${icon}`;
-
-    const colorClasses = {
-        emerald: { val: "text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xl shrink-0" },
-        blue: { val: "text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl shrink-0" },
-        purple: { val: "text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-xl shrink-0" },
-        amber: { val: "text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl shrink-0" },
-        rose: { val: "text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl shrink-0" }
-    };
-
-    const chosen = colorClasses[theme] || colorClasses.emerald;
-    if (valEl) valEl.className = chosen.val;
-    if (iconBox) iconBox.className = chosen.box;
-}
-
-// -------------------------------------------------------------
-// 3. Admin CSV Export Logic
-// -------------------------------------------------------------
-function exportDashboardToCSV() {
-    if (!dashboardData || !dashboardData.admin) {
-        return alert("ထုတ်ယူရန် Dashboard အချက်အလက် မရှိသေးပါ");
-    }
-
-    const a = dashboardData.admin;
-    let csv = `Executive Financial Summary (${selectedYear})\n`;
-    csv += `Metric,Value (MMK)\n`;
-    csv += `Total Revenue,${a.total_revenue || 0}\n`;
-    csv += `Net Profit,${a.net_profit || 0}\n`;
-    csv += `Total Expenses,${a.total_expenses || 0}\n`;
-    csv += `Total Stock Valuation,${a.total_stock_value || 0}\n`;
-    csv += `Outstanding Debt,${a.total_outstanding_debt || 0}\n\n`;
-
-    csv += `Expense Breakdown by Category\n`;
-    csv += `Category Name,Amount (MMK)\n`;
-    (a.expense_breakdown || []).forEach(e => {
-        csv += `"${(e.category_name || '').replace(/"/g, '""')}",${e.amount || 0}\n`;
-    });
-    csv += `\n`;
-
-    csv += `Branch Valuation & Balances\n`;
-    csv += `Branch Name,Cash Net,Bank Net,Stock Valuation,Outstanding Debt\n`;
-    (a.branch_metrics || []).forEach(b => {
-        csv += `"${(b.name || '').replace(/"/g, '""')}",${b.cash_net || 0},${b.bank_net || 0},${b.stock_value || 0},${b.outstanding_debt || 0}\n`;
-    });
-
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Executive_Dashboard_Summary_${selectedYear}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+</div>

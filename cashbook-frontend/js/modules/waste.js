@@ -21,6 +21,12 @@ export async function initWaste() {
 function bindEvents() {
     document.getElementById("waste-search")?.addEventListener("input", filterAndRender);
     document.getElementById("btn-export-waste-csv")?.addEventListener("click", exportWasteToCSV);
+    
+    document.getElementById("btn-close-waste-edit-modal")?.addEventListener("click", () => {
+        document.getElementById("waste-edit-modal")?.classList.add("hidden");
+    });
+
+    document.getElementById("waste-edit-form")?.addEventListener("submit", submitEditWaste);
 }
 
 async function loadWasteLogs() {
@@ -28,7 +34,7 @@ async function loadWasteLogs() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="10" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
     }
 
     try {
@@ -39,12 +45,11 @@ async function loadWasteLogs() {
         renderTable(wasteLogs);
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="10" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
 
-// KPI ၄ ခု (Total Waste Value, Total Category, Total Items, Total Entries)
 function updateWasteKPIs() {
     const totalWasteValue = wasteLogs.reduce((sum, w) => sum + (Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
     const uniqueCategories = new Set(wasteLogs.map(w => w.category).filter(Boolean)).size;
@@ -75,13 +80,25 @@ function renderTable(list) {
     tbody.innerHTML = "";
 
     if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="p-12 text-center text-slate-400 font-bold text-base">ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-slate-400 font-bold text-base">ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</td></tr>`;
         return;
     }
 
     list.forEach(w => {
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
         const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
+
+        // Admin ဖြစ်မှသာ ပြင်ဆင်ခွင့် / ဖျက်ခွင့် ခလုတ်များ ပေါ်မည်
+        const actionButtons = state.isAdmin() ? `
+            <div class="flex items-center justify-center gap-1.5">
+                <button type="button" data-id="${w.id}" title="ပြင်ဆင်မည်" class="btn-edit-waste w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
+                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                </button>
+                <button type="button" data-id="${w.id}" title="ဖျက်မည် (စတော့ထဲ ပြန်ပေါင်းမည်)" class="btn-delete-waste w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+            </div>
+        ` : `<span class="text-xs text-slate-400">-</span>`;
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
@@ -124,9 +141,70 @@ function renderTable(list) {
             <td class="p-4 text-center font-bold text-slate-600 dark:text-slate-300 text-sm">
                 ${escapeHtml(w.recorded_by_name || "Admin")}
             </td>
+            <td class="p-4 text-center">
+                ${actionButtons}
+            </td>
         `;
         tbody.appendChild(tr);
     });
+
+    if (state.isAdmin()) {
+        tbody.querySelectorAll(".btn-edit-waste").forEach(btn => {
+            btn.onclick = () => {
+                const log = wasteLogs.find(w => w.id === Number(btn.dataset.id));
+                if (log) openEditWasteModal(log);
+            };
+        });
+
+        tbody.querySelectorAll(".btn-delete-waste").forEach(btn => {
+            btn.onclick = () => deleteWasteLog(Number(btn.dataset.id));
+        });
+    }
+}
+
+function openEditWasteModal(log) {
+    document.getElementById("edit-waste-id").value = log.id;
+    document.getElementById("edit-waste-name").value = `${log.item_name} (${log.sku || "-"})`;
+    document.getElementById("edit-waste-qty").value = log.quantity;
+    document.getElementById("edit-waste-reason").value = log.reason || "";
+
+    document.getElementById("waste-edit-modal")?.classList.remove("hidden");
+    document.getElementById("edit-waste-qty")?.focus();
+}
+
+async function submitEditWaste(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-save-waste-edit");
+    const id = document.getElementById("edit-waste-id")?.value;
+    const qty = parseInt(document.getElementById("edit-waste-qty")?.value, 10);
+    const reason = document.getElementById("edit-waste-reason")?.value.trim();
+
+    if (!qty || qty <= 0) return alert("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပါ");
+
+    if (btn) btn.disabled = true;
+
+    try {
+        await api.put(`/waste/${id}`, { quantity: qty, reason });
+        document.getElementById("waste-edit-modal")?.classList.add("hidden");
+        alert("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        await loadWasteLogs();
+    } catch (err) {
+        alert("ပြင်ဆင်၍မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function deleteWasteLog(id) {
+    if (!confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)")) return;
+
+    try {
+        await api.delete(`/waste/${id}`);
+        alert("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
+        await loadWasteLogs();
+    } catch (err) {
+        alert("ဖျက်၍မရပါ: " + err.message);
+    }
 }
 
 function exportWasteToCSV() {

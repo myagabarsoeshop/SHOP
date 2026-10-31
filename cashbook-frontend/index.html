@@ -93,12 +93,11 @@
     <!-- Main Unified App Layout -->
     <div id="app-layout" class="hidden flex h-screen w-screen overflow-hidden">
         
-        <!-- Left Sidebar (English Labels & Clean Hierarchy) -->
+        <!-- Left Sidebar (Grouped & Clean Hierarchy) -->
         <aside class="w-68 bg-slate-950 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800/80 z-20">
-            <div>
+            <div class="flex flex-col h-full overflow-hidden">
                 <!-- Brand Logo & Shop Name -->
-                <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80">
-                    <!-- Minimal Emerald Brand Logo -->
+                <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80 shrink-0">
                     <div class="w-11 h-11 rounded-xl shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="w-full h-full">
                             <defs>
@@ -118,67 +117,95 @@
                     </div>
                 </div>
 
-                <!-- Navigation Menu (English Labels) -->
-                <nav class="p-3.5 space-y-1.5 text-sm font-bold">
-                    <button type="button" data-view="pos" class="nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
-                        <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
-                        <span>Sale Counter</span>
-                    </button>
+                <!-- Navigation Menu Container (Scrollable) -->
+                <nav class="flex-1 overflow-y-auto p-3.5 space-y-4 text-sm font-bold">
+                    
+                    <!-- 1. MAIN -->
+                    <div class="space-y-1">
+                        <div class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Main</div>
+                        <button type="button" data-view="dashboard" class="nav-item active flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer">
+                            <i class="fa-solid fa-gauge-high w-5 text-center text-base"></i>
+                            <span>Dashboard</span>
+                        </button>
+                    </div>
 
-                    <button type="button" data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
-                        <span>Cash Book</span>
-                    </button>
+                    <!-- 2. OPERATIONS -->
+                    <div class="space-y-1">
+                        <div class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Operations</div>
+                        
+                        <button type="button" data-view="pos" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-cash-register w-5 text-center text-base"></i>
+                            <span>Sale Counter</span>
+                        </button>
 
-                    <button type="button" data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
-                        <span>Stock Balances</span>
-                    </button>
+                        <button type="button" data-view="cashbook" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-book-journal-whills w-5 text-center text-base"></i>
+                            <span>Cash Book</span>
+                        </button>
 
-                    <!-- Purchases Menu -->
-                    <button type="button" data-view="purchases" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-truck-ramp-box w-5 text-center text-base"></i>
-                        <span>Purchases</span>
-                    </button>
+                        <button type="button" data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-users w-5 text-center text-base"></i>
+                            <span>Customers & Debt</span>
+                        </button>
+                    </div>
 
-                    <!-- Damage & Waste Menu -->
-                    <button type="button" data-view="waste" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-box-open w-5 text-center text-base text-amber-500"></i>
-                        <span>Damage & Waste</span>
-                    </button>
+                    <!-- 3. INVENTORY & MATERIALS -->
+                    <div class="space-y-1">
+                        <div class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Inventory & Materials</div>
+                        
+                        <!-- 🚚 Purchases -->
+                        <button type="button" data-view="purchases" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-truck-ramp-box w-5 text-center text-base"></i>
+                            <span>Purchases</span>
+                        </button>
 
-                    <!-- Stock Transfers Menu -->
-                    <button type="button" data-view="transfers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-parachute-box w-5 text-center text-base text-purple-400"></i>
-                        <span>Stock Transfers</span>
-                    </button>
+                        <!-- 📦 Stock Balances -->
+                        <button type="button" data-view="inventory" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
+                            <span>Stock Balances</span>
+                        </button>
 
-                    <!-- NEW: Stock Report Menu (လစဉ် စတော့လှုပ်ရှားမှုနှင့် လက်ကျန် မက်ထရစ်) -->
-                    <button type="button" data-view="stock_report" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-chart-column w-5 text-center text-base text-cyan-400"></i>
-                        <span>Stock Report</span>
-                    </button>
+                        <!-- 📜 Yarn Balances -->
+                        <button type="button" data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
+                            <span>Yarn Balances</span>
+                        </button>
 
-                    <!-- Product Master Menu (Admin Only) -->
-                    <button type="button" id="nav-master-products" data-view="master_products" class="nav-item hidden flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-boxes-packing w-5 text-center text-base"></i>
-                        <span>Product Master</span>
-                    </button>
+                        <!-- 🪂 Stock Transfers -->
+                        <button type="button" data-view="transfers" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-parachute-box w-5 text-center text-base text-purple-400"></i>
+                            <span>Stock Transfers</span>
+                        </button>
 
-                    <button type="button" data-view="yarn" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
-                        <span>Yarn Balances</span>
-                    </button>
+                        <!-- 🗑️ Damage & Waste -->
+                        <button type="button" data-view="waste" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-box-open w-5 text-center text-base text-amber-500"></i>
+                            <span>Damage & Waste</span>
+                        </button>
+                    </div>
 
-                    <button type="button" data-view="customers" class="nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
-                        <i class="fa-solid fa-users w-5 text-center text-base"></i>
-                        <span>Customers & Liabilities</span>
-                    </button>
+                    <!-- 4. REPORTS & MANAGEMENT (Bottom Section) -->
+                    <div class="space-y-1">
+                        <div class="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Reports & Management</div>
+                        
+                        <!-- Stock Report -->
+                        <button type="button" data-view="stock_report" class="nav-item flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-chart-column w-5 text-center text-base text-cyan-400"></i>
+                            <span>Stock Report</span>
+                        </button>
+
+                        <!-- Product Master (Admin Only) -->
+                        <button type="button" id="nav-master-products" data-view="master_products" class="nav-item hidden flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
+                            <i class="fa-solid fa-boxes-packing w-5 text-center text-base text-emerald-400"></i>
+                            <span>Product Master</span>
+                        </button>
+                    </div>
+
                 </nav>
             </div>
 
             <!-- User Profile & Logout -->
-            <div class="p-4 border-t border-slate-800/80 bg-slate-900/40">
+            <div class="p-4 border-t border-slate-800/80 bg-slate-900/40 shrink-0">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
                         <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-extrabold text-sm shrink-0">
@@ -204,7 +231,7 @@
                 <!-- Left: Dynamic Page Title & Store Pill -->
                 <div class="flex items-center gap-4">
                     <h2 id="topbar-page-title" class="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                        Sale Counter (POS)
+                        Dashboard (လုပ်ငန်းအနှစ်ချုပ်)
                     </h2>
 
                     <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-800"></div>

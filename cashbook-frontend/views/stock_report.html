@@ -1,0 +1,84 @@
+<!-- cashbook-frontend/views/stock_report.html -->
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm overflow-hidden">
+    
+    <!-- Top Filter Bar -->
+    <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex flex-wrap items-center gap-3 flex-1">
+            <!-- Search Input -->
+            <div class="relative w-64">
+                <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
+                <input type="text" id="sr-search" placeholder="ပစ္စည်းအမည် / SKU ရှာရန်..."
+                    class="w-full pl-10 pr-4 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
+            </div>
+
+            <!-- Branch Selector -->
+            <div class="relative w-48">
+                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3 top-3 pointer-events-none"></i>
+                <select id="sr-branch-select" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none">
+                    <!-- Populated dynamically -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
+
+            <!-- Category Selector -->
+            <div class="relative w-44">
+                <i class="fa-solid fa-layer-group text-blue-500 text-xs absolute left-3 top-3 pointer-events-none"></i>
+                <select id="sr-category-select" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none">
+                    <option value="">အမျိုးအစား အားလုံး</option>
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
+
+            <!-- Year Selector -->
+            <div class="relative w-32">
+                <i class="fa-regular fa-calendar text-purple-500 text-xs absolute left-3 top-3 pointer-events-none"></i>
+                <select id="sr-year-select" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none">
+                    <!-- e.g. 2025, 2026, 2027 -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
+        </div>
+
+        <!-- Export CSV Button -->
+        <button type="button" id="btn-export-sr-csv" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-xs rounded-xl transition flex items-center gap-2 cursor-pointer border border-slate-300 dark:border-slate-600">
+            <i class="fa-solid fa-file-export text-emerald-500"></i>
+            <span>Export CSV</span>
+        </button>
+    </div>
+
+    <!-- Matrix Report Table (Scrollable with Freeze Header) -->
+    <div class="flex-1 overflow-x-auto overflow-y-auto">
+        <table class="w-full text-left text-xs whitespace-nowrap min-w-[1550px] border-collapse">
+            <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+                <tr id="sr-table-header">
+                    <th class="p-3 w-12 text-center">NO</th>
+                    <th class="p-3 w-28">Category</th>
+                    <th class="p-3 w-48">Item Name</th>
+                    <!-- 12 Months Columns generated via JS -->
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Jan --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Feb --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Mar --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Apr --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">May --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Jun --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Jul --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Aug --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Sep --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Oct --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Nov --</th>
+                    <th class="p-3 text-center bg-slate-100 dark:bg-slate-800/80">Dec --</th>
+                    <!-- Totals and Valuation -->
+                    <th class="p-3 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400">စုစုပေါင်းအဝင်</th>
+                    <th class="p-3 text-right bg-rose-50/50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400">စုစုပေါင်းအထွက်</th>
+                    <th class="p-3 text-right bg-blue-50/50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400">လက်ရှိလက်ကျန်</th>
+                    <th class="p-3 text-right bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400">စတော့တန်ဖိုး</th>
+                </tr>
+            </thead>
+            <tbody id="sr-table-body" class="divide-y divide-slate-200/60 dark:divide-slate-700/60 font-semibold text-slate-800 dark:text-slate-200">
+                <tr>
+                    <td colspan="19" class="p-12 text-center text-slate-400 text-sm">အစီရင်ခံစာ အချက်အလက်များ ဆွဲယူနေပါသည်...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

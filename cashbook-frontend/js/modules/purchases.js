@@ -64,7 +64,6 @@ async function loadPurchases() {
 
     try {
         const branchId = state.currentBranch?.id || 1;
-        // Backend တွင် /purchases API ရေးသားထားရန် လိုအပ်သည်
         const res = await api.get("/purchases", { branch_id: branchId });
         purchasesList = res.data || [];
         renderPurchasesTable();
@@ -134,13 +133,11 @@ function renderPurchasesTable() {
 function openPurchaseModal() {
     const modal = document.getElementById("purchase-modal");
     
-    // Reset Form Elements
     document.getElementById("pur-supplier").value = "";
     document.getElementById("pur-payment-method").value = "cash";
     document.getElementById("pur-bank-name").value = "";
     document.getElementById("pur-bank-container")?.classList.add("hidden");
     
-    // Clear Rows and add a default row
     const tbody = document.getElementById("pur-items-container");
     if (tbody) tbody.innerHTML = "";
     updateTotalAmount();
@@ -153,30 +150,54 @@ function addPurchaseRow() {
     const tbody = document.getElementById("pur-items-container");
     if (!tbody) return;
 
-    // Master Product Options
     let productOptions = `<option value="">-- ပစ္စည်းရွေးချယ်ပါ --</option>`;
+    productOptions += `<option value="NEW" class="font-bold text-emerald-600">+ ပစ္စည်းအသစ် ထည့်မည်...</option>`;
     masterProducts.forEach(p => {
-        productOptions += `<option value="${p.id}" data-cost="${p.cost_price || 0}">${escapeHtml(p.item_name)} (${escapeHtml(p.sku)})</option>`;
+        productOptions += `<option value="${p.id}" data-cost="${p.cost_price || 0}" data-retail="${p.retail_price || 0}" data-wholesale="${p.wholesale_price || 0}">${escapeHtml(p.item_name)} (${escapeHtml(p.sku || "-")})</option>`;
     });
 
     const tr = document.createElement("tr");
-    tr.className = "pur-item-row group";
+    tr.className = "pur-item-row group border-b border-slate-200 dark:border-slate-700";
     tr.innerHTML = `
-        <td class="p-2">
-            <select class="pur-item-select w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+        <td class="p-2 align-top">
+            <select class="pur-item-select w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                 ${productOptions}
             </select>
+            <!-- ပစ္စည်းအသစ်ဖြစ်ပါက ပေါ်လာမည့် Inputs များ -->
+            <div class="new-product-fields hidden mt-2 space-y-1.5 p-2 bg-slate-50 dark:bg-slate-800/80 rounded-lg border border-emerald-500/30">
+                <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded">
+                <input type="text" placeholder="ပစ္စည်းအမည် (Item Name) *" class="new-name w-full text-xs font-bold px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded">
+                <div class="grid grid-cols-3 gap-1">
+                    <input type="text" placeholder="SKU" class="new-sku text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded">
+                    <input type="text" placeholder="အရောင်" class="new-color text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded">
+                    <input type="text" placeholder="ဆိုဒ်" class="new-size text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded" value="Free Size">
+                </div>
+            </div>
         </td>
-        <td class="p-2">
-            <input type="number" min="1" value="1" class="pur-item-qty w-full text-sm font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        <td class="p-2 align-top">
+            <input type="number" min="1" value="1" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
         </td>
-        <td class="p-2">
-            <input type="number" min="0" value="0" step="any" class="pur-item-cost w-full text-sm font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        <td class="p-2 align-top">
+            <input type="number" min="0" value="0" step="any" class="pur-item-cost w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="ဝယ်ဈေး">
         </td>
-        <td class="p-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-base pur-item-subtotal align-middle">
+        <td class="p-2 align-top space-y-1">
+            <input type="number" min="0" value="0" step="any" class="pur-item-retail w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်လီဈေး *">
+            <div class="flex items-center gap-1">
+                <input type="text" placeholder="% (ဥပမာ 30)" class="pur-retail-pct w-2/3 text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-center" title="ဝယ်ဈေးအပေါ် % ဖြင့် တွက်ရန်">
+                <button type="button" class="btn-calc-retail w-1/3 bg-slate-200 dark:bg-slate-700 hover:bg-emerald-600 hover:text-white text-[10px] font-bold rounded py-0.5 transition">Auto</button>
+            </div>
+        </td>
+        <td class="p-2 align-top space-y-1">
+            <input type="number" min="0" value="0" step="any" class="pur-item-wholesale w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-right text-blue-600 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်ကားဈေး *">
+            <div class="flex items-center gap-1">
+                <input type="text" placeholder="% (ဥပမာ 15)" class="pur-wholesale-pct w-2/3 text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-center" title="ဝယ်ဈေးအပေါ် % ဖြင့် တွက်ရန်">
+                <button type="button" class="btn-calc-wholesale w-1/3 bg-slate-200 dark:bg-slate-700 hover:bg-blue-600 hover:text-white text-[10px] font-bold rounded py-0.5 transition">Auto</button>
+            </div>
+        </td>
+        <td class="p-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm pur-item-subtotal align-top pt-3">
             0
         </td>
-        <td class="p-2 text-center align-middle">
+        <td class="p-2 text-center align-top pt-3">
             <button type="button" class="btn-remove-row text-slate-400 hover:text-rose-500 transition cursor-pointer">
                 <i class="fa-solid fa-circle-minus text-lg"></i>
             </button>
@@ -184,18 +205,62 @@ function addPurchaseRow() {
     `;
     tbody.appendChild(tr);
 
-    // Bind Events for this new row
     const select = tr.querySelector(".pur-item-select");
+    const newFields = tr.querySelector(".new-product-fields");
     const qtyInput = tr.querySelector(".pur-item-qty");
     const costInput = tr.querySelector(".pur-item-cost");
+    const retailInput = tr.querySelector(".pur-item-retail");
+    const wholesaleInput = tr.querySelector(".pur-item-wholesale");
+    const retailPctInput = tr.querySelector(".pur-retail-pct");
+    const wholesalePctInput = tr.querySelector(".pur-wholesale-pct");
+    const calcRetailBtn = tr.querySelector(".btn-calc-retail");
+    const calcWholesaleBtn = tr.querySelector(".btn-calc-wholesale");
     const removeBtn = tr.querySelector(".btn-remove-row");
 
-    // ပစ္စည်းရွေးလိုက်လျှင် အရင်းဈေး (Cost Price) ကို Auto ဖြည့်ပေးမည်
+    // ပစ္စည်းရွေးချယ်မှု ပြောင်းလဲလျှင်
     select.addEventListener("change", (e) => {
-        const selectedOption = e.target.options[e.target.selectedIndex];
-        const cost = selectedOption.getAttribute("data-cost");
-        if (cost) costInput.value = cost;
+        const val = e.target.value;
+        if (val === "NEW") {
+            newFields.classList.remove("hidden");
+            costInput.value = 0;
+            retailInput.value = 0;
+            wholesaleInput.value = 0;
+        } else {
+            newFields.classList.add("hidden");
+            const selectedOption = e.target.options[e.target.selectedIndex];
+            const cost = selectedOption.getAttribute("data-cost");
+            const retail = selectedOption.getAttribute("data-retail");
+            const wholesale = selectedOption.getAttribute("data-wholesale");
+            
+            if (cost) costInput.value = cost;
+            if (retail) retailInput.value = retail;
+            if (wholesale) wholesaleInput.value = wholesale;
+        }
         calculateRow(tr);
+    });
+
+    // Auto % ဖြင့် လက်လီဈေး တွက်ချက်ခြင်း
+    calcRetailBtn.addEventListener("click", () => {
+        const cost = parseFloat(costInput.value) || 0;
+        const pct = parseFloat(retailPctInput.value) || 0;
+        if (cost > 0 && pct > 0) {
+            const calculatedRetail = Math.round(cost + (cost * pct / 100));
+            retailInput.value = calculatedRetail;
+        } else {
+            alert("ကျေးဇူးပြု၍ ဝယ်ဈေးနှင့် ရာခိုင်နှုန်း (%) မှန်ကန်စွာ ထည့်ပါ။");
+        }
+    });
+
+    // Auto % ဖြင့် လက်ကားဈေး တွက်ချက်ခြင်း
+    calcWholesaleBtn.addEventListener("click", () => {
+        const cost = parseFloat(costInput.value) || 0;
+        const pct = parseFloat(wholesalePctInput.value) || 0;
+        if (cost > 0 && pct > 0) {
+            const calculatedWholesale = Math.round(cost + (cost * pct / 100));
+            wholesaleInput.value = calculatedWholesale;
+        } else {
+            alert("ကျေးဇူးပြု၍ ဝယ်ဈေးနှင့် ရာခိုင်နှုန်း (%) မှန်ကန်စွာ ထည့်ပါ။");
+        }
     });
 
     qtyInput.addEventListener("input", () => calculateRow(tr));
@@ -236,7 +301,7 @@ function updateTotalAmount() {
 
 async function submitPurchase() {
     const supplier = document.getElementById("pur-supplier").value.trim();
-    if (!supplier) return alert("ပေးသွင်းသူ အမည် ထည့်ပါ။");
+    if (!supplier) return alert("ပေးသွင်းသူ (ပွဲရုံ) အမည် ထည့်ပါ။");
 
     const paymentMethod = document.getElementById("pur-payment-method").value;
     const bankName = document.getElementById("pur-bank-name").value.trim();
@@ -246,28 +311,75 @@ async function submitPurchase() {
 
     const items = [];
     let hasError = false;
+    let errorMessage = "";
 
     document.querySelectorAll(".pur-item-row").forEach(row => {
-        const productId = row.querySelector(".pur-item-select").value;
+        const selectEl = row.querySelector(".pur-item-select");
+        const productId = selectEl.value;
         const qty = parseInt(row.querySelector(".pur-item-qty").value, 10) || 0;
         const cost = parseFloat(row.querySelector(".pur-item-cost").value) || 0;
+        const retail = parseFloat(row.querySelector(".pur-item-retail").value) || 0;
+        const wholesale = parseFloat(row.querySelector(".pur-item-wholesale").value) || 0;
 
         if (!productId) {
             hasError = true;
-            row.querySelector(".pur-item-select").classList.add("border-rose-500");
-        } else {
-            row.querySelector(".pur-item-select").classList.remove("border-rose-500");
-            items.push({
-                product_id: parseInt(productId, 10),
-                quantity: qty,
-                unit_cost: cost,
-                subtotal: qty * cost
-            });
+            errorMessage = "ဝယ်ယူမည့် ပစ္စည်းများကို မှန်ကန်စွာ ရွေးချယ်ပါ။";
+            selectEl.classList.add("border-rose-500");
+            return;
         }
+
+        // လက်လီ / လက်ကားဈေး မပါလျှင် လက်မခံရန် Validation
+        if (retail <= 0 || wholesale <= 0) {
+            hasError = true;
+            errorMessage = "ပစ္စည်းတိုင်းအတွက် လက်လီဈေးနှင့် လက်ကားဈေးများကို မဖြစ်မနေ ထည့်သွင်းပေးရပါမည်။";
+            row.querySelector(".pur-item-retail").classList.add("border-rose-500");
+            row.querySelector(".pur-item-wholesale").classList.add("border-rose-500");
+            return;
+        }
+
+        let itemData = {
+            quantity: qty,
+            unit_cost: cost,
+            retail_price: retail,
+            wholesale_price: wholesale,
+            subtotal: qty * cost
+        };
+
+        if (productId === "NEW") {
+            const category = row.querySelector(".new-cat").value.trim() || "Uncategorized";
+            const itemName = row.querySelector(".new-name").value.trim();
+            const sku = row.querySelector(".new-sku").value.trim() || null;
+            const color = row.querySelector(".new-color").value.trim() || null;
+            const size = row.querySelector(".new-size").value.trim() || "Free Size";
+
+            if (!itemName) {
+                hasError = true;
+                errorMessage = "ပစ္စည်းအသစ်အတွက် 'ပစ္စည်းအမည်' ကို မဖြစ်မနေ ထည့်သွင်းပါ။";
+                row.querySelector(".new-name").classList.add("border-rose-500");
+                return;
+            }
+
+            itemData.is_new = true;
+            itemData.new_product = {
+                category,
+                item_name: itemName,
+                sku,
+                color,
+                size,
+                cost_price: cost,
+                retail_price: retail,
+                wholesale_price: wholesale
+            };
+        } else {
+            itemData.product_id = parseInt(productId, 10);
+            itemData.is_new = false;
+        }
+
+        items.push(itemData);
     });
 
     if (hasError || items.length === 0) {
-        return alert("ကျေးဇူးပြု၍ ဝယ်ယူမည့် ပစ္စည်းများကို မှန်ကန်စွာ ရွေးချယ်ပါ။");
+        return alert(errorMessage || "ကျေးဇူးပြု၍ အချက်အလက်များကို ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
     }
 
     const totalAmount = items.reduce((sum, item) => sum + item.subtotal, 0);
@@ -291,8 +403,8 @@ async function submitPurchase() {
     try {
         await api.post("/purchases", payload);
         document.getElementById("purchase-modal")?.classList.add("hidden");
-        await loadPurchases(); // ဇယားကို ပြန် Refresh လုပ်မည်
-        alert("အဝယ်စာရင်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။ Stock နှင့် Cashbook တွင်လည်း အလိုအလျောက် သက်ရောက်သွားပါမည်။");
+        await loadPurchases();
+        alert("အဝယ်စာရင်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။ Stock နှင့် Cashbook သို့ အလိုအလျောက် ဝင်ရောက်သွားပါပြီ။");
     } catch (err) {
         alert("စာရင်းသွင်း၍မရပါ: " + err.message);
     } finally {

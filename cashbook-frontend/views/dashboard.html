@@ -1,0 +1,231 @@
+<!-- cashbook-frontend/views/dashboard.html -->
+<div class="h-full w-full flex flex-col gap-4 overflow-y-auto pr-1">
+
+    <!-- 1. Top Controls & Filter Bar -->
+    <div class="p-4 bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-gauge-high"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>လုပ်ငန်းအနှစ်ချုပ် Dashboard</span>
+                    <span id="dash-role-badge" class="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">ROLE</span>
+                </h3>
+                <p id="dash-greeting-text" class="text-xs text-slate-500 dark:text-slate-400">စာရင်းအင်း အချက်အလက်များ အချိန်နှင့်တပြေးညီ တင်ပြမှု</p>
+            </div>
+        </div>
+
+        <!-- Filter Controls (Admin အတွက် ဆိုင်ရွေး/နှစ်ရွေးခွင့် ပါမည်) -->
+        <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Branch Filter (Admin Only Active, Cashier Disabled) -->
+            <div id="dash-branch-container" class="relative">
+                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3 top-3 pointer-events-none"></i>
+                <select id="dash-branch-select" class="pl-8 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none transition">
+                    <!-- Populated dynamically via JS -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
+
+            <!-- Year Filter (Admin Only) -->
+            <div id="dash-year-container" class="relative hidden">
+                <i class="fa-regular fa-calendar text-blue-500 text-xs absolute left-3 top-3 pointer-events-none"></i>
+                <select id="dash-year-select" class="pl-8 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none">
+                    <!-- e.g. 2026, 2027 -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+            </div>
+
+            <!-- Refresh Button -->
+            <button type="button" id="btn-refresh-dashboard" title="ဒေတာ ပြန်ဆွဲတင်မည်" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 flex items-center justify-center transition border border-slate-200 dark:border-slate-600 cursor-pointer">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
+
+            <!-- Export CSV Button (Admin Only) -->
+            <button type="button" id="btn-export-dash-csv" class="hidden px-3.5 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-xs rounded-xl transition items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-600">
+                <i class="fa-solid fa-file-export text-emerald-500"></i>
+                <span>Export CSV</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Dynamic 4-Box Top Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        <!-- Card 1 -->
+        <div class="bg-white dark:bg-slate-800/90 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-1-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၁</div>
+                <div id="dash-card-1-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
+                <div id="dash-card-1-sub" class="text-[11px] text-slate-400 font-semibold mt-0.5">--</div>
+            </div>
+            <div id="dash-card-1-icon-box" class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-1-icon" class="fa-solid fa-money-bill-wave"></i>
+            </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="bg-white dark:bg-slate-800/90 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-2-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၂</div>
+                <div id="dash-card-2-value" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">0</div>
+                <div id="dash-card-2-sub" class="text-[11px] text-slate-400 font-semibold mt-0.5">--</div>
+            </div>
+            <div id="dash-card-2-icon-box" class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-2-icon" class="fa-solid fa-building-columns"></i>
+            </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="bg-white dark:bg-slate-800/90 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-3-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၃</div>
+                <div id="dash-card-3-value" class="text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight">0</div>
+                <div id="dash-card-3-sub" class="text-[11px] text-slate-400 font-semibold mt-0.5">--</div>
+            </div>
+            <div id="dash-card-3-icon-box" class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-3-icon" class="fa-solid fa-shirt"></i>
+            </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="bg-white dark:bg-slate-800/90 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+            <div>
+                <div id="dash-card-4-title" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ခေါင်းစဉ် ၄</div>
+                <div id="dash-card-4-value" class="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight">0</div>
+                <div id="dash-card-4-sub" class="text-[11px] text-slate-400 font-semibold mt-0.5">--</div>
+            </div>
+            <div id="dash-card-4-icon-box" class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-xl shrink-0">
+                <i id="dash-card-4-icon" class="fa-solid fa-vault"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. STAFF / CASHIER SPECIFIC SECTION (အမြတ်/အရှုံး မပါဝင်သော နေ့စဉ်လုပ်ငန်းဆောင်ရွက်မှု) -->
+    <div id="dash-staff-view" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Staff: Today Category Breakdown -->
+        <div class="bg-white dark:bg-slate-800/90 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700/80 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-emerald-500"></i>
+                    <span>ယနေ့ ရောင်းရသော အမျိုးအစားများ</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Category Summary</span>
+            </div>
+            <div class="flex-1 overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                            <th class="py-2">အမျိုးအစား</th>
+                            <th class="py-2 text-center">အရေအတွက်</th>
+                            <th class="py-2 text-right">ရောင်းရငွေ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-staff-cat-body" class="divide-y divide-slate-100 dark:divide-slate-800/80 font-semibold">
+                        <tr><td colspan="3" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Staff: Recent Sales Vouchers -->
+        <div class="bg-white dark:bg-slate-800/90 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700/80 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-receipt text-blue-500"></i>
+                    <span>ယနေ့ နောက်ဆုံး ရောင်းချမှု (၅) စောင်</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Latest Sales</span>
+            </div>
+            <div class="flex-1 overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                        <tr>
+                            <th class="py-2">ဘောင်ချာ</th>
+                            <th class="py-2">ဖောက်သည်</th>
+                            <th class="py-2">နည်းလမ်း</th>
+                            <th class="py-2 text-right">သင့်ငွေ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-staff-recent-body" class="divide-y divide-slate-100 dark:divide-slate-800/80 font-semibold">
+                        <tr><td colspan="4" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. ADMIN SPECIFIC SECTION (အသုံးစရိတ် ခွဲခြမ်းစိတ်ဖြာမှု၊ ရောင်းအားအကောင်းဆုံး၊ ဘဏ်နှင့် လက်ကျန်တန်ဖိုး) -->
+    <div id="dash-admin-view" class="hidden flex flex-col gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Admin: Expense Breakdown by Category -->
+            <div class="bg-white dark:bg-slate-800/90 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700/80 mb-3">
+                    <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-rose-500"></i>
+                        <span>အသုံးစရိတ် ခေါင်းစဉ်များ</span>
+                    </div>
+                    <span id="dash-total-expense-label" class="text-xs font-mono font-bold text-rose-500">0 Ks</span>
+                </div>
+                <div class="flex-1 overflow-y-auto max-h-60">
+                    <div id="dash-expense-list" class="space-y-2.5">
+                        <div class="text-center py-6 text-slate-400 text-xs">အသုံးစရိတ်စာရင်း မရှိသေးပါ</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin: Top Selling Categories & Items -->
+            <div class="bg-white dark:bg-slate-800/90 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex flex-col lg:col-span-2">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700/80 mb-3">
+                    <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-crown text-amber-500"></i>
+                        <span>ရောင်းအားအကောင်းဆုံး အထည်များ (Top Items)</span>
+                    </div>
+                    <span class="text-xs text-slate-400 font-bold">Best Sellers</span>
+                </div>
+                <div class="flex-1 overflow-x-auto max-h-60">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-slate-400 uppercase font-bold border-b border-slate-100 dark:border-slate-800">
+                            <tr>
+                                <th class="py-2">အထည်အမည်</th>
+                                <th class="py-2">အမျိုးအစား</th>
+                                <th class="py-2 text-center">ဦးရေ</th>
+                                <th class="py-2 text-right">ရောင်းရငွေ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dash-admin-top-items" class="divide-y divide-slate-100 dark:divide-slate-800/80 font-semibold">
+                            <tr><td colspan="4" class="py-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin: Liquidity & Branch Balances Table -->
+        <div class="bg-white dark:bg-slate-800/90 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700/80 mb-3">
+                <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-scale-balanced text-blue-500"></i>
+                    <span>ဆိုင်ခွဲအလိုက် စတော့တန်ဖိုးနှင့် ငွေကြေးအခြေအနေ</span>
+                </div>
+                <span class="text-xs text-slate-400 font-bold">Branch Valuation Breakdown</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left whitespace-nowrap">
+                    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase font-bold border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                            <th class="p-3">ဆိုင်ခွဲအမည်</th>
+                            <th class="p-3 text-right">ငွေသား (Cash Net)</th>
+                            <th class="p-3 text-right">ဘဏ်ငွေ (Bank Net)</th>
+                            <th class="p-3 text-right">စတော့တန်ဖိုး (Valuation)</th>
+                            <th class="p-3 text-right">ရရန်ကျန်အကြွေး (Debt)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-branch-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                        <tr><td colspan="5" class="p-6 text-center text-slate-400">စာရင်း ဆွဲယူနေပါသည်...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>

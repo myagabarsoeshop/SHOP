@@ -396,7 +396,7 @@ export default {
             }
 
             // =================================================================
-            // 6. WASTE / DAMAGE LOGS (အလေအလွင့် စာရင်း ရယူခြင်း နှင့် မှတ်တမ်းတင်ခြင်း)
+            // 6. WASTE / DAMAGE LOGS (အလေအလွင့် စာရင်း ရယူခြင်း၊ သွင်းခြင်း၊ ပြင်ခြင်း၊ ဖျက်ခြင်း)
             // =================================================================
             
             // (၁) အလေအလွင့် စာရင်းများကို ဆွဲယူပြသပေးမည့် GET Route
@@ -427,12 +427,11 @@ export default {
                 const reason = String(body.reason || "").trim();
                 const userId = Number(body.recorded_by || body.userId || 1);
 
-                // Validation စစ်ဆေးခြင်း
                 if (!branchId || !productId || isNaN(quantity) || quantity <= 0) {
                     return errorResponse("ဆိုင်ခွဲ၊ ပစ္စည်းနှင့် အလေအလွင့် အရေအတွက် မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
                 }
 
-                // ဆိုင်ခွဲရှိ လက်ကျန်စတော့ စစ်ဆေးခြင်း
+                // လက်ကျန်စတော့ စစ်ဆေးခြင်း
                 const inv = await env.DB.prepare(`
                     SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
                 `).bind(branchId, productId).first();
@@ -460,6 +459,58 @@ export default {
 
                 await env.DB.batch(batchStatements);
                 return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
+            }
+
+            // (၃) အလေအလွင့် စာရင်း ပြင်ဆင်မည့် PUT Route (စတော့ အလိုအလျောက် ပြန်ညှိမည်)
+            if (path.startsWith("/api/waste/") && method === "PUT") {
+                const id = Number(path.split("/").pop());
+                const body = await request.json().catch(() => ({}));
+                const newQty = parseInt(body.quantity, 10);
+                const reason = String(body.reason || "").trim();
+
+                if (!id || isNaN(newQty) || newQty <= 0) {
+                    return errorResponse("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပါ", 400);
+                }
+
+                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
+                if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+                // ကွာခြားချက် ရှာဖွေခြင်း (ဥပမာ- ယခင် ၉ ခု၊ ယခု ၃ ခု ပြင်လျှင် diff = +၆ ဖြစ်၍ စတော့ထဲ ၆ ခု ပြန်ပေါင်းမည်)
+                const diff = Number(oldLog.quantity) - newQty;
+
+                // အရေအတွက် ပိုတိုး၍ လျော့မည်ဆိုပါက စတော့လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
+                if (diff < 0) {
+                    const inv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first();
+                    const currentStock = Number(inv?.quantity || 0);
+                    if (currentStock + diff < 0) {
+                        return errorResponse(`လက်ကျန်စတော့ မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
+                    }
+                }
+
+                await env.DB.batch([
+                    env.DB.prepare("UPDATE waste_logs SET quantity = ?, reason = ? WHERE id = ?")
+                        .bind(newQty, reason, id),
+                    env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                        .bind(diff, Number(oldLog.branch_id), Number(oldLog.product_id))
+                ]);
+
+                return jsonResponse({ message: "အလေအလွင့်စာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်ညှိပြီးပါပြီ။" });
+            }
+
+            // (၄) အလေအလွင့် စာရင်း ဖျက်ပစ်မည့် DELETE Route (စတော့ထဲသို့ အပြည့်အဝ ပြန်ပေါင်းထည့်မည်)
+            if (path.startsWith("/api/waste/") && method === "DELETE") {
+                const id = Number(path.split("/").pop());
+                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
+                if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+                await env.DB.batch([
+                    env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                        .bind(Number(oldLog.quantity), Number(oldLog.branch_id), Number(oldLog.product_id)),
+                    env.DB.prepare("DELETE FROM waste_logs WHERE id = ?").bind(id)
+                ]);
+
+                return jsonResponse({ message: "မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲသို့ အပြည့်အဝ ပြန်လည် ထည့်သွင်းပြီးပါပြီ။" });
             }
 
             // =================================================================

@@ -404,7 +404,7 @@ export default {
                 const branchId = url.searchParams.get("branch_id") || 1;
                 const sql = `
                     SELECT 
-                        w.id, w.reference_no, w.branch_id, w.quantity, w.unit_cost, w.reason, w.created_at,
+                        w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
                         p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
                         COALESCE(u.full_name, 'Admin') AS recorded_by_name
                     FROM waste_logs w
@@ -420,9 +420,8 @@ export default {
             // (၂) အလေအလွင့် စာရင်း အသစ်သွင်းမည့် POST Route (ချည် ဒသမကိန်း lb ပါ လက်ခံသည်)
             if (path === "/api/waste" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const branchId = Number(body.branch_id || body.branchId);
+                const branchId = Number(body.branch_id || body.branchId || 1);
                 const productId = Number(body.product_id || body.productId);
-                // ချည် ပေါင် (lb) ဒသမကိန်းများပါ လက်ခံနိုင်ရန် parseFloat အသုံးပြုထားပါသည်
                 const quantity = parseFloat(body.quantity);
                 const unitCost = parseFloat(body.unit_cost ?? body.unitCost) || 0;
                 const reason = String(body.reason || "").trim();
@@ -468,15 +467,16 @@ export default {
                 const body = await request.json().catch(() => ({}));
                 const newQty = parseFloat(body.quantity);
                 const reason = String(body.reason || "").trim();
+                const unitCost = body.unit_cost !== undefined ? parseFloat(body.unit_cost) : null;
 
                 if (!id || isNaN(newQty) || newQty <= 0) {
                     return errorResponse("မှန်ကန်သော အရေအတွက်/ပမာဏ ထည့်သွင်းပါ", 400);
                 }
 
-                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
+                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity, unit_cost FROM waste_logs WHERE id = ?").bind(id).first();
                 if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
 
-                // ကွာခြားချက် ရှာဖွေခြင်း (ဒသမကိန်း တိကျစေရန် တွက်ချက်ထားပါသည်)
+                // ကွာခြားချက် ရှာဖွေခြင်း (ဒသမကိန်း တိကျစေရန် တွက်ချက်ခြင်း)
                 const diff = Math.round((Number(oldLog.quantity) - newQty) * 1000) / 1000;
 
                 // အရေအတွက် ပိုတိုး၍ လျော့မည်ဆိုပါက စတော့လက်ကျန် လုံလောက်မှု ရှိ/မရှိ စစ်ဆေးခြင်း
@@ -489,9 +489,11 @@ export default {
                     }
                 }
 
+                const finalUnitCost = unitCost !== null ? unitCost : Number(oldLog.unit_cost || 0);
+
                 await env.DB.batch([
-                    env.DB.prepare("UPDATE waste_logs SET quantity = ?, reason = ? WHERE id = ?")
-                        .bind(newQty, reason, id),
+                    env.DB.prepare("UPDATE waste_logs SET quantity = ?, unit_cost = ?, reason = ? WHERE id = ?")
+                        .bind(newQty, finalUnitCost, reason, id),
                     env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
                         .bind(diff, Number(oldLog.branch_id), Number(oldLog.product_id))
                 ]);

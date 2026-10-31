@@ -13,6 +13,17 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;");
 }
 
+/**
+ * ချည်ယူနစ် Free Size ဖြစ်နေပါက ပေါင် ဟု အလိုအလျောက် ပြောင်းလဲသတ်မှတ်ခြင်း
+ */
+function getYarnUnit(item) {
+    const sz = String(item.size || "").trim();
+    if (!sz || sz.toLowerCase() === "free size" || sz.toLowerCase() === "free") {
+        return "ပေါင်";
+    }
+    return sz;
+}
+
 export async function initYarn() {
     bindEvents();
     await loadYarnInventory();
@@ -44,8 +55,6 @@ function bindEvents() {
     document.getElementById("yarn-edit-form")?.addEventListener("submit", submitEditYarn);
 }
 
-// cashbook-frontend/js/modules/yarn.js ထဲရှိ loadYarnInventory အပိုင်း
-
 async function loadYarnInventory() {
     const tbody = document.getElementById("yarn-table-body");
     const branchId = state.currentBranch?.id || 1;
@@ -55,7 +64,6 @@ async function loadYarnInventory() {
     }
 
     try {
-        // သီးခြား API /yarns သို့မဟုတ် /products မှ ခေါ်ယူခြင်း
         const res = await api.get("/yarns", { branch_id: branchId }).catch(() => api.get("/products", { branch_id: branchId }));
         const allProducts = res.data || [];
         
@@ -70,7 +78,6 @@ async function loadYarnInventory() {
                 return false;
             }
 
-            // Category က ချည်ဖြစ်ခြင်း သို့မဟုတ် ချည်အမျိုးအစား (ဥပမာ- ချည်လုံး၊ ချည်ခင်၊ ချည်ထုပ်) ဖြစ်မှသာ ပြမည်
             return cat === "ချည်" || cat === "yarn" || cat.startsWith("ချည်");
         });
 
@@ -120,9 +127,8 @@ function renderTable(list) {
     list.forEach(item => {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 10);
-        const unit = item.size || "lb";
+        const unit = getYarnUnit(item);
 
-        // Action Buttons (ရက်ကန်းထုတ် = Amber ၊ Edit = Blue ၊ Delete = Rose)
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
                 <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" class="btn-issue-row w-8 h-8 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-white rounded-lg text-amber-600 dark:text-amber-400 transition cursor-pointer shadow-sm">
@@ -158,7 +164,7 @@ function renderTable(list) {
                 ${escapeHtml(item.color || "-")}
             </td>
             <td class="p-4 text-center font-bold text-xs">
-                <span class="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-400">
+                <span class="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold border border-emerald-500/20">
                     ${escapeHtml(unit)}
                 </span>
             </td>
@@ -173,7 +179,7 @@ function renderTable(list) {
             </td>
             <td class="p-4 text-center">
                 <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base ${isLow ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}">
-                    ${stock.toLocaleString()}
+                    ${stock.toLocaleString()} <span class="text-xs font-sans font-bold">${escapeHtml(unit)}</span>
                 </span>
             </td>
             <td class="p-4 text-center">
@@ -216,8 +222,9 @@ function openIssueModal(selectedYarnId = null) {
 
     yarnList.forEach(y => {
         const isSel = selectedYarnId && selectedYarnId === y.id ? "selected" : "";
+        const unit = getYarnUnit(y);
         select.innerHTML += `<option value="${y.id}" ${isSel} data-stock="${y.current_stock || 0}">
-            ${escapeHtml(y.item_name)} (${escapeHtml(y.sku || "-")}) - လက်ကျန်: ${y.current_stock || 0} ${escapeHtml(y.size || "lb")}
+            ${escapeHtml(y.item_name)} (${escapeHtml(y.sku || "-")}) - လက်ကျန်: ${Number(y.current_stock || 0).toLocaleString()} ${escapeHtml(unit)}
         </option>`;
     });
 
@@ -235,7 +242,8 @@ function updateIssueStockHint(yarnId) {
 
     if (item && hint) {
         const stock = Number(item.current_stock || 0);
-        hint.textContent = `လက်ရှိစတိုလက်ကျန်: ${stock.toLocaleString()} ${item.size || "lb"}`;
+        const unit = getYarnUnit(item);
+        hint.textContent = `လက်ရှိစတိုလက်ကျန်: ${stock.toLocaleString()} ${unit}`;
         if (qtyInput) qtyInput.max = stock;
     } else if (hint) {
         hint.textContent = "";
@@ -257,7 +265,8 @@ async function submitYarnIssue(e) {
 
     const item = yarnList.find(y => y.id === yarnId);
     if (item && qty > Number(item.current_stock || 0)) {
-        return alert(`လက်ကျန်ချည်ပမာဏ (${item.current_stock}) ထက် ပိုမို၍ ထုတ်ပေး၍မရပါ။`);
+        const unit = getYarnUnit(item);
+        return alert(`လက်ကျန်ချည်ပမာဏ (${item.current_stock} ${unit}) ထက် ပိုမို၍ ထုတ်ပေး၍မရပါ။`);
     }
 
     if (btn) btn.disabled = true;
@@ -285,11 +294,12 @@ async function submitYarnIssue(e) {
 
 // --- ချည်အချက်အလက် ပြင်ဆင်ခြင်း Modal Logic (Admin) ---
 function openEditYarnModal(item) {
+    const unit = getYarnUnit(item);
     document.getElementById("edit-yarn-id").value = item.id;
     document.getElementById("edit-yarn-sku").value = item.sku || "";
     document.getElementById("edit-yarn-name").value = item.item_name || "";
     document.getElementById("edit-yarn-color").value = item.color || "";
-    document.getElementById("edit-yarn-unit").value = item.size || "lb";
+    document.getElementById("edit-yarn-unit").value = unit;
     document.getElementById("edit-yarn-cost").value = item.cost_price || 0;
     document.getElementById("edit-yarn-retail").value = item.retail_price || 0;
     document.getElementById("edit-yarn-wholesale").value = item.wholesale_price || 0;
@@ -307,7 +317,7 @@ async function submitEditYarn(e) {
         sku: document.getElementById("edit-yarn-sku")?.value.trim() || null,
         itemName: document.getElementById("edit-yarn-name")?.value.trim(),
         color: document.getElementById("edit-yarn-color")?.value.trim() || null,
-        size: document.getElementById("edit-yarn-unit")?.value.trim() || "lb",
+        size: document.getElementById("edit-yarn-unit")?.value.trim() || "ပေါင်",
         costPrice: parseFloat(document.getElementById("edit-yarn-cost")?.value) || 0,
         retailPrice: parseFloat(document.getElementById("edit-yarn-retail")?.value) || 0,
         wholesalePrice: parseFloat(document.getElementById("edit-yarn-wholesale")?.value) || 0
@@ -348,12 +358,13 @@ function exportYarnToCSV() {
     let csvContent = "Yarn SKU,Barcode,Item Name,Color,Unit,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
 
     yarnList.forEach(y => {
+        const unit = getYarnUnit(y);
         const row = [
             `"${escapeHtml(y.sku || '')}"`,
             `"${escapeHtml(y.barcode || '')}"`,
             `"${escapeHtml(y.item_name || '')}"`,
             `"${escapeHtml(y.color || '')}"`,
-            `"${escapeHtml(y.size || 'lb')}"`,
+            `"${escapeHtml(unit)}"`,
             y.cost_price || 0,
             y.retail_price || 0,
             y.wholesale_price || 0,

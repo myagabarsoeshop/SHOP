@@ -94,8 +94,8 @@ function updateInventoryKPIs() {
 
     setKPI(1, "အထည်အမျိုးအစားပေါင်း (SKUs)", totalTypes, "fa-tags", "blue");
     setKPI(2, "စုစုပေါင်း အထည်လက်ကျန် (Pieces)", totalPieces, "fa-shirt", "emerald");
-    setKPI(3, "လက်ကျန် အရင်းတန်ဖိုး (Stock Value)", totalCostValue, "fa-vault", "amber");
-    setKPI(4, "လက်ကျန်နည်းနေသော အထည် (Low Stock)", lowStockCount, "fa-triangle-exclamation", "rose");
+    setKPI(3, "လက်ကျန် အရင်းတန်ဖိုး", totalCostValue, "fa-vault", "amber");
+    setKPI(4, "လက်ကျန်နည်းနေသော အထည်", lowStockCount, "fa-triangle-exclamation", "rose");
 }
 
 function filterAndRender() {

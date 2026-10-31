@@ -1152,6 +1152,141 @@ export default {
                 return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်းကို ပယ်ဖျက်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်ညှိပြီးပါပြီ" });
             }
 
+            // =================================================================
+            // 12. INVENTORY & STOCK REPORTS (လစဉ် စတော့လှုပ်ရှားမှုနှင့် လက်ကျန် အစီရင်ခံစာ)
+            // =================================================================
+            if (path === "/api/reports/monthly-stock" && method === "GET") {
+                const year = url.searchParams.get("year") || String(new Date().getFullYear());
+                const branchId = url.searchParams.get("branch_id"); // null သို့မဟုတ် branch_id
+
+                // ၁။ ပစ္စည်းများ အားလုံးနှင့် လက်ရှိ စတော့လက်ကျန်များ ဆွဲယူခြင်း
+                let prodSql = `
+                    SELECT 
+                        p.id, p.sku, p.category, p.item_name, p.cost_price,
+                        COALESCE(SUM(bi.quantity), 0) AS current_balance
+                    FROM products p
+                    LEFT JOIN branch_inventory bi ON p.id = bi.product_id
+                `;
+                const prodBindings = [];
+                if (branchId && branchId !== "ALL") {
+                    prodSql += ` AND bi.branch_id = ? `;
+                    prodBindings.push(Number(branchId));
+                }
+                prodSql += ` GROUP BY p.id ORDER BY p.category ASC, p.item_name ASC `;
+                const { results: products } = await env.DB.prepare(prodSql).bind(...prodBindings).all();
+
+                // ၂။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အဝင် (Purchases) တွက်ချက်ခြင်း
+                let purchSql = `
+                    SELECT 
+                        pi.product_id,
+                        CAST(strftime('%m', p.created_at) AS INTEGER) AS m,
+                        SUM(pi.quantity) AS qty
+                    FROM purchase_items pi
+                    JOIN purchases p ON pi.purchase_id = p.id
+                    WHERE strftime('%Y', p.created_at) = ?
+                `;
+                const purchBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    purchSql += ` AND p.branch_id = ? `;
+                    purchBindings.push(Number(branchId));
+                }
+                purchSql += ` GROUP BY pi.product_id, m `;
+                const { results: purchases } = await env.DB.prepare(purchSql).bind(...purchBindings).all();
+
+                // ၃။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အထွက် (Sales) တွက်ချက်ခြင်း
+                let saleSql = `
+                    SELECT 
+                        si.product_id,
+                        CAST(strftime('%m', s.created_at) AS INTEGER) AS m,
+                        SUM(si.quantity) AS qty
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE strftime('%Y', s.created_at) = ?
+                `;
+                const saleBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    saleSql += ` AND s.branch_id = ? `;
+                    saleBindings.push(Number(branchId));
+                }
+                saleSql += ` GROUP BY si.product_id, m `;
+                const { results: sales } = await env.DB.prepare(saleSql).bind(...saleBindings).all();
+
+                // ၄။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် ပျက်စီး/အလေအလွင့် (Waste) တွက်ချက်ခြင်း
+                let wasteSql = `
+                    SELECT 
+                        product_id,
+                        CAST(strftime('%m', created_at) AS INTEGER) AS m,
+                        SUM(quantity) AS qty
+                    FROM waste_records
+                    WHERE strftime('%Y', created_at) = ?
+                `;
+                const wasteBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    wasteSql += ` AND branch_id = ? `;
+                    wasteBindings.push(Number(branchId));
+                }
+                wasteSql += ` GROUP BY product_id, m `;
+                const { results: waste } = await env.DB.prepare(wasteSql).bind(...wasteBindings).all();
+
+                // ၅။ Memory ထဲတွင် Map ပြုလုပ်၍ လစဉ် လက်ကျန် Matrix တွက်ချက်ခြင်း
+                const report = (products || []).map(prod => {
+                    const pid = prod.id;
+                    const inMap = {};
+                    const outMap = {};
+
+                    // Purchases Add
+                    (purchases || []).filter(r => r.product_id === pid).forEach(r => {
+                        inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    // Sales Add
+                    (sales || []).filter(r => r.product_id === pid).forEach(r => {
+                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    // Waste Add
+                    (waste || []).filter(r => r.product_id === pid).forEach(r => {
+                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    let totalIn = 0;
+                    let totalOut = 0;
+                    const monthlyBalances = {};
+
+                    // လစဉ် အဝင်/အထွက် ပေါင်းလဒ်
+                    for (let m = 1; m <= 12; m++) {
+                        const mIn = inMap[m] || 0;
+                        const mOut = outMap[m] || 0;
+                        totalIn += mIn;
+                        totalOut += mOut;
+                    }
+
+                    // လစဉ် Cumulative လက်ကျန် ခန့်မှန်းတွက်ချက်ခြင်း
+                    let running = Number(prod.current_balance || 0);
+                    // လက်ရှိလက်ကျန်မှ နောက်ပြန်ဆွဲ၍ လအလိုက် ပုံဖော်ခြင်း
+                    for (let m = 12; m >= 1; m--) {
+                        monthlyBalances[m] = Math.max(0, running);
+                        const mIn = inMap[m] || 0;
+                        const mOut = outMap[m] || 0;
+                        running = running - mIn + mOut;
+                    }
+
+                    return {
+                        id: prod.id,
+                        sku: prod.sku,
+                        category: prod.category,
+                        item_name: prod.item_name,
+                        cost_price: Number(prod.cost_price || 0),
+                        current_balance: Number(prod.current_balance || 0),
+                        total_in: totalIn,
+                        total_out: totalOut,
+                        monthly_balances: monthlyBalances
+                    };
+                });
+
+                return jsonResponse(report);
+            }
+
             return errorResponse(`Route မတွေ့ပါ: ${method} ${path}`, 404);
         } catch (err) {
             return errorResponse(`Server Error: ${err.message}`, 500);

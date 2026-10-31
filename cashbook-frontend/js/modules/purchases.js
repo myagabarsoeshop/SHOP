@@ -4,9 +4,9 @@ import { state } from "../core/state.js";
 import { PaginationController } from "../core/pagination.js";
 
 let purchasesList = [];
+let currentFilteredPurchases = [];
 let masterProducts = [];
 
-// အဝယ်စာရင်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderPurchasesTable()
@@ -28,12 +28,12 @@ export async function initPurchases() {
 
 function bindEvents() {
     document.getElementById("btn-add-purchase")?.addEventListener("click", () => openPurchaseModal());
-    document.getElementById("btn-close-purchase-modal")?.addEventListener("click", () => {
-        document.getElementById("purchase-modal")?.classList.add("hidden");
-    });
+    document.getElementById("btn-close-purchase-modal")?.addEventListener("click", closeModal);
+    document.getElementById("btn-close-purchase-modal-2")?.addEventListener("click", closeModal);
 
     document.getElementById("btn-submit-purchase")?.addEventListener("click", submitPurchase);
     document.getElementById("btn-add-pur-item")?.addEventListener("click", () => addPurchaseRow());
+    document.getElementById("pur-search")?.addEventListener("input", filterAndRenderPurchases);
 
     const paymentSelect = document.getElementById("pur-payment-method");
     if (paymentSelect) {
@@ -49,12 +49,15 @@ function bindEvents() {
         });
     }
 
-    // Modal ပြင်ပနှိပ်ပါက Autocomplete Suggestion များကို ပိတ်သိမ်းခြင်း
     document.addEventListener("click", (e) => {
         if (!e.target.closest(".pur-search-wrapper")) {
             document.querySelectorAll(".pur-suggestions").forEach(el => el.classList.add("hidden"));
         }
     });
+}
+
+function closeModal() {
+    document.getElementById("purchase-modal")?.classList.add("hidden");
 }
 
 async function loadMasterProducts() {
@@ -77,6 +80,7 @@ async function loadPurchases() {
         const branchId = state.currentBranch?.id || 1;
         const res = await api.get("/purchases", { branch_id: branchId });
         purchasesList = res.data || [];
+        currentFilteredPurchases = [...purchasesList];
         pagination.reset();
         renderPurchasesTable();
     } catch (err) {
@@ -86,30 +90,42 @@ async function loadPurchases() {
     }
 }
 
+function filterAndRenderPurchases() {
+    const kw = (document.getElementById("pur-search")?.value || "").trim().toLowerCase();
+
+    currentFilteredPurchases = purchasesList.filter(p => {
+        if (!kw) return true;
+        const hay = `${p.purchase_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.supplier_name || ""}`.toLowerCase();
+        return hay.includes(kw);
+    });
+
+    pagination.reset();
+    renderPurchasesTable();
+}
+
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (purchasesList.length === 0) {
+    if (currentFilteredPurchases.length === 0) {
         tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-slate-400 font-bold text-base">အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</td></tr>`;
         pagination.renderControls("purchases-pagination");
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
-    const pageItems = pagination.getPageItems(purchasesList);
+    const pageItems = pagination.getPageItems(currentFilteredPurchases);
 
     pageItems.forEach(pur => {
         const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
         
         let paymentBadge = "";
         if (pur.payment_method === "cash") {
-            paymentBadge = `<span class="px-3 py-1.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold">လက်ငင်း</span>`;
+            paymentBadge = `<span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold">လက်ငင်း</span>`;
         } else if (pur.payment_method === "bank") {
-            paymentBadge = `<span class="px-3 py-1.5 bg-blue-500/15 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold">ဘဏ် (${escapeHtml(pur.bank_account_name || "Bank")})</span>`;
+            paymentBadge = `<span class="px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold">ဘဏ် (${escapeHtml(pur.bank_account_name || "Bank")})</span>`;
         } else {
-            paymentBadge = `<span class="px-3 py-1.5 bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
+            paymentBadge = `<span class="px-2.5 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
         }
 
         const unitDisplay = pur.size || "ထည်";
@@ -140,23 +156,15 @@ function renderPurchasesTable() {
                 <div class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">${escapeHtml(unitDisplay)}</div>
             </td>
             <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-blue-500/10 text-blue-600 dark:text-blue-400">
                     ${Number(pur.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(unitDisplay)}</span>
                 </span>
             </td>
             <td class="p-4 text-center">${paymentBadge}</td>
-            <td class="p-4 text-right font-mono text-base text-slate-500">
-                ${Number(pur.unit_cost || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                ${Number(pur.retail_price || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">
-                ${Number(pur.wholesale_price || 0).toLocaleString()}
-            </td>
-            <td class="p-4 font-bold text-slate-800 dark:text-slate-200 text-base">
-                ${escapeHtml(pur.supplier_name || "-")}
-            </td>
+            <td class="p-4 text-right font-mono text-base text-slate-500">${Number(pur.unit_cost || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(pur.retail_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(pur.wholesale_price || 0).toLocaleString()}</td>
+            <td class="p-4 font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(pur.supplier_name || "-")}</td>
             <td class="p-4 text-center">
                 <span class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold uppercase">
                     ${escapeHtml(pur.status || "COMPLETED")}
@@ -167,7 +175,7 @@ function renderPurchasesTable() {
                     <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" class="btn-edit-pur w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                     </button>
-                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်မည် (စတော့နှင့် ငွေစာရင်း ပြန်ညှိမည်)" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်မည်" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-trash-can text-xs"></i>
                     </button>
                 </div>
@@ -187,7 +195,6 @@ function renderPurchasesTable() {
         btn.onclick = () => deletePurchase(btn.dataset.id);
     });
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("purchases-pagination");
 }
 
@@ -241,113 +248,73 @@ function addPurchaseRow(existingData = null) {
     if (!tbody) return;
 
     const categories = [...new Set(masterProducts.map(p => p.category).filter(Boolean))];
-    let catOptions = `<option value="">အမျိုးအစား အားလုံး</option>`;
+    let catOptions = `<option value="">Category</option>`;
     categories.forEach(c => {
         catOptions += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
     });
 
     const tr = document.createElement("tr");
-    tr.className = "pur-item-row group border-b border-slate-200 dark:border-slate-800";
+    tr.className = "pur-item-row group border-b border-slate-100 dark:border-slate-800";
     tr.innerHTML = `
-        <td class="p-3 align-top min-w-[320px]">
+        <td class="p-3 align-top min-w-[300px]">
             <div class="pur-search-wrapper relative">
-                <!-- Search & Quick Actions Toolbar -->
                 <div class="flex items-center gap-1.5">
-                    <select class="pur-cat-filter text-[11px] font-bold bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 max-w-[100px] cursor-pointer" title="Category အလိုက် စစ်ထုတ်ရန်">
+                    <select class="pur-cat-filter text-[11px] font-bold bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-slate-700 dark:text-slate-300 max-w-[95px] cursor-pointer">
                         ${catOptions}
                     </select>
-
                     <div class="relative flex-1">
                         <i class="fa-solid fa-barcode text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 text-xs"></i>
-                        <input type="text" autocomplete="off" placeholder="ကုတ် / Barcode / အမည် ရိုက်ပါ..." 
-                            class="pur-search-input w-full text-xs font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg pl-7 pr-2 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input type="text" autocomplete="off" placeholder="ကုတ် / Barcode / အမည်..." 
+                            class="pur-search-input w-full text-xs font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg pl-7 pr-2 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
                         <input type="hidden" class="pur-selected-prod-id" value="${existingData?.product_id || ''}">
                     </div>
-
-                    <button type="button" title="ပစ္စည်းအသစ် ဖန်တီးမည်" class="btn-toggle-new shrink-0 px-2.5 py-2 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/30 transition cursor-pointer">
+                    <button type="button" class="btn-toggle-new shrink-0 px-2.5 py-2 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/30 transition cursor-pointer">
                         <i class="fa-solid fa-plus"></i> အသစ်
                     </button>
                 </div>
-
-                <!-- Autocomplete Dropdown List -->
-                <div class="pur-suggestions hidden absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-56 overflow-y-auto text-xs divide-y divide-slate-100 dark:divide-slate-800">
-                </div>
-
-                <!-- Selected Product Preview Badge -->
-                <div class="pur-selected-preview hidden mt-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center justify-between">
+                <div class="pur-suggestions hidden absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl shadow-2xl z-30 max-h-52 overflow-y-auto text-xs divide-y divide-slate-100 dark:divide-slate-800"></div>
+                <div class="pur-selected-preview hidden mt-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center justify-between">
                     <span class="preview-text truncate"></span>
-                    <button type="button" class="btn-clear-prod text-slate-400 hover:text-rose-500 ml-1.5 cursor-pointer">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
+                    <button type="button" class="btn-clear-prod text-slate-400 hover:text-rose-500 ml-1.5 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
-
-            <!-- ပစ္စည်းအသစ်အတွက် Inline Form -->
-            <div class="new-product-fields hidden mt-2 space-y-2 p-3 bg-slate-50 dark:bg-slate-950/80 rounded-xl border border-emerald-500/30">
+            <div class="new-product-fields hidden mt-2 space-y-2 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-emerald-500/30">
                 <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-sparkles mr-1"></i>ပစ္စည်းအသစ် အချက်အလက်</span>
+                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-sparkles mr-1"></i>ပစ္စည်းအသစ် ဖန်တီးမည်</span>
                     <button type="button" class="btn-cancel-new text-xs text-slate-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - ချည် သို့မဟုတ် အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg">
+                <input type="text" placeholder="အမျိုးအစား (Category) *" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg">
                 <input type="text" placeholder="ပစ္စည်းအမည် (Item Name) *" class="new-name w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg">
                 <div class="grid grid-cols-3 gap-1.5">
-                    <input type="text" placeholder="SKU ကုတ် *" class="new-sku text-xs font-mono font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500/50 text-emerald-500 rounded-lg" title="Auto SKU သတ်မှတ်ပေးပါသည်">
+                    <input type="text" placeholder="SKU ကုတ်" class="new-sku text-xs font-mono font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500/50 text-emerald-500 rounded-lg">
                     <input type="text" placeholder="အရောင်" class="new-color text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg">
-                    
-                    <select class="new-size text-xs font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
-                        <optgroup label="ချည်ယူနစ်များ">
-                            <option value="ပေါင်">ပေါင် (lb)</option>
-                            <option value="လိပ်">လိပ်</option>
-                            <option value="ထုပ်">ထုပ်</option>
-                            <option value="ခင်">ခင်</option>
-                            <option value="လုံး">လုံး</option>
-                        </optgroup>
-                        <optgroup label="အထည်ယူနစ် / ဆိုဒ်များ">
-                            <option value="ထည်" selected>ထည်</option>
-                            <option value="အုပ်">အုပ်</option>
-                            <option value="စုံ">စုံ</option>
-                            <option value="Free Size">Free Size</option>
-                            <option value="S">S</option>
-                            <option value="M">M</option>
-                            <option value="L">L</option>
-                            <option value="XL">XL</option>
-                            <option value="2XL">2XL</option>
-                        </optgroup>
+                    <select class="new-size text-xs font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-lg">
+                        <option value="ထည်" selected>ထည်</option>
+                        <option value="ပေါင်">ပေါင် (lb)</option>
+                        <option value="လိပ်">လိပ်</option>
+                        <option value="စုံ">စုံ</option>
+                        <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
                     </select>
                 </div>
             </div>
         </td>
         <td class="p-3 align-top">
-            <input type="number" min="0.1" step="any" value="${existingData?.quantity || 1}" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <input type="number" min="0.1" step="any" value="${existingData?.quantity || 1}" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white">
         </td>
         <td class="p-3 align-top">
-            <input type="number" min="0" value="${existingData?.unit_cost || 0}" step="any" class="pur-item-cost w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="ဝယ်ဈေး">
+            <input type="number" min="0" value="${existingData?.unit_cost || 0}" step="any" class="pur-item-cost w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white" placeholder="ဝယ်ဈေး">
         </td>
-        <td class="p-3 align-top space-y-1.5">
-            <div class="flex items-center gap-1">
-                <input type="number" min="0" value="${existingData?.retail_price || 0}" step="any" class="pur-item-retail w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်လီဈေး *">
-            </div>
-            <div class="flex items-center gap-1.5">
-                <span class="text-[11px] text-slate-400 font-bold shrink-0">+ % :</span>
-                <input type="number" placeholder="30" class="pur-retail-pct w-full text-[11px] px-2 py-1 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-center font-mono font-bold" title="ဝယ်ဈေးပေါ် ရာခိုင်နှုန်းထည့်ပါ">
-            </div>
+        <td class="p-3 align-top space-y-1">
+            <input type="number" min="0" value="${existingData?.retail_price || 0}" step="any" class="pur-item-retail w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-emerald-500" placeholder="လက်လီဈေး">
+            <input type="number" placeholder="+ %" class="pur-retail-pct w-full text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-center font-mono">
         </td>
-        <td class="p-3 align-top space-y-1.5">
-            <div class="flex items-center gap-1">
-                <input type="number" min="0" value="${existingData?.wholesale_price || 0}" step="any" class="pur-item-wholesale w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-blue-400 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="လက်ကားဈေး *">
-            </div>
-            <div class="flex items-center gap-1.5">
-                <span class="text-[11px] text-slate-400 font-bold shrink-0">+ % :</span>
-                <input type="number" placeholder="15" class="pur-wholesale-pct w-full text-[11px] px-2 py-1 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-center font-mono font-bold" title="ဝယ်ဈေးပေါ် ရာခိုင်နှုန်းထည့်ပါ">
-            </div>
+        <td class="p-3 align-top space-y-1">
+            <input type="number" min="0" value="${existingData?.wholesale_price || 0}" step="any" class="pur-item-wholesale w-full text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-2 text-right text-blue-400" placeholder="လက်ကားဈေး">
+            <input type="number" placeholder="+ %" class="pur-wholesale-pct w-full text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-center font-mono">
         </td>
-        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm pur-item-subtotal align-top pt-4">
-            0
-        </td>
+        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm pur-item-subtotal align-top pt-4">0</td>
         <td class="p-3 text-center align-top pt-3">
-            <button type="button" class="btn-remove-row text-slate-400 hover:text-rose-500 transition cursor-pointer">
-                <i class="fa-solid fa-circle-minus text-lg"></i>
-            </button>
+            <button type="button" class="btn-remove-row text-slate-400 hover:text-rose-500 transition cursor-pointer"><i class="fa-solid fa-circle-minus text-lg"></i></button>
         </td>
     `;
     tbody.appendChild(tr);
@@ -390,18 +357,16 @@ function addPurchaseRow(existingData = null) {
         let matches = masterProducts.filter(p => {
             if (selectedCat && (p.category || "").toLowerCase() !== selectedCat) return false;
             if (!kw) return true;
-            const hay = `${p.barcode || ""} ${p.sku || ""} ${p.item_name || ""} ${p.color || ""}`.toLowerCase();
-            return hay.includes(kw);
+            return `${p.barcode || ""} ${p.sku || ""} ${p.item_name || ""} ${p.color || ""}`.toLowerCase().includes(kw);
         }).slice(0, 15);
 
         suggestionsBox.innerHTML = "";
-
         if (matches.length === 0) {
             suggestionsBox.innerHTML = `
                 <div class="p-3 text-center text-slate-400">
                     <div>ပစ္စည်း ရှာမတွေ့ပါ</div>
                     <button type="button" class="btn-create-from-search mt-1.5 px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold text-xs">
-                        + "${escapeHtml(kw)}" ကို အသစ်အဖြစ် ထည့်မည်
+                        + "${escapeHtml(kw)}" ကို အသစ်ထည့်မည်
                     </button>
                 </div>
             `;
@@ -416,7 +381,7 @@ function addPurchaseRow(existingData = null) {
                 itemEl.innerHTML = `
                     <div>
                         <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(p.item_name)}</div>
-                        <div class="text-[11px] text-slate-400">${escapeHtml(p.sku || "-")} | ${escapeHtml(p.category || "-")} ${p.color ? '| ' + escapeHtml(p.color) : ''}</div>
+                        <div class="text-[11px] text-slate-400">${escapeHtml(p.sku || "-")} | ${escapeHtml(p.category || "-")}</div>
                     </div>
                     <div class="text-right">
                         <span class="text-emerald-600 dark:text-emerald-400 font-mono font-bold">${Number(p.cost_price || 0).toLocaleString()} Ks</span>
@@ -433,7 +398,7 @@ function addPurchaseRow(existingData = null) {
     const selectProduct = (p) => {
         hiddenProdId.value = p.id;
         newFields.classList.add("hidden");
-        previewText.textContent = `${p.item_name} (${p.sku || "-"}) [${p.category || ""}]`;
+        previewText.textContent = `${p.item_name} (${p.sku || "-"})`;
         previewBox.classList.remove("hidden");
         searchInput.classList.add("hidden");
         suggestionsBox.classList.add("hidden");
@@ -460,30 +425,11 @@ function addPurchaseRow(existingData = null) {
     searchInput.addEventListener("input", renderSuggestions);
     catFilter.addEventListener("change", renderSuggestions);
 
-    searchInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            const val = searchInput.value.trim().toLowerCase();
-            const exactMatch = masterProducts.find(p => 
-                (p.barcode && p.barcode.toLowerCase() === val) || 
-                (p.sku && p.sku.toLowerCase() === val)
-            );
-            if (exactMatch) {
-                selectProduct(exactMatch);
-            } else {
-                renderSuggestions();
-            }
-        }
-    });
-
     btnClearProd.addEventListener("click", () => {
         hiddenProdId.value = "";
         previewBox.classList.add("hidden");
         searchInput.classList.remove("hidden");
         searchInput.value = "";
-        costInput.value = 0;
-        retailInput.value = 0;
-        wholesaleInput.value = 0;
         calculateRow(tr);
         searchInput.focus();
     });
@@ -497,36 +443,20 @@ function addPurchaseRow(existingData = null) {
     });
 
     newCatInput.addEventListener("input", () => {
-        const catVal = newCatInput.value.trim().toLowerCase();
-        newSkuInput.value = generateAutoSKU(catVal);
-
-        if (catVal.includes("ချည်") || catVal.includes("yarn")) {
-            newSizeSelect.value = "ပေါင်";
-        } else if (catVal.includes("ပုဆိုး") || catVal.includes("လုံချည်") || catVal.includes("အင်္ကျီ")) {
-            newSizeSelect.value = "ထည်";
-        }
+        newSkuInput.value = generateAutoSKU(newCatInput.value.trim());
     });
 
     const updatePricesLive = () => {
         const cost = parseFloat(costInput.value) || 0;
         const rPct = parseFloat(retailPct.value);
         const wPct = parseFloat(wholesalePct.value);
-
-        if (!isNaN(rPct) && cost > 0) {
-            retailInput.value = Math.round(cost + (cost * rPct / 100));
-        }
-        if (!isNaN(wPct) && cost > 0) {
-            wholesaleInput.value = Math.round(cost + (cost * wPct / 100));
-        }
+        if (!isNaN(rPct) && cost > 0) retailInput.value = Math.round(cost + (cost * rPct / 100));
+        if (!isNaN(wPct) && cost > 0) wholesaleInput.value = Math.round(cost + (cost * wPct / 100));
     };
 
-    costInput.addEventListener("input", () => {
-        updatePricesLive();
-        calculateRow(tr);
-    });
+    costInput.addEventListener("input", () => { updatePricesLive(); calculateRow(tr); });
     retailPct.addEventListener("input", updatePricesLive);
     wholesalePct.addEventListener("input", updatePricesLive);
-
     qtyInput.addEventListener("input", () => calculateRow(tr));
 
     removeBtn.addEventListener("click", () => {
@@ -585,15 +515,6 @@ async function submitPurchase() {
         if (!hiddenProdId) {
             hasError = true;
             errMsg = "ပစ္စည်းရွေးချယ်မှု ပြည့်စုံစွာ လုပ်ဆောင်ပေးပါ။";
-            tr.querySelector(".pur-search-input").classList.add("border-rose-500");
-            return;
-        }
-
-        if (retail <= 0 || wholesale <= 0) {
-            hasError = true;
-            errMsg = "ပစ္စည်းတိုင်းအတွက် လက်လီဈေးနှင့် လက်ကားဈေးများကို မဖြစ်မနေ ထည့်သွင်းပေးရပါမည်။";
-            tr.querySelector(".pur-item-retail").classList.add("border-rose-500");
-            tr.querySelector(".pur-item-wholesale").classList.add("border-rose-500");
             return;
         }
 
@@ -615,7 +536,6 @@ async function submitPurchase() {
             if (!name) {
                 hasError = true;
                 errMsg = "ပစ္စည်းအသစ်အတွက် အမည် ဖြည့်သွင်းပေးပါ။";
-                tr.querySelector(".new-name").classList.add("border-rose-500");
                 return;
             }
 
@@ -668,7 +588,7 @@ async function submitPurchase() {
             await api.post("/purchases", payload);
             alert("အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
         }
-        document.getElementById("purchase-modal")?.classList.add("hidden");
+        closeModal();
         await loadMasterProducts();
         await loadPurchases();
     } catch (err) {

@@ -28,7 +28,6 @@ function bindEvents() {
     document.getElementById("inv-category-filter")?.addEventListener("change", filterAndRender);
     document.getElementById("inv-search")?.addEventListener("input", filterAndRender);
     
-    // CSV Export & Import Buttons
     document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
     document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
 }
@@ -69,7 +68,6 @@ function populateCategoryFilter() {
     if (cats.includes(current)) select.value = current;
 }
 
-// 1. KPI အမည်များ English လို ပြောင်းထားသည်
 function updateInventoryKPIs() {
     const totalTypes = products.length;
     const totalPieces = products.reduce((sum, p) => sum + Number(p.current_stock || 0), 0);
@@ -96,7 +94,6 @@ function filterAndRender() {
     renderTable(filtered);
 }
 
-// 2 & 3. Table အတွင်းရှိ Font Size ကြီးပေးထားခြင်း နှင့် Icon သီးသန့်ပြောင်းခြင်း
 function renderTable(list) {
     const tbody = document.getElementById("inv-table-body");
     if (!tbody) return;
@@ -141,9 +138,15 @@ function renderTable(list) {
             </td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                    <!-- Edit Button -->
+                    <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-pen-to-square"></i>
                     </button>
+                    <!-- Waste Button (New) -->
+                    <button type="button" data-id="${item.id}" title="အလေအလွင့်/ပျက်စီး စာရင်းသွင်းမည်" class="btn-waste-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                        <i class="fa-solid fa-box-open"></i>
+                    </button>
+                    <!-- Delete Button -->
                     <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
@@ -160,7 +163,13 @@ function renderTable(list) {
         };
     });
 
-    // Delete Button လုပ်ဆောင်ချက် အသစ်
+    // အလေအလွင့် (Waste) Button လုပ်ဆောင်ချက် (လောလောဆယ် Alert ဖြင့်သာ ပြထားသည်)
+    tbody.querySelectorAll(".btn-waste-prod").forEach(btn => {
+        btn.onclick = () => {
+            alert("အလေအလွင့်/ပျက်စီး (Waste Stock) စာရင်းသွင်းရန် မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။");
+        };
+    });
+
     tbody.querySelectorAll(".btn-delete-prod").forEach(btn => {
         btn.onclick = () => {
             const id = Number(btn.dataset.id);
@@ -169,7 +178,6 @@ function renderTable(list) {
     });
 }
 
-// အထည်စာရင်း ဖျက်ရန် Function
 async function deleteProduct(id) {
     if (!confirm("ဤအထည်ကို စာရင်းမှ အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?")) return;
     try {
@@ -180,7 +188,6 @@ async function deleteProduct(id) {
     }
 }
 
-// HTML Elements ကို ရှာမတွေ့ပါက Error မတက်စေရန် Helper Function
 function safeSetValue(id, value) {
     const el = document.getElementById(id);
     if (el) el.value = value;
@@ -192,7 +199,7 @@ function openProductModal(prod = null) {
     document.getElementById("product-form")?.reset();
 
     if (prod) {
-        if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
+        if (title) title.textContent = "အထည်အချက်အလက် ပြင်ဆင်မည်";
         safeSetValue("prod-id", prod.id);
         safeSetValue("prod-sku", prod.sku || "");
         safeSetValue("prod-barcode", prod.barcode || "");
@@ -204,9 +211,8 @@ function openProductModal(prod = null) {
         safeSetValue("prod-cost", prod.cost_price || 0);
         safeSetValue("prod-retail", prod.retail_price || 0);
         safeSetValue("prod-wholesale", prod.wholesale_price || 0);
-        safeSetValue("prod-stock", prod.current_stock ?? 0);
     } else {
-        if (title) title.textContent = "အထည်ပစ္စည်း အသစ်ထည့်သွင်းမည်";
+        if (title) title.textContent = "အထည်အချက်အလက်သစ် မှတ်ပုံတင်မည်";
         safeSetValue("prod-id", "");
         safeSetValue("prod-size", "Free Size");
     }
@@ -222,6 +228,7 @@ async function submitProduct(e) {
     const prodId = document.getElementById("prod-id")?.value;
     const branchId = state.currentBranch?.id || 1;
 
+    // အသစ်သွင်း/ပြင်ဆင်ချိန်တွင် Quantity/Stock များကို Payload မှ ဖြုတ်ထားသည် (သို့မဟုတ် 0 ထားသည်)
     const payload = {
         sku: document.getElementById("prod-sku")?.value.trim() || null,
         barcode: document.getElementById("prod-barcode")?.value.trim() || null,
@@ -233,8 +240,6 @@ async function submitProduct(e) {
         costPrice: parseFloat(document.getElementById("prod-cost")?.value) || 0,
         retailPrice: parseFloat(document.getElementById("prod-retail")?.value) || 0,
         wholesalePrice: parseFloat(document.getElementById("prod-wholesale")?.value) || 0,
-        initialStock: parseInt(document.getElementById("prod-stock")?.value, 10) || 0,
-        quantity: parseInt(document.getElementById("prod-stock")?.value, 10) || 0,
         targetBranchId: branchId,
         branchId
     };
@@ -243,6 +248,9 @@ async function submitProduct(e) {
         if (prodId) {
             await api.put(`/products/${prodId}`, payload);
         } else {
+            // အသစ်သွင်းလျှင် Stock အစကို 0 ဟု သတ်မှတ်မည်။ အရေအတွက်ကို Purchase မှ သွင်းရမည်။
+            payload.initialStock = 0; 
+            payload.quantity = 0;
             await api.post("/products", payload);
         }
         document.getElementById("product-modal")?.classList.add("hidden");
@@ -254,7 +262,7 @@ async function submitProduct(e) {
     }
 }
 
-// --- CSV Export Logic (Current FY) ---
+// --- CSV Export Logic ---
 function exportToCSV() {
     if (products.length === 0) {
         alert("ထုတ်ယူရန် စာရင်းမရှိပါ။");
@@ -311,7 +319,7 @@ function triggerImport() {
 async function processImport(csvText) {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     if (lines.length <= 1) {
-        alert("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။ (Header သာပါဝင်သည်)");
+        alert("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
         return;
     }
     

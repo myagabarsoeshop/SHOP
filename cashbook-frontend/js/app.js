@@ -1,4 +1,5 @@
 // cashbook-frontend/js/app.js
+
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
 import { initAuth } from "./modules/auth.js";
@@ -8,17 +9,18 @@ import { initInventory } from "./modules/inventory.js";
 import { initYarn } from "./modules/yarn.js";
 import { initCustomers } from "./modules/customers.js";
 import { initPurchases } from "./modules/purchases.js";
-// Master Products ကို ဖွင့်လိုက်ပါပြီ
 import { initMasterProducts } from "./modules/master_products.js";
+import { initWaste } from "./modules/waste.js";
 
 const VIEW_TITLES = {
     pos: "Sale Counter (POS)",
     cashbook: "Cash Book (နေ့စဉ်ငွေစာရင်း)",
     inventory: "Stock Balances (အထည်လက်ကျန်)",
-    yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
-    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)",
     purchases: "Purchases (အဝယ်နှင့် စတော့အဝင်)",
-    master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)"
+    waste: "Damage & Waste (ပျက်စီး/အလေအလွင့်)",
+    master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
+    yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
+    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
 };
 
 let currentActiveView = "pos";
@@ -146,7 +148,7 @@ export function getLocalTodayDate() {
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     // KPI ကို သီးသန့် တွက်ချက်မည့် မျက်နှာပြင်များ
-    if (view === "inventory" || view === "yarn" || view === "customers" || view === "purchases" || view === "master_products") return;
+    if (view === "inventory" || view === "yarn" || view === "customers" || view === "purchases" || view === "master_products" || view === "waste") return;
 
     try {
         const branchId = state.currentBranch?.id || 1;
@@ -227,8 +229,9 @@ export async function navigateTo(viewName) {
         } else if (viewName === "purchases") {
             await initPurchases(); 
         } else if (viewName === "master_products") {
-            // Master Products မျက်နှာပြင်ကို ဖွင့်ပေးလိုက်ပါပြီ
             await initMasterProducts(); 
+        } else if (viewName === "waste") {
+            await initWaste();
         }
     } catch (err) {
         container.innerHTML = `

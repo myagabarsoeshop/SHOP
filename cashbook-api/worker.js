@@ -273,27 +273,47 @@ export default {
                 const batchStatements = [];
 
                 for (const item of body.items) {
+                    let targetProductId = item.product_id;
+
+                    // အကယ်၍ ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲသို့ ဦးစွာ ထည့်သွင်းမည်
+                    if (item.is_new && item.new_product) {
+                        const np = item.new_product;
+                        const prodRes = await env.DB.prepare(`
+                            INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            np.sku || null, null, np.category, np.item_name,
+                            null, np.size || "Free Size", np.color || null,
+                            parseFloat(item.unit_cost), parseFloat(item.retail_price), parseFloat(item.wholesale_price)
+                        ).run();
+
+                        targetProductId = prodRes.meta.last_row_id;
+                    }
+
+                    // Purchase Items ထည့်ခြင်း
                     batchStatements.push(
                         env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
-                        .bind(newPurId, Number(item.product_id), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
+                        .bind(newPurId, Number(targetProductId), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
                     );
                     
+                    // Branch Inventory (စတော့) တိုးမြှင့်ခြင်း
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) 
                             VALUES (?, ?, ?)
                             ON CONFLICT(branch_id, product_id) DO UPDATE SET 
                             quantity = quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                        `).bind(Number(body.branch_id), Number(item.product_id), Number(item.quantity))
+                        `).bind(Number(body.branch_id), Number(targetProductId), Number(item.quantity))
                     );
                 }
 
+                // ငွေပေးချေမှုမှာ credit (အကြွေး) မဟုတ်ပါက Cashbook သို့ အလိုအလျောက် စရိတ်ထွက်ငွေသွင်းမည်
                 if (body.payment_method !== "credit") {
                     const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, created_by)
-                            VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?)
+                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?)
                         `).bind(
                             Number(body.branch_id), newPurId, String(body.payment_method), 
                             body.bank_account_name || null, parseFloat(body.total_amount), 

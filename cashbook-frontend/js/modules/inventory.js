@@ -1,4 +1,5 @@
 // cashbook-frontend/js/modules/inventory.js
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI } from "../app.js";

@@ -13,6 +13,12 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;");
 }
 
+// HTML Element များကို လုံခြုံစွာ Value ထည့်သွင်းရန် (Error[cite: 6] ဖြေရှင်းချက်)
+function safeSetValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+}
+
 export async function initInventory() {
     bindEvents();
     await loadInventory();
@@ -45,6 +51,17 @@ function bindEvents() {
     const searchInput = document.getElementById("inv-search");
     if (searchInput) {
         searchInput.oninput = filterAndRender;
+    }
+
+    // Export & Import CSV Buttons
+    const exportBtn = document.getElementById("btn-export-csv");
+    if (exportBtn) {
+        exportBtn.onclick = exportToCSV;
+    }
+
+    const importBtn = document.getElementById("btn-import-csv");
+    if (importBtn) {
+        importBtn.onclick = triggerImport;
     }
 }
 
@@ -181,22 +198,22 @@ function openProductModal(prod) {
 
     if (prod) {
         if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
-        document.getElementById("prod-id").value = prod.id;
-        document.getElementById("prod-sku").value = prod.sku || "";
-        document.getElementById("prod-barcode").value = prod.barcode || "";
-        document.getElementById("prod-category").value = prod.category || "";
-        document.getElementById("prod-name").value = prod.item_name || "";
-        document.getElementById("prod-pattern").value = prod.pattern || "";
-        document.getElementById("prod-color").value = prod.color || "";
-        document.getElementById("prod-size").value = prod.size || "Free Size";
-        document.getElementById("prod-cost").value = prod.cost_price || 0;
-        document.getElementById("prod-retail").value = prod.retail_price || 0;
-        document.getElementById("prod-wholesale").value = prod.wholesale_price || 0;
-        document.getElementById("prod-stock").value = prod.current_stock !== undefined ? prod.current_stock : 0;
+        safeSetValue("prod-id", prod.id);
+        safeSetValue("prod-sku", prod.sku || "");
+        safeSetValue("prod-barcode", prod.barcode || "");
+        safeSetValue("prod-category", prod.category || "");
+        safeSetValue("prod-name", prod.item_name || "");
+        safeSetValue("prod-pattern", prod.pattern || "");
+        safeSetValue("prod-color", prod.color || "");
+        safeSetValue("prod-size", prod.size || "Free Size");
+        safeSetValue("prod-cost", prod.cost_price || 0);
+        safeSetValue("prod-retail", prod.retail_price || 0);
+        safeSetValue("prod-wholesale", prod.wholesale_price || 0);
+        safeSetValue("prod-stock", prod.current_stock !== undefined ? prod.current_stock : 0);
     } else {
         if (title) title.textContent = "အထည်ပစ္စည်း အသစ်ထည့်သွင်းမည်";
-        document.getElementById("prod-id").value = "";
-        document.getElementById("prod-size").value = "Free Size";
+        safeSetValue("prod-id", "");
+        safeSetValue("prod-size", "Free Size");
     }
 
     if (modal) {
@@ -209,21 +226,21 @@ async function submitProduct(e) {
     const btn = document.getElementById("btn-submit-product");
     if (btn) btn.disabled = true;
 
-    const prodId = document.getElementById("prod-id").value;
+    const prodId = document.getElementById("prod-id")?.value;
     const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
-    const stockVal = parseInt(document.getElementById("prod-stock").value, 10) || 0;
+    const stockVal = parseInt(document.getElementById("prod-stock")?.value, 10) || 0;
 
     const payload = {
-        sku: document.getElementById("prod-sku").value.trim() || null,
-        barcode: document.getElementById("prod-barcode").value.trim() || null,
-        category: document.getElementById("prod-category").value.trim(),
-        itemName: document.getElementById("prod-name").value.trim(),
-        pattern: document.getElementById("prod-pattern").value.trim() || null,
-        color: document.getElementById("prod-color").value.trim() || null,
-        size: document.getElementById("prod-size").value.trim() || "Free Size",
-        costPrice: parseFloat(document.getElementById("prod-cost").value) || 0,
-        retailPrice: parseFloat(document.getElementById("prod-retail").value) || 0,
-        wholesalePrice: parseFloat(document.getElementById("prod-wholesale").value) || 0,
+        sku: document.getElementById("prod-sku")?.value.trim() || null,
+        barcode: document.getElementById("prod-barcode")?.value.trim() || null,
+        category: document.getElementById("prod-category")?.value.trim(),
+        itemName: document.getElementById("prod-name")?.value.trim(),
+        pattern: document.getElementById("prod-pattern")?.value.trim() || null,
+        color: document.getElementById("prod-color")?.value.trim() || null,
+        size: document.getElementById("prod-size")?.value.trim() || "Free Size",
+        costPrice: parseFloat(document.getElementById("prod-cost")?.value) || 0,
+        retailPrice: parseFloat(document.getElementById("prod-retail")?.value) || 0,
+        wholesalePrice: parseFloat(document.getElementById("prod-wholesale")?.value) || 0,
         initialStock: stockVal,
         quantity: stockVal,
         targetBranchId: branchId,
@@ -244,4 +261,103 @@ async function submitProduct(e) {
     } finally {
         if (btn) btn.disabled = false;
     }
+}
+
+// --- CSV Export Logic (Current FY) ---
+function exportToCSV() {
+    if (products.length === 0) {
+        alert("ထုတ်ယူရန် စာရင်းမရှိပါ။");
+        return;
+    }
+    const currentYear = new Date().getFullYear();
+    let csvContent = "SKU,Barcode,Category,Item Name,Pattern,Color,Size,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
+    
+    products.forEach(p => {
+        const row = [
+            `"${escapeHtml(p.sku || '')}"`,
+            `"${escapeHtml(p.barcode || '')}"`,
+            `"${escapeHtml(p.category || '')}"`,
+            `"${escapeHtml(p.item_name || '')}"`,
+            `"${escapeHtml(p.pattern || '')}"`,
+            `"${escapeHtml(p.color || '')}"`,
+            `"${escapeHtml(p.size || 'Free Size')}"`,
+            p.cost_price || 0,
+            p.retail_price || 0,
+            p.wholesale_price || 0,
+            p.current_stock || 0
+        ];
+        csvContent += row.join(",") + "\n";
+    });
+
+    // UTF-8 BOM ထည့်သွင်းခြင်း (မြန်မာစာမှန်ကန်စွာပေါ်စေရန်)
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" }); 
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Stock_Balances_FY${currentYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// --- CSV Import Logic ---
+function triggerImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = async e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const text = event.target.result;
+            await processImport(text);
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+async function processImport(csvText) {
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    if (lines.length <= 1) {
+        alert("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။ (Header သာပါဝင်သည်)");
+        return;
+    }
+    
+    let successCount = 0;
+    const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
+    
+    // ပထမလိုင်း (Header) ကိုကျော်ပြီး Data များကိုစတင်သွင်းမည်
+    for (let i = 1; i < lines.length; i++) {
+        // Quote (") များကို ဖယ်ရှားပြီး column ခွဲခြင်း
+        const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || lines[i].split(',');
+        if (row.length < 4) continue; // Data မပြည့်စုံသော လိုင်းများကိုကျော်မည်
+        
+        const payload = {
+            sku: row[0] || null,
+            barcode: row[1] || null,
+            category: row[2] || "Uncategorized",
+            itemName: row[3] || "Imported Item",
+            pattern: row[4] || null,
+            color: row[5] || null,
+            size: row[6] || "Free Size",
+            costPrice: parseFloat(row[7]) || 0,
+            retailPrice: parseFloat(row[8]) || 0,
+            wholesalePrice: parseFloat(row[9]) || 0,
+            initialStock: parseInt(row[10]) || 0,
+            quantity: parseInt(row[10]) || 0,
+            targetBranchId: branchId,
+            branchId: branchId
+        };
+        
+        try {
+            await api.post("/products", payload);
+            successCount++;
+        } catch (e) {
+            console.error("Import error line " + i, e);
+        }
+    }
+    alert(`အထည်အချက်အလက် အသစ် ${successCount} ခု အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
+    await loadInventory();
 }

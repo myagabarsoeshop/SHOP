@@ -11,6 +11,7 @@ import { initCustomers } from "./modules/customers.js";
 import { initPurchases } from "./modules/purchases.js";
 import { initMasterProducts } from "./modules/master_products.js";
 import { initWaste } from "./modules/waste.js";
+import { initTransfers } from "./modules/transfers.js";
 
 const VIEW_TITLES = {
     pos: "Sale Counter (POS)",
@@ -18,6 +19,7 @@ const VIEW_TITLES = {
     inventory: "Stock Balances (အထည်လက်ကျန်)",
     purchases: "Purchases (အဝယ်နှင့် စတော့အဝင်)",
     waste: "Damage & Waste (ပျက်စီး/အလေအလွင့်)",
+    transfers: "Stock Transfers (ဆိုင်ခွဲစတော့လွှဲပြောင်းမှု)",
     master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
     customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
@@ -148,7 +150,15 @@ export function getLocalTodayDate() {
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     // KPI ကို သီးသန့် တွက်ချက်မည့် မျက်နှာပြင်များ
-    if (view === "inventory" || view === "yarn" || view === "customers" || view === "purchases" || view === "master_products" || view === "waste") return;
+    if (
+        view === "inventory" || 
+        view === "yarn" || 
+        view === "customers" || 
+        view === "purchases" || 
+        view === "master_products" || 
+        view === "waste" || 
+        view === "transfers"
+    ) return;
 
     try {
         const branchId = state.currentBranch?.id || 1;
@@ -194,6 +204,7 @@ export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
             blue: "text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight",
             rose: "text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight",
             amber: "text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight",
+            purple: "text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight",
             slate: "text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight"
         };
         valEl.className = colorMap[colorTheme] || colorMap.emerald;
@@ -232,6 +243,8 @@ export async function navigateTo(viewName) {
             await initMasterProducts(); 
         } else if (viewName === "waste") {
             await initWaste();
+        } else if (viewName === "transfers") {
+            await initTransfers();
         }
     } catch (err) {
         container.innerHTML = `

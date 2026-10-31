@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Updated with Purchases & Waste APIs)
+// File: cashbook-api/worker.js (Full Updated Version)
 // =============================================================================
 
 const corsHeaders = {
@@ -231,7 +231,6 @@ export default {
                     productId
                 ).run();
 
-                // Admin ဝင်ပြင်ချိန်တွင် quantity ဖြုတ်ထားသဖြင့် ဤအဆင့်ကို ကျော်သွားမည်
                 if (body.quantity !== undefined && body.branchId) {
                     await env.DB.prepare(`
                         INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
@@ -242,13 +241,21 @@ export default {
                 return jsonResponse({ message: "ပစ္စည်းအချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
             }
 
+            // ပစ္စည်းအား စာရင်းမှ ဖျက်ပစ်ခြင်း (Soft Delete: is_active = 0)
+            if (path.startsWith("/api/products/") && method === "DELETE") {
+                const productId = Number(path.split("/").pop());
+                if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
+
+                await env.DB.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(productId).run();
+                return jsonResponse({ message: "အထည်စာရင်းမှ အောင်မြင်စွာ ဖျက်ပြီးပါပြီ" });
+            }
+
             // =================================================================
-            // 5. PURCHASES & STOCK IN (အဝယ်၊ စတော့အဝင် နှင့် ပြင်ဆင်/ဖျက်ပစ်ခြင်း)
+            // 5. PURCHASES & STOCK IN (အဝယ်၊ စတော့အဝင်၊ ပြင်ဆင်ခြင်းနှင့် ဖျက်သိမ်းခြင်း)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || 1;
                 
-                // Item-level အချက်အလက်များအားလုံးပါဝင်သော JOIN Query
                 const sql = `
                     SELECT 
                         pi.id AS item_row_id,
@@ -305,7 +312,7 @@ export default {
                 for (const item of body.items) {
                     let targetProductId = item.product_id;
 
-                    // ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲ ဦးစွာထည့်သွင်းမည် (Auto SKU ပါဝင်သည်)
+                    // ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲ ဦးစွာ ထည့်သွင်းမည်
                     if (item.is_new && item.new_product) {
                         const np = item.new_product;
                         const prodRes = await env.DB.prepare(`
@@ -319,7 +326,7 @@ export default {
 
                         targetProductId = prodRes.meta.last_row_id;
                     } else {
-                        // ရှိပြီးသား ပစ္စည်းဖြစ်ပါကလည်း နောက်ဆုံး ဝယ်ဈေးနှင့် ရောင်းဈေးများကို Update လုပ်ပေးမည်
+                        // ရှိပြီးသားပစ္စည်းဖြစ်ပါက ဝယ်ဈေးနှင့် ရောင်းဈေးများကို နောက်ဆုံးဈေးနှုန်းဖြင့် Update လုပ်မည်
                         batchStatements.push(
                             env.DB.prepare(`
                                 UPDATE products SET cost_price = ?, retail_price = ?, wholesale_price = ? WHERE id = ?
@@ -327,7 +334,7 @@ export default {
                         );
                     }
 
-                    // Purchase Items ထည့်ခြင်း
+                    // Purchase Items ထည့်သွင်းခြင်း
                     batchStatements.push(
                         env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
                         .bind(newPurId, Number(targetProductId), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
@@ -344,7 +351,7 @@ export default {
                     );
                 }
 
-                // Cashbook Expense သို့ ထည့်သွင်းခြင်း
+                // Cashbook Expense (ချည်/အထည်ဝယ်ယူစရိတ် Category 4) သို့ အလိုအလျောက် သွင်းခြင်း
                 if (body.payment_method !== "credit") {
                     const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
                     batchStatements.push(
@@ -367,14 +374,12 @@ export default {
             if (path.startsWith("/api/purchases/") && method === "DELETE") {
                 const purId = Number(path.split("/").pop());
                 
-                // ၁။ ဝယ်ယူခဲ့သော ပစ္စည်းစာရင်းများကို ရှာဖွေခြင်း
                 const { results: items } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const pur = await env.DB.prepare("SELECT branch_id FROM purchases WHERE id = ?").bind(purId).first();
                 const branchId = pur?.branch_id || 1;
 
                 const batchRollback = [];
 
-                // ၂။ စတော့ထဲမှ အရေအတွက် ပြန်လည် နုတ်ယူခြင်း
                 (items || []).forEach(it => {
                     batchRollback.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
@@ -382,7 +387,6 @@ export default {
                     );
                 });
 
-                // ၃။ Cashbook စာရင်းနှင့် Purchases အချက်အလက်များ ဖျက်ပစ်ခြင်း
                 batchRollback.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
                 batchRollback.push(env.DB.prepare("DELETE FROM purchase_items WHERE purchase_id = ?").bind(purId));
                 batchRollback.push(env.DB.prepare("DELETE FROM purchases WHERE id = ?").bind(purId));
@@ -494,6 +498,36 @@ export default {
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
             }
 
+            // Cashbook Entry ပြင်ဆင်ခြင်း (Edit)
+            if (path.startsWith("/api/cashbook/entries/") && method === "PUT") {
+                const id = Number(path.split("/").pop());
+                const body = await request.json().catch(() => ({}));
+                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
+
+                if (!categoryId || !amount) return errorResponse("အချက်အလက် မစုံလင်ပါ", 400);
+
+                await env.DB.prepare(`
+                    UPDATE cashbook_entries SET
+                        category_id = ?,
+                        entry_type = ?,
+                        payment_method = ?,
+                        amount = ?,
+                        description = ?,
+                        entry_date = COALESCE(?, entry_date)
+                    WHERE id = ?
+                `).bind(
+                    Number(categoryId),
+                    String(entryType || "EXPENSE").toUpperCase(),
+                    String(paymentMethod).toLowerCase(),
+                    parseFloat(amount),
+                    String(description).trim(),
+                    entryDate || null,
+                    id
+                ).run();
+
+                return jsonResponse({ message: "ငွေစာရင်း ပြင်ဆင်ပြီးပါပြီ" });
+            }
+
             if (path.startsWith("/api/cashbook/entries/") && method === "DELETE") {
                 const id = Number(path.split("/").pop());
                 await env.DB.prepare("DELETE FROM cashbook_entries WHERE id = ?").bind(id).run();
@@ -563,7 +597,7 @@ export default {
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
                             ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity - excluded.quantity
-                        `).bind(Number(branchId), Number(item.productId), qty) // Changed to excluded.quantity with positive qty for negative addition logic above
+                        `).bind(Number(branchId), Number(item.productId), qty)
                     );
                 }
 

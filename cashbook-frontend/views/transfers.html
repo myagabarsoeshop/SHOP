@@ -1,8 +1,8 @@
 <!-- cashbook-frontend/views/transfers.html -->
-<div class="h-full w-full flex flex-col bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm overflow-hidden">
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
     <!-- Top Action Toolbar -->
-    <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3 flex-1 min-w-[300px]">
             <h2 class="text-lg font-bold text-slate-800 dark:text-white">ဆိုင်ခွဲစတော့လွှဲပြောင်းမှု (Stock Transfers)</h2>
             <div class="px-3 py-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-bold rounded-lg border border-purple-500/20">
@@ -11,12 +11,12 @@
             <div class="relative flex-1 max-w-sm">
                 <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
                 <input type="text" id="trf-search" placeholder="လွှဲပြောင်းကုတ် / ပစ္စည်းအမည် / ဆိုင်ခွဲ ရှာရန်..."
-                    class="w-full pl-10 pr-4 py-2 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white">
+                    class="w-full pl-10 pr-4 py-2 text-sm font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white">
             </div>
         </div>
 
         <div class="flex items-center gap-2.5">
-            <button type="button" id="btn-export-trf-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer border border-slate-300 dark:border-slate-600">
+            <button type="button" id="btn-export-trf-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white font-bold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer border border-slate-300 dark:border-slate-800">
                 <i class="fa-solid fa-file-export text-blue-500"></i>
                 <span>Export CSV</span>
             </button>
@@ -30,7 +30,7 @@
     <!-- Transfers History Table -->
     <div class="flex-1 overflow-x-auto overflow-y-auto">
         <table class="w-full text-left text-sm whitespace-nowrap min-w-[1250px]">
-            <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                     <th class="p-4">လွှဲပြောင်းကုတ် / ရက်စွဲ</th>
                     <th class="p-4">ပေးပို့သည့်ဆိုင် (From)</th>
@@ -44,18 +44,21 @@
                     <th class="p-4 text-center">လုပ်ဆောင်ချက်</th>
                 </tr>
             </thead>
-            <tbody id="trf-table-body" class="divide-y divide-slate-200/60 dark:divide-slate-700/60 font-semibold text-slate-800 dark:text-slate-200">
+            <tbody id="trf-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200">
                 <tr>
                     <td colspan="10" class="p-12 text-center text-slate-400 text-base">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</td>
                 </tr>
             </tbody>
         </table>
     </div>
+
+    <!-- 15-Rows Pagination Footer Container (Window/Table အောက်စွန်းနှင့် တစ်သားတည်း ကွက်တိကျစေရန်) -->
+    <div id="transfers-pagination" class="shrink-0"></div>
 </div>
 
 <!-- Modal 1: Create New Stock Transfer Modal (လွှဲပြောင်းမှု အသစ်ပြုလုပ်ရန်) -->
 <div id="create-trf-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[92vh]">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
         <div class="p-5 bg-purple-600 text-white flex items-center justify-between shrink-0">
             <div class="text-base font-bold flex items-center gap-2">
                 <i class="fa-solid fa-parachute-box text-lg"></i>
@@ -69,7 +72,7 @@
         <form id="create-trf-form" class="p-6 space-y-4 overflow-y-auto">
             <div>
                 <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">လွှဲပြောင်းမည့် ပစ္စည်း ရွေးချယ်ပါ *</label>
-                <select id="create-trf-prod-id" required class="w-full text-sm font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer">
+                <select id="create-trf-prod-id" required class="w-full text-sm font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer">
                     <!-- Dynamic Product List with Current Stock -->
                 </select>
                 <div id="create-trf-stock-hint" class="text-xs text-purple-600 dark:text-purple-400 font-bold mt-1"></div>
@@ -78,19 +81,19 @@
             <div class="grid grid-cols-2 gap-3.5">
                 <div>
                     <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">လက်ခံမည့် ဆိုင်ခွဲ *</label>
-                    <select id="create-trf-dest-branch" required class="w-full text-sm font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer">
+                    <select id="create-trf-dest-branch" required class="w-full text-sm font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer">
                         <!-- Dynamic Branch List -->
                     </select>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">လွှဲပြောင်းမည့် အရေအတွက် *</label>
-                    <input type="number" id="create-trf-qty" required min="0.1" step="any" placeholder="0" class="w-full text-sm font-mono font-black bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-purple-600 dark:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <input type="number" id="create-trf-qty" required min="0.1" step="any" placeholder="0" class="w-full text-sm font-mono font-black bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-purple-600 dark:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500">
                 </div>
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">လွှဲပြောင်းမှု မှတ်ချက် (Notes)</label>
-                <input type="text" id="create-trf-notes" placeholder="ဥပမာ - ကားဂိတ်မှ တင်ပေးလိုက်သည်" class="w-full text-sm font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <input type="text" id="create-trf-notes" placeholder="ဥပမာ - ကားဂိတ်မှ တင်ပေးလိုက်သည်" class="w-full text-sm font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
             </div>
 
             <div class="p-3.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/50 rounded-xl">
@@ -108,7 +111,7 @@
 
 <!-- Modal 2: Edit Stock Transfer Modal (လွှဲပြောင်းမှု ပြင်ဆင်ရန် - Admin) -->
 <div id="edit-trf-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
         <div class="p-5 bg-blue-600 text-white flex items-center justify-between">
             <div class="text-base font-bold flex items-center gap-2">
                 <i class="fa-solid fa-pen-to-square"></i>
@@ -124,23 +127,23 @@
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ပစ္စည်းအမည်</label>
-                <input type="text" id="edit-trf-prod-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
+                <input type="text" id="edit-trf-prod-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-400 cursor-not-allowed">
             </div>
 
             <div class="grid grid-cols-2 gap-3.5">
                 <div>
                     <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ယခင် ပမာဏ</label>
-                    <input type="text" id="edit-trf-old-qty" readonly class="w-full text-sm font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
+                    <input type="text" id="edit-trf-old-qty" readonly class="w-full text-sm font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-400 cursor-not-allowed">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ပြင်ဆင်မည့် ပမာဏ *</label>
-                    <input type="number" id="edit-trf-qty" required min="0.1" step="any" class="w-full text-sm font-mono font-black bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="number" id="edit-trf-qty" required min="0.1" step="any" class="w-full text-sm font-mono font-black bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
 
             <div>
                 <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">မှတ်ချက် (Notes)</label>
-                <input type="text" id="edit-trf-notes" class="w-full text-sm font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="edit-trf-notes" class="w-full text-sm font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
             <div class="p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl">

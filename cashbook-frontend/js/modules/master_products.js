@@ -1,8 +1,16 @@
 // cashbook-frontend/js/modules/master_products.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { PaginationController } from "../core/pagination.js";
 
 let masterProducts = [];
+let currentFilteredMaster = [];
+
+// ဗဟိုပစ္စည်းစာရင်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderMasterTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -40,7 +48,9 @@ async function loadMasterProducts() {
         // Master Products များဖြစ်သဖြင့် Branch ရွေးချယ်မှု မလိုဘဲ ပစ္စည်းအချက်အလက်သက်သက်သာ ရယူမည်
         const res = await api.get("/products");
         masterProducts = res.data || [];
-        filterAndRenderMaster();
+        currentFilteredMaster = [...masterProducts];
+        pagination.reset();
+        renderMasterTable();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center text-rose-500 font-bold">ဗဟိုစာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
@@ -51,26 +61,31 @@ async function loadMasterProducts() {
 function filterAndRenderMaster() {
     const kw = (document.getElementById("master-search")?.value || "").trim().toLowerCase();
 
-    const filtered = masterProducts.filter(p => {
+    currentFilteredMaster = masterProducts.filter(p => {
         if (!kw) return true;
         const hay = `${p.sku || ""} ${p.barcode || ""} ${p.category || ""} ${p.item_name || ""} ${p.pattern || ""} ${p.color || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
-    renderMasterTable(filtered);
+    pagination.reset();
+    renderMasterTable();
 }
 
-function renderMasterTable(list) {
+function renderMasterTable() {
     const tbody = document.getElementById("master-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (currentFilteredMaster.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-slate-400 font-bold text-base">ဗဟိုကုန်ပစ္စည်းစာရင်း မတွေ့ရှိပါ</td></tr>`;
+        pagination.renderControls("master-products-pagination");
         return;
     }
 
-    list.forEach(item => {
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredMaster);
+
+    pageItems.forEach(item => {
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
         tr.innerHTML = `
@@ -109,6 +124,9 @@ function renderMasterTable(list) {
             if (prod) openMasterModal(prod);
         };
     });
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("master-products-pagination");
 }
 
 function safeSetValue(id, value) {
@@ -167,10 +185,8 @@ async function submitMasterProduct(e) {
         if (prodId) {
             await api.put(`/products/${prodId}`, payload);
         } else {
-            // အသစ်သွင်းလျှင် Stock အစကို 0 ဟု သတ်မှတ်မည်။ အရေအတွက်ကို Purchase မှ သွင်းရမည်။
             payload.initialStock = 0; 
             payload.quantity = 0;
-            // Admin အနေဖြင့် Branch 1 တွင် အမည်စာရင်း စတင်မှတ်ပုံတင်မည်
             payload.targetBranchId = 1;
             payload.branchId = 1;
             await api.post("/products", payload);

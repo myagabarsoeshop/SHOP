@@ -3,6 +3,7 @@
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
 import { initAuth } from "./modules/auth.js";
+import { initDashboard } from "./modules/dashboard.js";
 import { initPOS } from "./modules/pos.js";
 import { initCashbook } from "./modules/cashbook.js";
 import { initInventory } from "./modules/inventory.js";
@@ -15,6 +16,7 @@ import { initTransfers } from "./modules/transfers.js";
 import { initStockReport } from "./modules/stock_report.js";
 
 const VIEW_TITLES = {
+    dashboard: "Dashboard (လုပ်ငန်းအနှစ်ချုပ်)",
     pos: "Sale Counter (POS)",
     cashbook: "Cash Book (နေ့စဉ်ငွေစာရင်း)",
     inventory: "Stock Balances (အထည်လက်ကျန်)",
@@ -27,7 +29,7 @@ const VIEW_TITLES = {
     customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
 };
 
-let currentActiveView = "pos";
+let currentActiveView = "dashboard";
 
 document.addEventListener("DOMContentLoaded", async () => {
     startClock();
@@ -39,7 +41,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
         showAppLayout();
         await loadBranches();
-        await navigateTo("pos");
+        await navigateTo("dashboard");
     }
 });
 
@@ -151,6 +153,16 @@ export function getLocalTodayDate() {
 
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
+    const globalKpiBar = document.getElementById("global-kpi-bar");
+
+    // Dashboard မျက်နှာပြင်တွင် ကိုယ်ပိုင် 4-Box Cards များ ပါရှိပြီးဖြစ်သောကြောင့် အပေါ်ဘားကို ဖျောက်ထားမည်
+    if (view === "dashboard") {
+        globalKpiBar?.classList.add("hidden");
+        return;
+    } else {
+        globalKpiBar?.classList.remove("hidden");
+    }
+
     // KPI ကို သီးသန့် တွက်ချက်မည့် မျက်နှာပြင်များ
     if (
         view === "inventory" || 
@@ -230,7 +242,11 @@ export async function navigateTo(viewName) {
         });
         container.innerHTML = html;
 
-        if (viewName === "pos") {
+        await refreshGlobalKPIs(viewName);
+
+        if (viewName === "dashboard") {
+            await initDashboard();
+        } else if (viewName === "pos") {
             await initPOS();
         } else if (viewName === "cashbook") {
             await initCashbook();

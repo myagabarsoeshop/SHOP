@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Full Production Ready Version)
+// File: cashbook-api/worker.js (Full Production Ready Version with Dashboard)
 // =============================================================================
 
 const corsHeaders = {
@@ -57,7 +57,7 @@ export default {
             }
             return jsonResponse({
                 status: "online",
-                version: "2.7.0",
+                version: "2.8.0",
                 note: "Frontend assets not bound."
             });
         }
@@ -67,7 +67,7 @@ export default {
             // 1. HEALTH CHECK
             // =================================================================
             if (path === "/api/health") {
-                return jsonResponse({ status: "online", version: "2.7.0" });
+                return jsonResponse({ status: "online", version: "2.8.0" });
             }
 
             // =================================================================
@@ -1132,7 +1132,6 @@ export default {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
                 const branchId = url.searchParams.get("branch_id");
 
-                // waste_logs ဇယား အသင့်ရှိနေစေရန် စစ်ဆေးခြင်း
                 await env.DB.prepare(`
                     CREATE TABLE IF NOT EXISTS waste_logs (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1147,7 +1146,6 @@ export default {
                     )
                 `).run();
 
-                // ၁။ ပစ္စည်းများ အားလုံးနှင့် လက်ရှိ စတော့လက်ကျန်များ ဆွဲယူခြင်း
                 let prodSql = `
                     SELECT 
                         p.id, p.sku, p.category, p.item_name, p.cost_price,
@@ -1163,7 +1161,6 @@ export default {
                 prodSql += ` WHERE p.is_active = 1 GROUP BY p.id ORDER BY p.category ASC, p.item_name ASC `;
                 const { results: products } = await env.DB.prepare(prodSql).bind(...prodBindings).all();
 
-                // ၂။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အဝယ်စတော့အဝင် (Purchases)
                 let purchases = [];
                 try {
                     let purchSql = `
@@ -1187,7 +1184,6 @@ export default {
                     purchases = [];
                 }
 
-                // ၃။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် အရောင်းစတော့အထွက် (Sales)
                 let sales = [];
                 try {
                     let saleSql = `
@@ -1211,7 +1207,6 @@ export default {
                     sales = [];
                 }
 
-                // ၄။ သက်ဆိုင်ရာ နှစ်အတွင်း လအလိုက် ပျက်စီး/အလေအလွင့် (Waste Logs)
                 let waste = [];
                 try {
                     let wasteSql = `
@@ -1234,7 +1229,6 @@ export default {
                     waste = [];
                 }
 
-                // ၅။ သက်ဆိုင်ရာ နှစ်အတွင်း ဆိုင်ခွဲအချင်းချင်း လွှဲပြောင်းမှုများ (Transfers In / Out)
                 let trfIn = [];
                 let trfOut = [];
                 if (branchId && branchId !== "ALL") {
@@ -1260,33 +1254,27 @@ export default {
                     }
                 }
 
-                // ၆။ Memory ထဲတွင် Map ပြုလုပ်၍ လစဉ် လက်ကျန် Matrix တွက်ချက်ခြင်း
                 const report = (products || []).map(prod => {
                     const pid = prod.id;
                     const inMap = {};
                     const outMap = {};
 
-                    // Purchases Add
                     purchases.filter(r => r.product_id === pid).forEach(r => {
                         inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
-                    // Transfer In Add
                     trfIn.filter(r => r.product_id === pid).forEach(r => {
                         inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
-                    // Sales Add
                     sales.filter(r => r.product_id === pid).forEach(r => {
                         outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
-                    // Waste Add
                     waste.filter(r => r.product_id === pid).forEach(r => {
                         outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
                     });
 
-                    // Transfer Out Add
                     trfOut.filter(r => r.product_id === pid).forEach(r => {
                         outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
                     });
@@ -1302,7 +1290,6 @@ export default {
                         totalOut += mOut;
                     }
 
-                    // လက်ရှိလက်ကျန်မှ နောက်ပြန်တွက်ဆခြင်း
                     let running = Number(prod.current_balance || 0);
                     for (let m = 12; m >= 1; m--) {
                         monthlyBalances[m] = Math.max(0, running);
@@ -1325,6 +1312,240 @@ export default {
                 });
 
                 return jsonResponse(report);
+            }
+
+            // =================================================================
+            // 13. DUAL-MODE DASHBOARD SUMMARY (Executive Admin & Staff Views)
+            // =================================================================
+            if (path === "/api/dashboard/summary" && method === "GET") {
+                const year = url.searchParams.get("year") || String(new Date().getFullYear());
+                const branchId = url.searchParams.get("branch_id"); // null, "ALL" or ID
+                const today = getMyanmarTodayDate();
+
+                // -------------------------------------------------------------
+                // (A) Staff / Cashier Metrics (Today Only & Branch-Specific)
+                // -------------------------------------------------------------
+                const targetBranchId = (branchId && branchId !== "ALL") ? Number(branchId) : 1;
+
+                // ၁။ ယနေ့ အရောင်းငွေသား/ဘဏ် နှင့် အရေအတွက်
+                const todaySalesRow = await env.DB.prepare(`
+                    SELECT 
+                        COALESCE(SUM(cash_amount), 0) AS today_cash,
+                        COALESCE(SUM(bank_amount), 0) AS today_bank,
+                        COALESCE(SUM(final_amount), 0) AS today_total
+                    FROM sales
+                    WHERE branch_id = ? AND date(created_at) = ?
+                `).bind(targetBranchId, today).first();
+
+                // ယနေ့ ရောင်းရသော အထည်အရေအတွက် စုစုပေါင်း
+                const todayItemsRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(si.quantity), 0) AS items_sold
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.branch_id = ? AND date(s.created_at) = ?
+                `).bind(targetBranchId, today).first();
+
+                // ဆိုင်လက်ကျန်ငွေ (Cash Drawer & Bank Balance from Cashbook)
+                const drawerRow = await env.DB.prepare(`
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
+                                          WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_drawer,
+                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
+                                          WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
+                    FROM cashbook_entries
+                    WHERE branch_id = ? AND date(entry_date) <= ?
+                `).bind(targetBranchId, today).first();
+
+                // ယနေ့ ရောင်းရသော ပစ္စည်းအမျိုးအစား (Category Breakdown)
+                const { results: catSales } = await env.DB.prepare(`
+                    SELECT p.category, SUM(si.quantity) AS quantity, SUM(si.subtotal) AS total_amount
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    JOIN products p ON si.product_id = p.id
+                    WHERE s.branch_id = ? AND date(s.created_at) = ?
+                    GROUP BY p.category
+                    ORDER BY total_amount DESC
+                `).bind(targetBranchId, today).all();
+
+                // ယနေ့ နောက်ဆုံးရောင်းချမှု (၅) စောင်
+                const { results: recentSales } = await env.DB.prepare(`
+                    SELECT s.invoice_no, s.final_amount, s.payment_method, c.name AS customer_name
+                    FROM sales s
+                    LEFT JOIN customers c ON s.customer_id = c.id
+                    WHERE s.branch_id = ? AND date(s.created_at) = ?
+                    ORDER BY s.id DESC LIMIT 5
+                `).bind(targetBranchId, today).all();
+
+                const staffMetrics = {
+                    today_cash: Number(todaySalesRow?.today_cash || 0),
+                    today_bank: Number(todaySalesRow?.today_bank || 0),
+                    today_total: Number(todaySalesRow?.today_total || 0),
+                    today_items_sold: Number(todayItemsRow?.items_sold || 0),
+                    cash_drawer: Number(drawerRow?.cash_drawer || 0),
+                    bank_balance: Number(drawerRow?.bank_balance || 0),
+                    category_sales: catSales || [],
+                    recent_sales: recentSales || []
+                };
+
+                // -------------------------------------------------------------
+                // (B) Admin Metrics (Full Financials, Profit, Expenses & Branches)
+                // -------------------------------------------------------------
+                let salesFilter = ` strftime('%Y', created_at) = ? `;
+                let salesBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    salesFilter += ` AND branch_id = ? `;
+                    salesBindings.push(Number(branchId));
+                }
+
+                // ၁။ တစ်နှစ်တာ စုစုပေါင်း ဝင်ငွေ (Revenue)
+                const revRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(final_amount), 0) AS total_revenue
+                    FROM sales
+                    WHERE ${salesFilter}
+                `).bind(...salesBindings).first();
+
+                // ၂။ တစ်နှစ်တာ ကုန်ကျစရိတ် စုစုပေါင်း (Expenses from Cashbook)
+                let expFilter = ` strftime('%Y', entry_date) = ? AND entry_type = 'EXPENSE' `;
+                let expBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    expFilter += ` AND branch_id = ? `;
+                    expBindings.push(Number(branchId));
+                }
+
+                const expRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(amount), 0) AS total_expenses
+                    FROM cashbook_entries
+                    WHERE ${expFilter}
+                `).bind(...expBindings).first();
+
+                // အသုံးစရိတ် ခေါင်းစဉ်အလိုက် စာရင်း (Expense Breakdown by Category)
+                let expCatFilter = ` strftime('%Y', ce.entry_date) = ? AND ce.entry_type = 'EXPENSE' `;
+                let expCatBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    expCatFilter += ` AND ce.branch_id = ? `;
+                    expCatBindings.push(Number(branchId));
+                }
+
+                const { results: expBreakdown } = await env.DB.prepare(`
+                    SELECT cc.name AS category_name, SUM(ce.amount) AS amount
+                    FROM cashbook_entries ce
+                    LEFT JOIN cash_categories cc ON ce.category_id = cc.id
+                    WHERE ${expCatFilter}
+                    GROUP BY cc.name
+                    ORDER BY amount DESC
+                `).bind(...expCatBindings).all();
+
+                // ၃။ ကုန်ကျစရိတ်နှင့် အဝယ်တန်ဖိုးများ နုတ်ပြီး တစ်နှစ်တာ အသားတင်အမြတ် (Gross Profit & Net Profit)
+                let cogsFilter = ` strftime('%Y', s.created_at) = ? `;
+                let cogsBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    cogsFilter += ` AND s.branch_id = ? `;
+                    cogsBindings.push(Number(branchId));
+                }
+
+                const cogsRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(si.quantity * si.cost_price), 0) AS cogs
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE ${cogsFilter}
+                `).bind(...cogsBindings).first();
+
+                const totalRev = Number(revRow?.total_revenue || 0);
+                const totalExp = Number(expRow?.total_expenses || 0);
+                const cogs = Number(cogsRow?.cogs || 0);
+                const grossProfit = totalRev - cogs;
+                const netProfit = grossProfit - totalExp;
+
+                // ၄။ ရရန်ကျန် စုစုပေါင်း အကြွေး (Outstanding Debt)
+                const debtRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(current_debt), 0) AS total_debt
+                    FROM customers
+                    WHERE is_active = 1
+                `).first();
+
+                // ၅။ စတော့ စုစုပေါင်း တန်ဖိုး (Total Stock Value)
+                let stockValFilter = ` p.is_active = 1 `;
+                let stockValBindings = [];
+                if (branchId && branchId !== "ALL") {
+                    stockValFilter += ` AND bi.branch_id = ? `;
+                    stockValBindings.push(Number(branchId));
+                }
+
+                const stockValRow = await env.DB.prepare(`
+                    SELECT COALESCE(SUM(bi.quantity * p.cost_price), 0) AS total_stock_value
+                    FROM branch_inventory bi
+                    JOIN products p ON bi.product_id = p.id
+                    WHERE ${stockValFilter}
+                `).bind(...stockValBindings).first();
+
+                // ၆။ ရောင်းအားအကောင်းဆုံး ပစ္စည်းများ (Top Selling Items)
+                let topFilter = ` strftime('%Y', s.created_at) = ? `;
+                let topBindings = [year];
+                if (branchId && branchId !== "ALL") {
+                    topFilter += ` AND s.branch_id = ? `;
+                    topBindings.push(Number(branchId));
+                }
+
+                const { results: topItems } = await env.DB.prepare(`
+                    SELECT p.item_name, p.category, SUM(si.quantity) AS quantity, SUM(si.subtotal) AS total_sales
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    JOIN products p ON si.product_id = p.id
+                    WHERE ${topFilter}
+                    GROUP BY p.id
+                    ORDER BY quantity DESC LIMIT 6
+                `).bind(...topBindings).all();
+
+                // ၇။ ဆိုင်ခွဲတစ်ခုချင်းစီအလိုက် စတော့တန်ဖိုးနှင့် ငွေကြေးအခြေအနေ (Branch Valuation Breakdown)
+                const { results: branches } = await env.DB.prepare("SELECT id, name FROM branches WHERE is_active = 1 ORDER BY id ASC").all();
+                const branchMetrics = [];
+
+                for (const b of (branches || [])) {
+                    // Cash Net & Bank Net
+                    const bCashRow = await env.DB.prepare(`
+                        SELECT 
+                            COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
+                                              WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_net,
+                            COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
+                                              WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_net
+                        FROM cashbook_entries
+                        WHERE branch_id = ?
+                    `).bind(b.id).first();
+
+                    // Branch Stock Valuation
+                    const bStockRow = await env.DB.prepare(`
+                        SELECT COALESCE(SUM(bi.quantity * p.cost_price), 0) AS stock_value
+                        FROM branch_inventory bi
+                        JOIN products p ON bi.product_id = p.id
+                        WHERE bi.branch_id = ? AND p.is_active = 1
+                    `).bind(b.id).first();
+
+                    branchMetrics.push({
+                        id: b.id,
+                        name: b.name,
+                        cash_net: Number(bCashRow?.cash_net || 0),
+                        bank_net: Number(bCashRow?.bank_net || 0),
+                        stock_value: Number(bStockRow?.stock_value || 0),
+                        outstanding_debt: Number(debtRow?.total_debt || 0) // Customers are centralized
+                    });
+                }
+
+                const adminMetrics = {
+                    total_revenue: totalRev,
+                    net_profit: netProfit,
+                    gross_profit: grossProfit,
+                    total_expenses: totalExp,
+                    total_outstanding_debt: Number(debtRow?.total_debt || 0),
+                    total_stock_value: Number(stockValRow?.total_stock_value || 0),
+                    expense_breakdown: expBreakdown || [],
+                    top_selling_items: topItems || [],
+                    branch_metrics: branchMetrics
+                };
+
+                return jsonResponse({
+                    staff: staffMetrics,
+                    admin: adminMetrics
+                });
             }
 
             return errorResponse(`Route မတွေ့ပါ: ${method} ${path}`, 404);

@@ -5,6 +5,7 @@ import { setKPI, refreshGlobalKPIs } from "../app.js";
 
 let customers = [];
 let activeCustomerLedger = [];
+let currentCustomer = null;
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -20,6 +21,12 @@ export async function initCustomers() {
 }
 
 function bindEvents() {
+    // ပင်မ ဖောက်သည်စာရင်း အားလုံးကို CSV Export ထုတ်ခြင်း
+    document.getElementById("btn-export-customers-csv")?.addEventListener("click", exportAllCustomersToCSV);
+
+    // တစ်ဦးချင်း Statement Modal မှ CSV Export ထုတ်ခြင်း
+    document.getElementById("btn-export-ledger-csv")?.addEventListener("click", exportCustomerLedgerToCSV);
+
     // ဖောက်သည်အသစ် Modal ဖွင့်/ပိတ်
     document.getElementById("btn-add-customer")?.addEventListener("click", () => {
         document.getElementById("customer-form")?.reset();
@@ -65,7 +72,7 @@ function bindEvents() {
         });
     }
 
-    // Ledger Print (Statement ထုတ်ပေးရန်)
+    // Ledger Print (Statement ပရင့်ထုတ်ရန်)
     document.getElementById("btn-print-ledger")?.addEventListener("click", () => {
         window.print();
     });
@@ -131,13 +138,11 @@ function renderTable(list) {
             </td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <!-- မှတ်တမ်းကြည့်ရန် Button (ဘယ်နေ့ ဘယ်လောက်ဆပ်သွားသည်ကို အပြည့်အစုံ ကြည့်နိုင်သည်) -->
                     <button type="button" data-id="${c.id}" title="အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း ကြည့်မည်" class="btn-view-ledger px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-600 transition cursor-pointer flex items-center gap-1 shadow-sm">
                         <i class="fa-solid fa-receipt text-blue-500"></i>
                         <span>မှတ်တမ်း</span>
                     </button>
 
-                    <!-- အကြွေးဆပ်ရန် Button -->
                     ${debt > 0 ? `
                     <button type="button" data-id="${c.id}" class="btn-repay px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer flex items-center gap-1">
                         <i class="fa-solid fa-hand-holding-dollar"></i>
@@ -152,7 +157,6 @@ function renderTable(list) {
         tbody.appendChild(tr);
     });
 
-    // Event Bindings
     tbody.querySelectorAll(".btn-repay").forEach(btn => {
         btn.onclick = () => {
             const cust = customers.find(item => item.id === Number(btn.dataset.id));
@@ -168,8 +172,9 @@ function renderTable(list) {
     });
 }
 
-// --- Customer Ledger / Statement Modal Logic (နေ့စွဲအလိုက် ကြွေးမြီမှတ်တမ်း) ---
+// --- Customer Ledger / Statement Modal Logic ---
 async function openCustomerLedgerModal(cust) {
+    currentCustomer = cust;
     const modal = document.getElementById("customer-ledger-modal");
     const nameEl = document.getElementById("ledger-cust-name");
     const phoneEl = document.getElementById("ledger-cust-phone");
@@ -208,7 +213,7 @@ function renderCustomerLedger(ledgerList) {
     }
 
     ledgerList.forEach(entry => {
-        const isDebit = entry.type === "DEBIT"; // DEBIT = အကြွေးယူခြင်း / ဝယ်ယူခြင်း
+        const isDebit = entry.type === "DEBIT";
         const dateStr = entry.created_at ? new Date(entry.created_at).toLocaleString("en-GB", { hour12: true }) : "-";
         const amt = Number(entry.amount || 0);
         const balanceAfter = Number(entry.balance_after || 0);
@@ -249,14 +254,12 @@ function openRepayModal(cust) {
     document.getElementById("repay-modal-title").textContent = `${cust.name} - အကြွေးဆပ်ငွေ လက်ခံခြင်း`;
     document.getElementById("repay-current-debt").textContent = Number(cust.current_debt || 0).toLocaleString();
     
-    // Default ပမာဏကို လက်ကျန်အကြွေးအတိုင်း ဖြည့်ပေးမည် (ပြင်ဆင်နိုင်သည်)
     const amountInput = document.getElementById("repay-amount");
     if (amountInput) {
         amountInput.value = cust.current_debt || 0;
         amountInput.max = cust.current_debt || 0;
     }
 
-    // ရက်စွဲကို ယနေ့ရက်စွဲ (YYYY-MM-DD) Default ထည့်ပေးခြင်း
     const dateInput = document.getElementById("repay-date");
     if (dateInput) {
         dateInput.value = new Date().toISOString().split("T")[0];
@@ -333,4 +336,74 @@ async function submitRepayment(e) {
     } finally {
         if (btn) btn.disabled = false;
     }
+}
+
+// --- CSV Export Functions (UTF-8 BOM ပါဝင်ပြီး Excel တွင် မြန်မာစာ မပျက်ပါ) ---
+
+// ၁။ ပင်မ view မှ ဖောက်သည်စာရင်း အားလုံးကို Export ထုတ်ခြင်း
+function exportAllCustomersToCSV() {
+    if (!customers || customers.length === 0) {
+        return alert("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
+    }
+
+    let csvContent = "Customer Name,Phone,Shop Name,Customer Type,Address,Outstanding Debt (MMK),Status\n";
+
+    customers.forEach(c => {
+        const debt = Number(c.current_debt || 0);
+        const status = debt > 0 ? "အကြွေးကျန်ရှိ" : "ကင်းရှင်း";
+        const row = [
+            `"${(c.name || '').replace(/"/g, '""')}"`,
+            `"${(c.phone || '').replace(/"/g, '""')}"`,
+            `"${(c.shop_name || '').replace(/"/g, '""')}"`,
+            `"${(c.customer_type || 'retail').toUpperCase()}"`,
+            `"${(c.address || '').replace(/"/g, '""')}"`,
+            debt,
+            `"${status}"`
+        ];
+        csvContent += row.join(",") + "\n";
+    });
+
+    downloadCSV(csvContent, `Customers_Liabilities_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+// ၂။ တစ်ဦးချင်း Customer Statement မှတ်တမ်းဇယားကို Export ထုတ်ခြင်း
+function exportCustomerLedgerToCSV() {
+    if (!activeCustomerLedger || activeCustomerLedger.length === 0) {
+        return alert("ထုတ်ယူရန် အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း မရှိပါ။");
+    }
+
+    const custName = currentCustomer ? currentCustomer.name : "Customer";
+    let csvContent = `Date / Time,Transaction Type,Invoice / Reference,Payment Method,Amount,Balance After (MMK),Recorded By\n`;
+
+    activeCustomerLedger.forEach(item => {
+        const dateStr = item.created_at ? new Date(item.created_at).toLocaleString("en-GB") : "-";
+        const typeStr = item.type === "DEBIT" ? "အကြွေးယူခြင်း (Debit)" : "အကြွေးဆပ်ခြင်း (Credit)";
+        const sign = item.type === "DEBIT" ? "+" : "-";
+
+        const row = [
+            `"${dateStr}"`,
+            `"${typeStr}"`,
+            `"${(item.reference_note || '').replace(/"/g, '""')}"`,
+            `"${(item.payment_method || '').replace(/"/g, '""')}"`,
+            `"${sign}${Number(item.amount || 0)}"`,
+            Number(item.balance_after || 0),
+            `"${(item.created_by_name || 'Admin').replace(/"/g, '""')}"`
+        ];
+        csvContent += row.join(",") + "\n";
+    });
+
+    const safeName = custName.replace(/[\/\\:*?"<>|]/g, "_");
+    downloadCSV(csvContent, `Statement_${safeName}_${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+function downloadCSV(csvContent, fileName) {
+    // 0xEF, 0xBB, 0xBF (UTF-8 BOM) ထည့်သွင်းထားသဖြင့် Microsoft Excel တွင် မြန်မာစာလုံးများ ပုံမှန်အတိုင်း ဖတ်ရှုနိုင်ပါသည်
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }

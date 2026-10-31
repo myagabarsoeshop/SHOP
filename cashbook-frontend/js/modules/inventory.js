@@ -28,7 +28,6 @@ function bindEvents() {
     } else {
         document.getElementById("btn-add-product")?.classList.add("hidden");
         document.getElementById("btn-import-csv")?.classList.add("hidden");
-        // btn-export-csv ကို hidden မလုပ်တော့ပါ (Cashier များပါ ထုတ်ယူနိုင်ပါပြီ)
     }
 
     document.getElementById("btn-close-product-modal")?.addEventListener("click", () => {
@@ -122,27 +121,19 @@ function renderTable(list) {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
 
-        // Admin ဖြစ်မှသာ ခလုတ်များ နှိပ်ခွင့်ရှိမည်၊ မဟုတ်လျှင် Disabled ပုံစံ အရောင်မှိန်မည်
+        // Edit (အပြာရောင်) ၊ Waste (လိမ္မော်ရောင် Amber) ၊ Delete (အနီရောင် Rose)
         const actionButtons = state.isAdmin() ? `
-            <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-pen-to-square"></i>
+            <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" class="btn-edit-prod w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-pen-to-square text-xs"></i>
             </button>
-            <button type="button" data-id="${item.id}" title="အလေအလွင့်/ပျက်စီး စာရင်းသွင်းမည်" class="btn-waste-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-box-open"></i>
+            <button type="button" data-id="${item.id}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" class="btn-waste-prod w-8 h-8 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-white rounded-lg text-amber-600 dark:text-amber-400 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-box-open text-xs"></i>
             </button>
-            <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-trash-can"></i>
+            <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" class="btn-delete-prod w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-trash-can text-xs"></i>
             </button>
         ` : `
-            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
-                <i class="fa-solid fa-pen-to-square"></i>
-            </button>
-            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
-                <i class="fa-solid fa-box-open"></i>
-            </button>
-            <button type="button" disabled title="Admin သာ ပြင်ခွင့်ရှိသည်" class="w-9 h-9 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 rounded-xl text-slate-400 opacity-50 cursor-not-allowed">
-                <i class="fa-solid fa-trash-can"></i>
-            </button>
+            <span class="text-xs text-slate-400 font-mono">-</span>
         `;
 
         const tr = document.createElement("tr");
@@ -174,7 +165,7 @@ function renderTable(list) {
                 </span>
             </td>
             <td class="p-4 text-center">
-                <div class="flex items-center justify-center gap-2">
+                <div class="flex items-center justify-center gap-1.5">
                     ${actionButtons}
                 </div>
             </td>

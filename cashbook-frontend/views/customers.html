@@ -1,7 +1,7 @@
 <!-- cashbook-frontend/views/customers.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm overflow-hidden">
     
-    <!-- Top Toolbar -->
+    <!-- Top Toolbar (Export CSV ခလုတ် ထည့်သွင်းထားသည်) -->
     <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="relative flex-1 max-w-md">
             <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
@@ -9,13 +9,19 @@
                 class="w-full pl-10 pr-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
         </div>
 
-        <button type="button" id="btn-add-customer" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
-            <i class="fa-solid fa-user-plus"></i>
-            <span>ဖောက်သည်အသစ် ထည့်မည်</span>
-        </button>
+        <div class="flex items-center gap-2.5">
+            <button type="button" id="btn-export-customers-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer border border-slate-300 dark:border-slate-600">
+                <i class="fa-solid fa-file-export text-blue-500"></i>
+                <span>Export CSV</span>
+            </button>
+            <button type="button" id="btn-add-customer" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>ဖောက်သည်အသစ် ထည့်မည်</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Customers Table (7 Columns Standard) -->
+    <!-- Customers Table -->
     <div class="flex-1 overflow-x-auto overflow-y-auto">
         <table class="w-full text-left text-sm whitespace-nowrap min-w-[950px]">
             <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
@@ -91,7 +97,7 @@
     </div>
 </div>
 
-<!-- 2. Debt Repayment Modal (Enhanced with Date & Bank Fields) -->
+<!-- 2. Debt Repayment Modal -->
 <div id="repay-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
         <div class="p-5 bg-emerald-600 text-white flex items-center justify-between">
@@ -119,14 +125,13 @@
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ငွေလက်ခံသည့် ပုံစံ *</label>
-                    <select id="repay-method" class="w-full text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                    <select id="repay-method" class="w-full text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                         <option value="cash">💵 ငွေသား (Cash)</option>
                         <option value="bank">🏦 KPay / ဘဏ် (Bank)</option>
                     </select>
                 </div>
             </div>
 
-            <!-- Bank Selection Container (Hidden by default) -->
             <div id="repay-bank-container" class="hidden">
                 <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ဘဏ် / Mobile Pay အကောင့်</label>
                 <input type="text" id="repay-bank-name" placeholder="KBZPay / CB / AYA / WavePay" class="w-full text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
@@ -155,7 +160,7 @@
     </div>
 </div>
 
-<!-- 3. Customer Ledger / Statement Modal (ရက်စွဲအလိုက် အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်းဇယား) -->
+<!-- 3. Customer Ledger / Statement Modal (CSV Export Button ထည့်သွင်းထားသည်) -->
 <div id="customer-ledger-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[92vh]">
         
@@ -174,12 +179,17 @@
                 </div>
             </div>
 
-            <div class="flex items-center gap-3">
-                <div class="text-right">
+            <div class="flex items-center gap-2">
+                <div class="text-right mr-2">
                     <div class="text-[11px] text-slate-400 font-bold">လက်ရှိ အကြွေးကျန်ငွေ</div>
                     <div id="ledger-cust-debt" class="text-lg font-black font-mono text-rose-500">0 Ks</div>
                 </div>
-                <button type="button" id="btn-print-ledger" title="Statement ပရင့်ထုတ်မည်" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer ml-2">
+                <!-- Statement Export CSV Button -->
+                <button type="button" id="btn-export-ledger-csv" title="Statement CSV ထုတ်ယူမည်" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 rounded-xl font-bold text-xs flex items-center gap-1.5 border border-slate-700 transition cursor-pointer">
+                    <i class="fa-solid fa-file-csv text-sm"></i>
+                    <span>Export CSV</span>
+                </button>
+                <button type="button" id="btn-print-ledger" title="Statement ပရင့်ထုတ်မည်" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer">
                     <i class="fa-solid fa-print"></i>
                 </button>
                 <button type="button" id="btn-close-ledger-modal" class="text-slate-400 hover:text-white text-lg cursor-pointer ml-1">

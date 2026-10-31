@@ -12,6 +12,7 @@ import { initPurchases } from "./modules/purchases.js";
 import { initMasterProducts } from "./modules/master_products.js";
 import { initWaste } from "./modules/waste.js";
 import { initTransfers } from "./modules/transfers.js";
+import { initStockReport } from "./modules/stock_report.js";
 
 const VIEW_TITLES = {
     pos: "Sale Counter (POS)",
@@ -20,6 +21,7 @@ const VIEW_TITLES = {
     purchases: "Purchases (အဝယ်နှင့် စတော့အဝင်)",
     waste: "Damage & Waste (ပျက်စီး/အလေအလွင့်)",
     transfers: "Stock Transfers (ဆိုင်ခွဲစတော့လွှဲပြောင်းမှု)",
+    stock_report: "Stock Report (လစဉ်စတော့လှုပ်ရှားမှုနှင့် လက်ကျန်မက်ထရစ်)",
     master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
     customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
@@ -157,7 +159,8 @@ export async function refreshGlobalKPIs(viewOverride) {
         view === "purchases" || 
         view === "master_products" || 
         view === "waste" || 
-        view === "transfers"
+        view === "transfers" ||
+        view === "stock_report"
     ) return;
 
     try {
@@ -245,6 +248,8 @@ export async function navigateTo(viewName) {
             await initWaste();
         } else if (viewName === "transfers") {
             await initTransfers();
+        } else if (viewName === "stock_report") {
+            await initStockReport();
         }
     } catch (err) {
         container.innerHTML = `

@@ -41,6 +41,13 @@ function bindEvents() {
             }
         });
     }
+
+    // Modal ပြင်ပနှိပ်ပါက Autocomplete Suggestion များကို ပိတ်သိမ်းခြင်း
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest(".pur-search-wrapper")) {
+            document.querySelectorAll(".pur-suggestions").forEach(el => el.classList.add("hidden"));
+        }
+    });
 }
 
 async function loadMasterProducts() {
@@ -218,30 +225,61 @@ function addPurchaseRow(existingData = null) {
     const tbody = document.getElementById("pur-items-container");
     if (!tbody) return;
 
-    let productOptions = `<option value="">-- ပစ္စည်းရွေးချယ်ပါ --</option>`;
-    productOptions += `<option value="NEW" class="font-bold text-emerald-600">+ ပစ္စည်းအသစ် ထည့်မည်...</option>`;
-    masterProducts.forEach(p => {
-        const isSel = existingData && existingData.product_id == p.id ? "selected" : "";
-        productOptions += `<option value="${p.id}" ${isSel} data-cost="${p.cost_price || 0}" data-retail="${p.retail_price || 0}" data-wholesale="${p.wholesale_price || 0}">${escapeHtml(p.item_name)} (${escapeHtml(p.sku || "-")})</option>`;
+    // Categories စာရင်းကို ဆွဲထုတ်ခြင်း
+    const categories = [...new Set(masterProducts.map(p => p.category).filter(Boolean))];
+    let catOptions = `<option value="">အမျိုးအစား အားလုံး</option>`;
+    categories.forEach(c => {
+        catOptions += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
     });
 
     const tr = document.createElement("tr");
     tr.className = "pur-item-row group border-b border-slate-200 dark:border-slate-700";
     tr.innerHTML = `
-        <td class="p-3 align-top">
-            <select class="pur-item-select w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
-                ${productOptions}
-            </select>
-            
-            <!-- ပစ္စည်းအသစ် Inline Form -->
+        <td class="p-3 align-top min-w-[320px]">
+            <div class="pur-search-wrapper relative">
+                <!-- Search & Quick Actions Toolbar -->
+                <div class="flex items-center gap-1.5">
+                    <select class="pur-cat-filter text-[11px] font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 max-w-[100px] cursor-pointer" title="Category အလိုက် စစ်ထုတ်ရန်">
+                        ${catOptions}
+                    </select>
+
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-barcode text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 text-xs"></i>
+                        <input type="text" autocomplete="off" placeholder="ကုတ် / Barcode / အမည် ရိုက်ပါ..." 
+                            class="pur-search-input w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg pl-7 pr-2 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input type="hidden" class="pur-selected-prod-id" value="${existingData?.product_id || ''}">
+                    </div>
+
+                    <button type="button" title="ပစ္စည်းအသစ် ဖန်တီးမည်" class="btn-toggle-new shrink-0 px-2.5 py-2 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-lg border border-emerald-500/30 transition cursor-pointer">
+                        <i class="fa-solid fa-plus"></i> အသစ်
+                    </button>
+                </div>
+
+                <!-- Autocomplete Dropdown List -->
+                <div class="pur-suggestions hidden absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-2xl z-30 max-h-56 overflow-y-auto text-xs divide-y divide-slate-100 dark:divide-slate-800">
+                </div>
+
+                <!-- Selected Product Preview Badge -->
+                <div class="pur-selected-preview hidden mt-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center justify-between">
+                    <span class="preview-text truncate"></span>
+                    <button type="button" class="btn-clear-prod text-slate-400 hover:text-rose-500 ml-1.5 cursor-pointer">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ပစ္စည်းအသစ်အတွက် Inline Form -->
             <div class="new-product-fields hidden mt-2 space-y-2 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-emerald-500/30">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-sparkles mr-1"></i>ပစ္စည်းအသစ် အချက်အလက်</span>
+                    <button type="button" class="btn-cancel-new text-xs text-slate-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - ချည် သို့မဟုတ် အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                 <input type="text" placeholder="ပစ္စည်းအမည် (Item Name) *" class="new-name w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                 <div class="grid grid-cols-3 gap-1.5">
                     <input type="text" placeholder="SKU ကုတ် *" class="new-sku text-xs font-mono font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500/50 text-emerald-600 rounded-lg" title="Auto SKU သတ်မှတ်ပေးပါသည်">
                     <input type="text" placeholder="အရောင်" class="new-color text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                     
-                    <!-- ရေတွက်ပုံ / ယူနစ် / ဆိုဒ် ရွေးချယ်မှု -->
                     <select class="new-size text-xs font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                         <optgroup label="ချည်ယူနစ်များ">
                             <option value="ပေါင်">ပေါင် (lb)</option>
@@ -300,11 +338,22 @@ function addPurchaseRow(existingData = null) {
     `;
     tbody.appendChild(tr);
 
-    const select = tr.querySelector(".pur-item-select");
+    const searchInput = tr.querySelector(".pur-search-input");
+    const catFilter = tr.querySelector(".pur-cat-filter");
+    const suggestionsBox = tr.querySelector(".pur-suggestions");
+    const hiddenProdId = tr.querySelector(".pur-selected-prod-id");
+    const previewBox = tr.querySelector(".pur-selected-preview");
+    const previewText = tr.querySelector(".preview-text");
+    const btnClearProd = tr.querySelector(".btn-clear-prod");
+    const btnToggleNew = tr.querySelector(".btn-toggle-new");
+    const btnCancelNew = tr.querySelector(".btn-cancel-new");
+
     const newFields = tr.querySelector(".new-product-fields");
     const newCatInput = tr.querySelector(".new-cat");
+    const newNameInput = tr.querySelector(".new-name");
     const newSkuInput = tr.querySelector(".new-sku");
     const newSizeSelect = tr.querySelector(".new-size");
+
     const qtyInput = tr.querySelector(".pur-item-qty");
     const costInput = tr.querySelector(".pur-item-cost");
     const retailInput = tr.querySelector(".pur-item-retail");
@@ -313,26 +362,130 @@ function addPurchaseRow(existingData = null) {
     const wholesalePct = tr.querySelector(".pur-wholesale-pct");
     const removeBtn = tr.querySelector(".btn-remove-row");
 
-    select.addEventListener("change", (e) => {
-        if (e.target.value === "NEW") {
-            newFields.classList.remove("hidden");
-            newSkuInput.value = generateAutoSKU(newCatInput.value);
-            costInput.value = 0;
-            retailInput.value = 0;
-            wholesaleInput.value = 0;
+    // Existing Data ထည့်သွင်းထားလျှင် UI Preview ချိန်ညှိခြင်း
+    if (existingData && existingData.product_id) {
+        hiddenProdId.value = existingData.product_id;
+        previewText.textContent = `${existingData.item_name || 'Item'} (${existingData.sku || '-'})`;
+        previewBox.classList.remove("hidden");
+        searchInput.classList.add("hidden");
+    }
+
+    // Smart Search & Suggestion Engine
+    const renderSuggestions = () => {
+        const kw = searchInput.value.trim().toLowerCase();
+        const selectedCat = catFilter.value.trim().toLowerCase();
+
+        let matches = masterProducts.filter(p => {
+            if (selectedCat && (p.category || "").toLowerCase() !== selectedCat) return false;
+            if (!kw) return true;
+            const hay = `${p.barcode || ""} ${p.sku || ""} ${p.item_name || ""} ${p.color || ""}`.toLowerCase();
+            return hay.includes(kw);
+        }).slice(0, 15); // Performance အတွက် ထိပ်ဆုံး ၁၅ ခုသာ Render လုပ်မည်
+
+        suggestionsBox.innerHTML = "";
+
+        if (matches.length === 0) {
+            suggestionsBox.innerHTML = `
+                <div class="p-3 text-center text-slate-400">
+                    <div>ပစ္စည်း ရှာမတွေ့ပါ</div>
+                    <button type="button" class="btn-create-from-search mt-1.5 px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold text-xs">
+                        + "${escapeHtml(kw)}" ကို အသစ်အဖြစ် ထည့်မည်
+                    </button>
+                </div>
+            `;
+            suggestionsBox.querySelector(".btn-create-from-search")?.addEventListener("click", () => {
+                openNewProductBox(kw);
+                suggestionsBox.classList.add("hidden");
+            });
         } else {
-            newFields.classList.add("hidden");
-            const opt = e.target.options[e.target.selectedIndex];
-            if (opt) {
-                costInput.value = opt.getAttribute("data-cost") || 0;
-                retailInput.value = opt.getAttribute("data-retail") || 0;
-                wholesaleInput.value = opt.getAttribute("data-wholesale") || 0;
+            matches.forEach(p => {
+                const itemEl = document.createElement("div");
+                itemEl.className = "p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between";
+                itemEl.innerHTML = `
+                    <div>
+                        <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(p.item_name)}</div>
+                        <div class="text-[11px] text-slate-400">${escapeHtml(p.sku || "-")} | ${escapeHtml(p.category || "-")} ${p.color ? '| ' + escapeHtml(p.color) : ''}</div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-emerald-600 dark:text-emerald-400 font-mono font-bold">${Number(p.cost_price || 0).toLocaleString()} Ks</span>
+                        <div class="text-[10px] text-slate-400">စတော့: ${p.current_stock || 0}</div>
+                    </div>
+                `;
+                itemEl.onclick = () => selectProduct(p);
+                suggestionsBox.appendChild(itemEl);
+            });
+        }
+        suggestionsBox.classList.remove("hidden");
+    };
+
+    const selectProduct = (p) => {
+        hiddenProdId.value = p.id;
+        newFields.classList.add("hidden");
+        previewText.textContent = `${p.item_name} (${p.sku || "-"}) [${p.category || ""}]`;
+        previewBox.classList.remove("hidden");
+        searchInput.classList.add("hidden");
+        suggestionsBox.classList.add("hidden");
+
+        costInput.value = p.cost_price || 0;
+        retailInput.value = p.retail_price || 0;
+        wholesaleInput.value = p.wholesale_price || 0;
+
+        calculateRow(tr);
+        qtyInput.focus();
+    };
+
+    const openNewProductBox = (initialName = "") => {
+        hiddenProdId.value = "NEW";
+        previewBox.classList.add("hidden");
+        newFields.classList.remove("hidden");
+        if (initialName) newNameInput.value = initialName;
+        newCatInput.value = catFilter.value || "";
+        newSkuInput.value = generateAutoSKU(newCatInput.value);
+        newNameInput.focus();
+    };
+
+    searchInput.addEventListener("focus", renderSuggestions);
+    searchInput.addEventListener("input", renderSuggestions);
+    catFilter.addEventListener("change", renderSuggestions);
+
+    // Barcode Scan / Enter Key Auto-select
+    searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const val = searchInput.value.trim().toLowerCase();
+            const exactMatch = masterProducts.find(p => 
+                (p.barcode && p.barcode.toLowerCase() === val) || 
+                (p.sku && p.sku.toLowerCase() === val)
+            );
+            if (exactMatch) {
+                selectProduct(exactMatch);
+            } else {
+                renderSuggestions();
             }
         }
-        calculateRow(tr);
     });
 
-    // Category ရိုက်သည့်အခါ Auto SKU နှင့် သင့်တော်သော Unit ကို အလိုအလျောက် ရွေးချယ်ပေးခြင်း
+    btnClearProd.addEventListener("click", () => {
+        hiddenProdId.value = "";
+        previewBox.classList.add("hidden");
+        searchInput.classList.remove("hidden");
+        searchInput.value = "";
+        costInput.value = 0;
+        retailInput.value = 0;
+        wholesaleInput.value = 0;
+        calculateRow(tr);
+        searchInput.focus();
+    });
+
+    btnToggleNew.addEventListener("click", () => openNewProductBox());
+    btnCancelNew.addEventListener("click", () => {
+        hiddenProdId.value = "";
+        newFields.classList.add("hidden");
+        searchInput.classList.remove("hidden");
+        searchInput.focus();
+    });
+
+    // New Product Auto Unit & SKU Engine
     newCatInput.addEventListener("input", () => {
         const catVal = newCatInput.value.trim().toLowerCase();
         newSkuInput.value = generateAutoSKU(catVal);
@@ -344,6 +497,7 @@ function addPurchaseRow(existingData = null) {
         }
     });
 
+    // Realtime Percentage တွက်ချက်ခြင်း
     const updatePricesLive = () => {
         const cost = parseFloat(costInput.value) || 0;
         const rPct = parseFloat(retailPct.value);
@@ -413,17 +567,16 @@ async function submitPurchase() {
     let errMsg = "";
 
     document.querySelectorAll(".pur-item-row").forEach(tr => {
-        const select = tr.querySelector(".pur-item-select");
-        const prodVal = select.value;
+        const hiddenProdId = tr.querySelector(".pur-selected-prod-id").value;
         const qty = parseFloat(tr.querySelector(".pur-item-qty").value) || 0;
         const cost = parseFloat(tr.querySelector(".pur-item-cost").value) || 0;
         const retail = parseFloat(tr.querySelector(".pur-item-retail").value) || 0;
         const wholesale = parseFloat(tr.querySelector(".pur-item-wholesale").value) || 0;
 
-        if (!prodVal) {
+        if (!hiddenProdId) {
             hasError = true;
             errMsg = "ပစ္စည်းရွေးချယ်မှု ပြည့်စုံစွာ လုပ်ဆောင်ပေးပါ။";
-            select.classList.add("border-rose-500");
+            tr.querySelector(".pur-search-input").classList.add("border-rose-500");
             return;
         }
 
@@ -443,7 +596,7 @@ async function submitPurchase() {
             subtotal: qty * cost
         };
 
-        if (prodVal === "NEW") {
+        if (hiddenProdId === "NEW") {
             const cat = tr.querySelector(".new-cat").value.trim() || "အထည်";
             const name = tr.querySelector(".new-name").value.trim();
             const sku = tr.querySelector(".new-sku").value.trim();
@@ -470,7 +623,7 @@ async function submitPurchase() {
             };
         } else {
             itemObj.is_new = false;
-            itemObj.product_id = parseInt(prodVal, 10);
+            itemObj.product_id = parseInt(hiddenProdId, 10);
         }
 
         items.push(itemObj);

@@ -1,5 +1,4 @@
 // cashbook-frontend/js/modules/inventory.js
-
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI } from "../app.js";
@@ -70,16 +69,17 @@ function populateCategoryFilter() {
     if (cats.includes(current)) select.value = current;
 }
 
+// 1. KPI အမည်များ English လို ပြောင်းထားသည်
 function updateInventoryKPIs() {
     const totalTypes = products.length;
     const totalPieces = products.reduce((sum, p) => sum + Number(p.current_stock || 0), 0);
     const totalCostValue = products.reduce((sum, p) => sum + (Number(p.current_stock || 0) * Number(p.cost_price || 0)), 0);
     const lowStockCount = products.filter(p => Number(p.current_stock || 0) <= Number(p.alert_quantity || 5)).length;
 
-    setKPI(1, "အထည်အမျိုးအစားပေါင်း (SKUs)", totalTypes, "fa-tags", "blue");
-    setKPI(2, "စုစုပေါင်း အထည်လက်ကျန် (Pieces)", totalPieces, "fa-shirt", "emerald");
-    setKPI(3, "လက်ကျန် အရင်းတန်ဖိုး (Stock Value)", totalCostValue, "fa-vault", "amber");
-    setKPI(4, "လက်ကျန်နည်းနေသော အထည် (Low Stock)", lowStockCount, "fa-triangle-exclamation", "rose");
+    setKPI(1, "Total Category", totalTypes, "fa-tags", "blue");
+    setKPI(2, "Stock Balances", totalPieces, "fa-shirt", "emerald");
+    setKPI(3, "Stock Value", totalCostValue, "fa-vault", "amber");
+    setKPI(4, "Low Stock", lowStockCount, "fa-triangle-exclamation", "rose");
 }
 
 function filterAndRender() {
@@ -96,13 +96,14 @@ function filterAndRender() {
     renderTable(filtered);
 }
 
+// 2 & 3. Table အတွင်းရှိ Font Size ကြီးပေးထားခြင်း နှင့် Icon သီးသန့်ပြောင်းခြင်း
 function renderTable(list) {
     const tbody = document.getElementById("inv-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-slate-400 font-bold">အထည်စာရင်း မတွေ့ရှိပါ</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-slate-400 font-bold text-base">အထည်စာရင်း မတွေ့ရှိပါ</td></tr>`;
         return;
     }
 
@@ -113,35 +114,40 @@ function renderTable(list) {
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
         tr.innerHTML = `
-            <td class="p-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(item.sku || "-")}</div>
+            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
+                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(item.sku || "-")}</div>
                 <div>${escapeHtml(item.barcode || "")}</div>
             </td>
             <td class="p-4">
-                <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
                     ${escapeHtml(item.category)}
                 </span>
             </td>
             <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(item.item_name)}</div>
-                <div class="text-xs text-slate-400">${escapeHtml(item.pattern || "-")}</div>
+                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(item.item_name)}</div>
+                <div class="text-sm text-slate-400">${escapeHtml(item.pattern || "-")}</div>
             </td>
-            <td class="p-4 text-xs">
+            <td class="p-4 text-sm">
                 <div>${escapeHtml(item.color || "-")}</div>
                 <div class="text-slate-400">${escapeHtml(item.size || "Free Size")}</div>
             </td>
-            <td class="p-4 text-right font-mono text-slate-500">${Number(item.cost_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(item.retail_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400">${Number(item.wholesale_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono text-base text-slate-500">${Number(item.cost_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(item.retail_price || 0).toLocaleString()}</td>
+            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(item.wholesale_price || 0).toLocaleString()}</td>
             <td class="p-4 text-center">
-                <span class="px-3 py-1 rounded-xl font-mono font-black text-sm ${isLow ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}">
+                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base ${isLow ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}">
                     ${stock.toLocaleString()}
                 </span>
             </td>
             <td class="p-4 text-center">
-                <button type="button" data-id="${item.id}" class="btn-edit-prod px-3 py-1.5 bg-slate-100 dark:bg-slate-900 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition cursor-pointer">
-                    <i class="fa-solid fa-pen-to-square mr-1"></i> ပြင်မည်
-                </button>
+                <div class="flex items-center justify-center gap-2">
+                    <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
@@ -153,6 +159,25 @@ function renderTable(list) {
             if (prod) openProductModal(prod);
         };
     });
+
+    // Delete Button လုပ်ဆောင်ချက် အသစ်
+    tbody.querySelectorAll(".btn-delete-prod").forEach(btn => {
+        btn.onclick = () => {
+            const id = Number(btn.dataset.id);
+            deleteProduct(id);
+        };
+    });
+}
+
+// အထည်စာရင်း ဖျက်ရန် Function
+async function deleteProduct(id) {
+    if (!confirm("ဤအထည်ကို စာရင်းမှ အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?")) return;
+    try {
+        await api.delete(`/products/${id}`);
+        await loadInventory();
+    } catch (err) {
+        alert("ဖျက်၍မရပါ: " + err.message);
+    }
 }
 
 // HTML Elements ကို ရှာမတွေ့ပါက Error မတက်စေရန် Helper Function
@@ -255,7 +280,6 @@ function exportToCSV() {
         csvContent += row.join(",") + "\n";
     });
 
-    // UTF-8 BOM ထည့်သွင်းခြင်း (မြန်မာစာမှန်ကန်စွာပေါ်စေရန်)
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" }); 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

@@ -19,17 +19,22 @@ export async function initInventory() {
 }
 
 function bindEvents() {
-    document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
+    if (state.isAdmin()) {
+        document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
+        document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
+        document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
+    } else {
+        document.getElementById("btn-add-product")?.classList.add("hidden");
+        document.getElementById("btn-export-csv")?.classList.add("hidden");
+        document.getElementById("btn-import-csv")?.classList.add("hidden");
+    }
+
     document.getElementById("btn-close-product-modal")?.addEventListener("click", () => {
         document.getElementById("product-modal")?.classList.add("hidden");
     });
-
     document.getElementById("product-form")?.addEventListener("submit", submitProduct);
     document.getElementById("inv-category-filter")?.addEventListener("change", filterAndRender);
     document.getElementById("inv-search")?.addEventListener("input", filterAndRender);
-    
-    document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
-    document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
 }
 
 async function loadInventory() {
@@ -108,6 +113,15 @@ function renderTable(list) {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
 
+        const adminActions = state.isAdmin() ? `
+            <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        ` : "";
+
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
         tr.innerHTML = `
@@ -138,17 +152,9 @@ function renderTable(list) {
             </td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <!-- Edit Button -->
-                    <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်မည်" class="btn-edit-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                        <i class="fa-solid fa-pen-to-square"></i>
-                    </button>
-                    <!-- Waste Button (New) -->
+                    ${adminActions}
                     <button type="button" data-id="${item.id}" title="အလေအလွင့်/ပျက်စီး စာရင်းသွင်းမည်" class="btn-waste-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                         <i class="fa-solid fa-box-open"></i>
-                    </button>
-                    <!-- Delete Button -->
-                    <button type="button" data-id="${item.id}" title="ဖျက်မည်" class="btn-delete-prod w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
-                        <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
             </td>
@@ -163,7 +169,6 @@ function renderTable(list) {
         };
     });
 
-    // အလေအလွင့် (Waste) Button လုပ်ဆောင်ချက် (လောလောဆယ် Alert ဖြင့်သာ ပြထားသည်)
     tbody.querySelectorAll(".btn-waste-prod").forEach(btn => {
         btn.onclick = () => {
             alert("အလေအလွင့်/ပျက်စီး (Waste Stock) စာရင်းသွင်းရန် မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။");
@@ -228,7 +233,6 @@ async function submitProduct(e) {
     const prodId = document.getElementById("prod-id")?.value;
     const branchId = state.currentBranch?.id || 1;
 
-    // အသစ်သွင်း/ပြင်ဆင်ချိန်တွင် Quantity/Stock များကို Payload မှ ဖြုတ်ထားသည် (သို့မဟုတ် 0 ထားသည်)
     const payload = {
         sku: document.getElementById("prod-sku")?.value.trim() || null,
         barcode: document.getElementById("prod-barcode")?.value.trim() || null,
@@ -248,7 +252,6 @@ async function submitProduct(e) {
         if (prodId) {
             await api.put(`/products/${prodId}`, payload);
         } else {
-            // အသစ်သွင်းလျှင် Stock အစကို 0 ဟု သတ်မှတ်မည်။ အရေအတွက်ကို Purchase မှ သွင်းရမည်။
             payload.initialStock = 0; 
             payload.quantity = 0;
             await api.post("/products", payload);

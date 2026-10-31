@@ -44,6 +44,8 @@ function bindEvents() {
     document.getElementById("yarn-edit-form")?.addEventListener("submit", submitEditYarn);
 }
 
+// cashbook-frontend/js/modules/yarn.js ထဲရှိ loadYarnInventory အပိုင်း
+
 async function loadYarnInventory() {
     const tbody = document.getElementById("yarn-table-body");
     const branchId = state.currentBranch?.id || 1;
@@ -53,14 +55,23 @@ async function loadYarnInventory() {
     }
 
     try {
-        // Products ထဲမှ Category တွင် "ချည်" သို့မဟုတ် "yarn" ပါဝင်သော စာရင်းများကို ရယူခြင်း
-        const res = await api.get("/products", { branch_id: branchId });
+        // သီးခြား API /yarns သို့မဟုတ် /products မှ ခေါ်ယူခြင်း
+        const res = await api.get("/yarns", { branch_id: branchId }).catch(() => api.get("/products", { branch_id: branchId }));
         const allProducts = res.data || [];
         
+        // Category ကို အဓိကထား စစ်ဆေးပြီး အထည်အမည်များကို ဖယ်ထုတ်ခြင်း
         yarnList = allProducts.filter(p => {
-            const cat = (p.category || "").toLowerCase();
+            const cat = (p.category || "").trim().toLowerCase();
             const name = (p.item_name || "").toLowerCase();
-            return cat.includes("ချည်") || cat.includes("yarn") || name.includes("ချည်");
+
+            // ပုဆိုး၊ လုံချည်၊ အင်္ကျီ ဖြစ်ပါက လုံးဝ ဖယ်ထုတ်မည်
+            if (cat.includes("ပုဆိုး") || cat.includes("လုံချည်") || cat.includes("အင်္ကျီ") || 
+                name.includes("ပုဆိုး") || name.includes("လုံချည်") || name.includes("အင်္ကျီ")) {
+                return false;
+            }
+
+            // Category က ချည်ဖြစ်ခြင်း သို့မဟုတ် ချည်အမျိုးအစား (ဥပမာ- ချည်လုံး၊ ချည်ခင်၊ ချည်ထုပ်) ဖြစ်မှသာ ပြမည်
+            return cat === "ချည်" || cat === "yarn" || cat.startsWith("ချည်");
         });
 
         updateYarnKPIs();

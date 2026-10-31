@@ -112,15 +112,14 @@ function renderTable(data) {
         return;
     }
 
-    const canDelete = typeof state.isAdmin === "function" ? state.isAdmin() : (state.user?.role === "admin" || state.user?.role === "finance");
-
     data.forEach(item => {
         const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
         const isIncome = entryType === "INCOME";
         const colorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
         const sign = isIncome ? "+" : "-";
 
-        const actionButtons = canDelete ? `
+        // Role ခွဲခြားမှုမရှိဘဲ မည်သည့် User မဆို Edit နှင့် အနီရောင် Delete Icon ကို အမြဲတမ်း အသုံးပြုနိုင်မည်
+        const actionButtons = `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-entry w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
@@ -129,7 +128,7 @@ function renderTable(data) {
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
-        ` : `<span class="text-xs text-slate-400">-</span>`;
+        `;
 
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition text-sm";

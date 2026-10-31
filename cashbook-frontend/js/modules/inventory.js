@@ -6,17 +6,11 @@ import { setKPI } from "../app.js";
 let products = [];
 
 function escapeHtml(str) {
-    return String(str !== null && str !== undefined ? str : "")
+    return String(str ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
-}
-
-// HTML Element များကို လုံခြုံစွာ Value ထည့်သွင်းရန် (Error[cite: 6] ဖြေရှင်းချက်)
-function safeSetValue(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.value = value;
 }
 
 export async function initInventory() {
@@ -25,44 +19,18 @@ export async function initInventory() {
 }
 
 function bindEvents() {
-    const addBtn = document.getElementById("btn-add-product");
-    if (addBtn) {
-        addBtn.onclick = () => openProductModal(null);
-    }
+    document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
+    document.getElementById("btn-close-product-modal")?.addEventListener("click", () => {
+        document.getElementById("product-modal")?.classList.add("hidden");
+    });
 
-    const closeBtn = document.getElementById("btn-close-product-modal");
-    if (closeBtn) {
-        closeBtn.onclick = () => {
-            const modal = document.getElementById("product-modal");
-            if (modal) modal.classList.add("hidden");
-        };
-    }
-
-    const form = document.getElementById("product-form");
-    if (form) {
-        form.onsubmit = submitProduct;
-    }
-
-    const catFilter = document.getElementById("inv-category-filter");
-    if (catFilter) {
-        catFilter.onchange = filterAndRender;
-    }
-
-    const searchInput = document.getElementById("inv-search");
-    if (searchInput) {
-        searchInput.oninput = filterAndRender;
-    }
-
-    // Export & Import CSV Buttons
-    const exportBtn = document.getElementById("btn-export-csv");
-    if (exportBtn) {
-        exportBtn.onclick = exportToCSV;
-    }
-
-    const importBtn = document.getElementById("btn-import-csv");
-    if (importBtn) {
-        importBtn.onclick = triggerImport;
-    }
+    document.getElementById("product-form")?.addEventListener("submit", submitProduct);
+    document.getElementById("inv-category-filter")?.addEventListener("change", filterAndRender);
+    document.getElementById("inv-search")?.addEventListener("input", filterAndRender);
+    
+    // CSV Export & Import Buttons
+    document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
+    document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
 }
 
 async function loadInventory() {
@@ -72,7 +40,7 @@ async function loadInventory() {
     }
 
     try {
-        const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
+        const branchId = state.currentBranch?.id || 1;
         const res = await api.get("/products", { branch_id: branchId });
         products = res.data || [];
 
@@ -98,9 +66,7 @@ function populateCategoryFilter() {
         opt.textContent = c;
         select.appendChild(opt);
     });
-    if (cats.includes(current)) {
-        select.value = current;
-    }
+    if (cats.includes(current)) select.value = current;
 }
 
 function updateInventoryKPIs() {
@@ -111,15 +77,13 @@ function updateInventoryKPIs() {
 
     setKPI(1, "အထည်အမျိုးအစားပေါင်း (SKUs)", totalTypes, "fa-tags", "blue");
     setKPI(2, "စုစုပေါင်း အထည်လက်ကျန် (Pieces)", totalPieces, "fa-shirt", "emerald");
-    setKPI(3, "လက်ကျန် အရင်းတန်ဖိုး", totalCostValue, "fa-vault", "amber");
-    setKPI(4, "လက်ကျန်နည်းနေသော အထည်", lowStockCount, "fa-triangle-exclamation", "rose");
+    setKPI(3, "လက်ကျန် အရင်းတန်ဖိုး (Stock Value)", totalCostValue, "fa-vault", "amber");
+    setKPI(4, "လက်ကျန်နည်းနေသော အထည် (Low Stock)", lowStockCount, "fa-triangle-exclamation", "rose");
 }
 
 function filterAndRender() {
-    const catEl = document.getElementById("inv-category-filter");
-    const searchEl = document.getElementById("inv-search");
-    const cat = catEl ? catEl.value : "";
-    const kw = (searchEl ? searchEl.value : "").trim().toLowerCase();
+    const cat = document.getElementById("inv-category-filter")?.value || "";
+    const kw = (document.getElementById("inv-search")?.value || "").trim().toLowerCase();
 
     const filtered = products.filter(p => {
         if (cat && p.category !== cat) return false;
@@ -190,11 +154,16 @@ function renderTable(list) {
     });
 }
 
-function openProductModal(prod) {
+// HTML Elements ကို ရှာမတွေ့ပါက Error မတက်စေရန် Helper Function
+function safeSetValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+}
+
+function openProductModal(prod = null) {
     const modal = document.getElementById("product-modal");
     const title = document.getElementById("product-modal-title");
-    const form = document.getElementById("product-form");
-    if (form) form.reset();
+    document.getElementById("product-form")?.reset();
 
     if (prod) {
         if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
@@ -209,16 +178,14 @@ function openProductModal(prod) {
         safeSetValue("prod-cost", prod.cost_price || 0);
         safeSetValue("prod-retail", prod.retail_price || 0);
         safeSetValue("prod-wholesale", prod.wholesale_price || 0);
-        safeSetValue("prod-stock", prod.current_stock !== undefined ? prod.current_stock : 0);
+        safeSetValue("prod-stock", prod.current_stock ?? 0);
     } else {
         if (title) title.textContent = "အထည်ပစ္စည်း အသစ်ထည့်သွင်းမည်";
         safeSetValue("prod-id", "");
         safeSetValue("prod-size", "Free Size");
     }
 
-    if (modal) {
-        modal.classList.remove("hidden");
-    }
+    modal?.classList.remove("hidden");
 }
 
 async function submitProduct(e) {
@@ -227,8 +194,7 @@ async function submitProduct(e) {
     if (btn) btn.disabled = true;
 
     const prodId = document.getElementById("prod-id")?.value;
-    const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
-    const stockVal = parseInt(document.getElementById("prod-stock")?.value, 10) || 0;
+    const branchId = state.currentBranch?.id || 1;
 
     const payload = {
         sku: document.getElementById("prod-sku")?.value.trim() || null,
@@ -241,10 +207,10 @@ async function submitProduct(e) {
         costPrice: parseFloat(document.getElementById("prod-cost")?.value) || 0,
         retailPrice: parseFloat(document.getElementById("prod-retail")?.value) || 0,
         wholesalePrice: parseFloat(document.getElementById("prod-wholesale")?.value) || 0,
-        initialStock: stockVal,
-        quantity: stockVal,
+        initialStock: parseInt(document.getElementById("prod-stock")?.value, 10) || 0,
+        quantity: parseInt(document.getElementById("prod-stock")?.value, 10) || 0,
         targetBranchId: branchId,
-        branchId: branchId
+        branchId
     };
 
     try {
@@ -253,8 +219,7 @@ async function submitProduct(e) {
         } else {
             await api.post("/products", payload);
         }
-        const modal = document.getElementById("product-modal");
-        if (modal) modal.classList.add("hidden");
+        document.getElementById("product-modal")?.classList.add("hidden");
         await loadInventory();
     } catch (err) {
         alert("သိမ်းဆည်း၍မရပါ: " + err.message);
@@ -326,13 +291,11 @@ async function processImport(csvText) {
     }
     
     let successCount = 0;
-    const branchId = (state.currentBranch && state.currentBranch.id) ? state.currentBranch.id : 1;
+    const branchId = state.currentBranch?.id || 1;
     
-    // ပထမလိုင်း (Header) ကိုကျော်ပြီး Data များကိုစတင်သွင်းမည်
     for (let i = 1; i < lines.length; i++) {
-        // Quote (") များကို ဖယ်ရှားပြီး column ခွဲခြင်း
         const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || lines[i].split(',');
-        if (row.length < 4) continue; // Data မပြည့်စုံသော လိုင်းများကိုကျော်မည်
+        if (row.length < 4) continue; 
         
         const payload = {
             sku: row[0] || null,

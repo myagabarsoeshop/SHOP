@@ -844,8 +844,10 @@ export default {
             }
 
             // =================================================================
-            // 10. CUSTOMERS & DEBT LIABILITIES
+            // 10. CUSTOMERS & DEBT LIABILITIES (ဖောက်သည်စာရင်း၊ အကြွေးနှင့် ကြွေးမြီမှတ်တမ်း)
             // =================================================================
+
+            // (၁) ဖောက်သည်စာရင်းများ ဆွဲယူခြင်း
             if (path === "/api/customers" && method === "GET") {
                 const { results } = await env.DB.prepare(
                     "SELECT *, current_debt AS outstanding_balance FROM customers WHERE is_active = 1 ORDER BY current_debt DESC, name ASC"
@@ -853,23 +855,52 @@ export default {
                 return jsonResponse(results || []);
             }
 
+            // (၂) ဖောက်သည်အသစ် မှတ်ပုံတင်ခြင်း (ကနဦးအကြွေးပါက Ledger ထဲသို့ပါ Auto သွင်းမည်)
             if (path === "/api/customers" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 if (!body.name) return errorResponse("ဖောက်သည်အမည် ထည့်သွင်းပေးပါ", 400);
+
+                const initialDebt = parseFloat(body.initialDebt ?? body.current_debt) || 0;
+
                 const res = await env.DB.prepare(`
                     INSERT INTO customers (name, phone, shop_name, customer_type, current_debt, address)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `).bind(
-                    String(body.name).trim(), body.phone ? String(body.phone).trim() : null,
-                    body.shopName ? String(body.shopName).trim() : null, body.customerType || "retail",
-                    parseFloat(body.initialDebt) || 0, body.address ? String(body.address).trim() : null
+                    String(body.name).trim(),
+                    body.phone ? String(body.phone).trim() : null,
+                    body.shopName ? String(body.shopName).trim() : null,
+                    body.customerType || "retail",
+                    initialDebt,
+                    body.address ? String(body.address).trim() : null
                 ).run();
-                return jsonResponse({ id: res.meta.last_row_id, message: "ဖောက်သည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
+
+                const newCustId = res.meta.last_row_id;
+
+                // ကနဦးအကြွေး ရှိပါက Customer Ledger တွင် Opening Debt အဖြစ် မှတ်တမ်းတင်ခြင်း
+                if (initialDebt > 0) {
+                    await env.DB.prepare(`
+                        INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
+                        VALUES (?, 1, 'DEBIT', ?, ?, 'အကြွေး', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', 1)
+                    `).bind(newCustId, initialDebt, initialDebt).run();
+                }
+
+                return jsonResponse({ id: newCustId, message: "ဖောက်သည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
             }
 
+            // (၃) အကြွေးပြန်ဆပ်ငွေ လက်ခံခြင်း (Cashbook သို့ ဝင်ငွေအဖြစ် Auto စာရင်းသွင်းမည်)
             if (path === "/api/customers/repay" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const { customerId, branchId = 1, amount, paymentMethod = "cash", note = "", createdBy = 1 } = body;
+                const {
+                    customerId,
+                    branchId = 1,
+                    amount,
+                    paymentMethod = "cash",
+                    bankAccountName = null,
+                    note = "",
+                    entryDate,
+                    createdBy = 1
+                } = body;
+
                 const repayAmt = parseFloat(amount) || 0;
                 if (!customerId || repayAmt <= 0) return errorResponse("ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
 
@@ -877,21 +908,66 @@ export default {
                 if (!cust) return errorResponse("ဖောက်သည် ရှာမတွေ့ပါ", 404);
 
                 const newDebt = Math.max(0, Number(cust.current_debt || 0) - repayAmt);
-                const today = getMyanmarTodayDate();
+                const today = entryDate || getMyanmarTodayDate();
 
                 await env.DB.batch([
+                    // ၁။ Customer Ledger တွင် အကြွေးဆပ်ငွေ (CREDIT) အဖြစ် မှတ်တမ်းတင်ခြင်း
                     env.DB.prepare(`
                         INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
                         VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?)
-                    `).bind(Number(customerId), Number(branchId), repayAmt, newDebt, paymentMethod, note || "အကြွေးဆပ်", Number(createdBy)),
+                    `).bind(
+                        Number(customerId),
+                        Number(branchId),
+                        repayAmt,
+                        newDebt,
+                        String(paymentMethod).toLowerCase(),
+                        note || `အကြွေးဆပ် (${paymentMethod === 'bank' ? (bankAccountName || 'Bank') : 'ငွေသား'})`,
+                        Number(createdBy)
+                    ),
+
+                    // ၂။ Customers စာရင်းရှိ လက်ကျန်အကြွေး Update ပြုလုပ်ခြင်း
                     env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId)),
+
+                    // ၃။ Cashbook တွင် Category 2 (အကြွေးရငွေ) ဖြင့် ဝင်ငွေအဖြစ် Auto စာရင်းသွင်းခြင်း
                     env.DB.prepare(`
-                        INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, description, entry_date, created_by)
-                        VALUES (?, 2, 'INCOME', ?, ?, ?, ?, ?)
-                    `).bind(Number(branchId), paymentMethod, repayAmt, `${cust.name} အကြွေးဆပ် (${note || paymentMethod})`, today, Number(createdBy))
+                        INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                        VALUES (?, 2, 'INCOME', ?, ?, ?, ?, ?, ?)
+                    `).bind(
+                        Number(branchId),
+                        String(paymentMethod).toLowerCase(),
+                        bankAccountName || null,
+                        repayAmt,
+                        `${cust.name} အကြွေးဆပ် (${note || (paymentMethod === 'bank' ? bankAccountName : 'ငွေသား')})`,
+                        today,
+                        Number(createdBy)
+                    )
                 ]);
 
                 return jsonResponse({ message: "အကြွေးဆပ်ငွေ လက်ခံပြီးပါပြီ", newDebt });
+            }
+
+            // (၄) ဖောက်သည်တစ်ဦးချင်းစီ၏ အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်းဇယား (Customer Ledger Statement)
+            if (path.startsWith("/api/customers/") && path.endsWith("/ledger") && method === "GET") {
+                const parts = path.split("/");
+                const customerId = Number(parts[3]); // /api/customers/:id/ledger
+
+                if (!customerId) return errorResponse("Customer ID မမှန်ကန်ပါ", 400);
+
+                const sql = `
+                    SELECT 
+                        cl.id, cl.customer_id, cl.branch_id, cl.sale_id,
+                        cl.type, cl.amount, cl.balance_after, cl.payment_method,
+                        cl.reference_note, cl.created_at,
+                        s.invoice_no,
+                        COALESCE(u.full_name, 'Admin') AS created_by_name
+                    FROM customer_ledger cl
+                    LEFT JOIN sales s ON cl.sale_id = s.id
+                    LEFT JOIN users u ON cl.created_by = u.id
+                    WHERE cl.customer_id = ?
+                    ORDER BY cl.id DESC LIMIT 300
+                `;
+                const { results } = await env.DB.prepare(sql).bind(customerId).all();
+                return jsonResponse(results || []);
             }
 
             // =================================================================

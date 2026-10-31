@@ -2,12 +2,29 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { refreshGlobalKPIs, setKPI } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let allProducts = [];
 let cart = [];
 let currentSaleType = "retail";
 let selectedPaymentMethod = "cash";
 let allCustomers = [];
+
+// ယနေ့အရောင်းစာရင်းအတွက် စာရင်း (၁၅) ကြောင်းစီ ပြသမည့် Pagination Controller
+let todaySalesList = [];
+let currentFilteredTodaySales = [];
+const todaySalesPagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTodaySalesTable()
+});
+
+function escapeHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
 
 export async function initPOS() {
     bindEvents();
@@ -44,7 +61,6 @@ async function loadCustomers() {
         const res = await api.get("/customers");
         allCustomers = res.data || [];
         
-        // POS ရှိ Customer Dropdown (Sidebar ရှိ select ရော Modal ထဲရှိ select ပါ) ဖြည့်သွင်းခြင်း
         const customerSelects = [
             document.getElementById("pos-customer-select"),
             document.getElementById("modal-customer-select")
@@ -59,7 +75,7 @@ async function loadCustomers() {
             allCustomers.forEach(c => {
                 const debt = Number(c.current_debt || 0);
                 const debtStr = debt > 0 ? ` [အကြွေးကျန်: ${debt.toLocaleString()} Ks]` : '';
-                select.innerHTML += `<option value="${c.id}">${c.name} ${c.phone ? `(${c.phone})` : ''}${debtStr}</option>`;
+                select.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)} ${c.phone ? `(${escapeHtml(c.phone)})` : ''}${debtStr}</option>`;
             });
             if (currentVal) select.value = currentVal;
         });
@@ -75,7 +91,7 @@ function populateCategoryDropdown(products) {
     const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
     select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${products.length})</option>`;
     categories.forEach(cat => {
-        select.innerHTML += `<option value="${cat}">${cat}</option>`;
+        select.innerHTML += `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`;
     });
     select.value = currentVal;
 }
@@ -114,22 +130,22 @@ function renderProductsGrid(products) {
         const itemCode = p.sku || p.barcode || 'N/A';
 
         const card = document.createElement("div");
-        card.className = `bg-slate-50 dark:bg-slate-900/90 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 hover:border-emerald-500 active:scale-95 transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-45 pointer-events-none' : ''}`;
+        card.className = `bg-slate-50 dark:bg-slate-900/90 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 active:scale-95 transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-45 pointer-events-none' : ''}`;
         
         card.innerHTML = `
             <div>
                 <div class="flex items-center justify-between gap-2 mb-2">
                     <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        ${p.category} <strong class="${stock < 5 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">(${stock})</strong>
+                        ${escapeHtml(p.category)} <strong class="${stock < 5 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">(${stock})</strong>
                     </span>
-                    <span class="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">Code: ${itemCode}</span>
+                    <span class="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">Code: ${escapeHtml(itemCode)}</span>
                 </div>
-                <div class="text-base font-extrabold text-slate-900 dark:text-white leading-snug">${p.item_name}</div>
-                <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">${p.pattern || ''} • ${p.color || ''}</div>
-                <div class="text-xs text-slate-400 mt-0.5">ဆိုက်: ${p.size || 'Free'}</div>
+                <div class="text-base font-extrabold text-slate-900 dark:text-white leading-snug">${escapeHtml(p.item_name)}</div>
+                <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">${escapeHtml(p.pattern || '')} • ${escapeHtml(p.color || '')}</div>
+                <div class="text-xs text-slate-400 mt-0.5">ဆိုက်: ${escapeHtml(p.size || 'Free')}</div>
             </div>
             <div class="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
-                <span class="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">${Number(price).toLocaleString()}</span>
+                <span class="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">${Number(price || 0).toLocaleString()}</span>
                 <div class="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
                     <i class="fa-solid fa-plus text-xs"></i>
                 </div>
@@ -195,7 +211,7 @@ function renderCart() {
         row.className = "py-3.5 flex items-center justify-between gap-3";
         row.innerHTML = `
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-bold text-slate-900 dark:text-white truncate">${item.product.item_name}</div>
+                <div class="text-sm font-bold text-slate-900 dark:text-white truncate">${escapeHtml(item.product.item_name)}</div>
                 <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${Number(item.unitPrice).toLocaleString()}</div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -284,9 +300,9 @@ function bindEvents() {
     document.querySelectorAll(".method-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".method-btn").forEach(b => {
-                b.className = "method-btn p-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
+                b.className = "method-btn p-3 rounded-xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
             });
-            btn.className = "method-btn active p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
+            btn.className = "method-btn active p-3 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
             selectedPaymentMethod = btn.dataset.method;
             
             const bankGroup = document.getElementById("bank-input-group");
@@ -296,11 +312,10 @@ function bindEvents() {
             const paidInput = document.getElementById("modal-paid-amount");
             const dueAmount = getFinalTotal();
 
-            // အကြွေး (Credit) ရွေးထားသော်လည်း Paid Amount ကို စရန်ငွေ/တစ်စိတ်တစ်ပိုင်း လက်ခံနိုင်ရန် အမြဲ ပွင့်ထားမည်
             if (paidInput) {
                 paidInput.disabled = false;
                 if (selectedPaymentMethod === "credit") {
-                    paidInput.value = 0; // အကြွေးဆိုပါက မူလ default ကို 0 ထားပြီး လွတ်လပ်စွာ ရိုက်ထည့်နိုင်မည်
+                    paidInput.value = 0;
                     paidInput.placeholder = "လက်ခံရရှိငွေ (ဥပမာ- စရန်ငွေ သို့မဟုတ် 0)";
                 } else {
                     paidInput.value = dueAmount;
@@ -312,7 +327,7 @@ function bindEvents() {
         });
     });
 
-    // Customer Selection Change (Modal & Sidebar)
+    // Customer Selection Change (Modal & Sidebar Sync)
     const handleCustomerChange = (e) => {
         const val = e.target.value;
         const newBox = document.getElementById("modal-new-customer-box");
@@ -323,7 +338,6 @@ function bindEvents() {
             newBox?.classList.add("hidden");
         }
 
-        // Sync Selects
         const sideSelect = document.getElementById("pos-customer-select");
         const modalSelect = document.getElementById("modal-customer-select");
         if (sideSelect && sideSelect !== e.target) sideSelect.value = val;
@@ -340,6 +354,14 @@ function bindEvents() {
     document.getElementById("btn-close-receipt")?.addEventListener("click", () => {
         document.getElementById("receipt-modal")?.classList.add("hidden");
     });
+
+    // --- Today Sales Modal Events ---
+    document.getElementById("btn-open-today-sales")?.addEventListener("click", openTodaySalesModal);
+    document.getElementById("btn-close-today-sales-modal")?.addEventListener("click", () => {
+        document.getElementById("today-sales-modal")?.classList.add("hidden");
+    });
+    document.getElementById("today-sales-search")?.addEventListener("input", filterAndRenderTodaySales);
+    document.getElementById("btn-export-today-sales-csv")?.addEventListener("click", exportTodaySalesToCSV);
 }
 
 function updatePricesForSaleType() {
@@ -362,7 +384,6 @@ function openCheckoutModal() {
     const paidInput = document.getElementById("modal-paid-amount");
     const finalTotal = getFinalTotal();
     
-    // Default to Cash payment when opening modal
     document.querySelector('.method-btn[data-method="cash"]')?.click();
     
     if (dueEl) dueEl.textContent = finalTotal.toLocaleString();
@@ -371,7 +392,6 @@ function openCheckoutModal() {
         paidInput.value = finalTotal;
     }
     
-    // Sync customer selection from sidebar to modal
     const sideCust = document.getElementById("pos-customer-select")?.value || "";
     const modalCust = document.getElementById("modal-customer-select");
     if (modalCust) {
@@ -436,7 +456,6 @@ async function submitSale() {
                             document.getElementById("pos-customer-select")?.value || "";
     let customerId = null;
 
-    // ၁။ ဖောက်သည်အသစ် ဖြစ်ပါက ချက်ချင်း မှတ်ပုံတင်ခြင်း (Quick Customer Create)
     if (customerSelectVal === "NEW") {
         const newName = document.getElementById("modal-new-cust-name")?.value.trim();
         const newPhone = document.getElementById("modal-new-cust-phone")?.value.trim() || null;
@@ -457,7 +476,7 @@ async function submitSale() {
                 initialDebt: 0
             });
             customerId = custRes.data?.id;
-            await loadCustomers(); // စာရင်းပြန်ဆွဲတင်မည်
+            await loadCustomers();
         } catch (e) {
             alert("ဖောက်သည်အသစ် သိမ်းဆည်း၍မရပါ: " + e.message);
             return;
@@ -466,7 +485,6 @@ async function submitSale() {
         customerId = parseInt(customerSelectVal, 10);
     }
 
-    // ၂။ အကြွေးကျန်ရှိပါက ဖောက်သည် မဖြစ်မနေ ရွေးချယ်ခိုင်းခြင်း
     if (remainingDebt > 0 && !customerId) {
         alert("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ကျေးဇူးပြု၍ ဖောက်သည် (Customer) ရွေးချယ်ပေးပါ (သို့မဟုတ် အသစ်ထည့်ပါ)။");
         document.getElementById("modal-customer-select")?.focus();
@@ -487,7 +505,6 @@ async function submitSale() {
         const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
         const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
 
-        // အမှန်တကယ် လက်ခံရရှိငွေကို ခွဲခြမ်းသတ်မှတ်ခြင်း
         const actualPaid = Math.min(paidAmount, finalTotal);
         const pCash = selectedPaymentMethod === "cash" ? actualPaid : 0;
         const pBank = selectedPaymentMethod === "bank" ? actualPaid : 0;
@@ -515,10 +532,8 @@ async function submitSale() {
         if (res.success) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
             
-            // ဘောင်ချာပြသမည်
             showReceiptModal(res.data.invoiceNo, cart, subtotal, discountAmount, finalTotal, actualPaid);
 
-            // ခြင်းတောင်းနှင့် Form များ ရှင်းလင်းမည်
             cart = [];
             document.getElementById("pos-discount").value = 0;
             if (document.getElementById("pos-customer-select")) document.getElementById("pos-customer-select").value = "";
@@ -555,9 +570,10 @@ function showReceiptModal(invoiceNo, items, subtotal, discount, finalTotal, paid
     if (tbody) {
         tbody.innerHTML = "";
         items.forEach(item => {
+            const name = item.product?.item_name || item.item_name || "Item";
             tbody.innerHTML += `
                 <tr class="border-b border-dashed border-gray-300">
-                    <td class="py-2 text-[13px] font-semibold">${item.product.item_name}</td>
+                    <td class="py-2 text-[13px] font-semibold">${escapeHtml(name)}</td>
                     <td class="py-2 text-[13px] text-center font-mono">${item.quantity}</td>
                     <td class="py-2 text-[13px] text-right font-mono">${(item.quantity * item.unitPrice).toLocaleString()}</td>
                 </tr>
@@ -577,4 +593,190 @@ function showReceiptModal(invoiceNo, items, subtotal, discount, finalTotal, paid
     }
 
     document.getElementById("receipt-modal")?.classList.remove("hidden");
+}
+
+// ==========================================
+// --- Today Sales Detailed Modal Logic ---
+// ==========================================
+
+async function openTodaySalesModal() {
+    const modal = document.getElementById("today-sales-modal");
+    const tbody = document.getElementById("today-sales-table-body");
+    modal?.classList.remove("hidden");
+
+    if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-slate-400 font-bold"><i class="fa-solid fa-spinner fa-spin text-blue-500 text-2xl mb-2"></i><div>ယနေ့အရောင်းစာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
+    }
+
+    try {
+        const branchId = state.currentBranch?.id || 1;
+        const today = new Date().toISOString().split("T")[0];
+        
+        // POS အရောင်းစာရင်းနှင့် သက်ဆိုင်ရာ Invoices ဆွဲယူခြင်း
+        const res = await api.get("/pos/sales", { branch_id: branchId, date: today }).catch(() => api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today }));
+        
+        todaySalesList = res.data?.items || res.data || [];
+        currentFilteredTodaySales = [...todaySalesList];
+
+        todaySalesPagination.reset();
+        renderTodaySalesTable();
+    } catch (err) {
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-rose-500 font-bold">အရောင်းစာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+        }
+    }
+}
+
+function filterAndRenderTodaySales() {
+    const kw = (document.getElementById("today-sales-search")?.value || "").trim().toLowerCase();
+
+    currentFilteredTodaySales = todaySalesList.filter(s => {
+        if (!kw) return true;
+        const hay = `${s.invoice_no || ""} ${s.customer_name || ""} ${s.item_name || ""} ${s.category || ""} ${s.payment_method || ""} ${s.notes || ""}`.toLowerCase();
+        return hay.includes(kw);
+    });
+
+    todaySalesPagination.reset();
+    renderTodaySalesTable();
+}
+
+function renderTodaySalesTable() {
+    const tbody = document.getElementById("today-sales-table-body");
+    const countEl = document.getElementById("today-sales-invoice-count");
+    const totalQtyEl = document.getElementById("today-sales-total-qty");
+    const totalAmountEl = document.getElementById("today-sales-total-amount");
+
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const uniqueInvoices = new Set(currentFilteredTodaySales.map(s => s.invoice_no || s.id)).size;
+    const totalQty = currentFilteredTodaySales.reduce((acc, s) => acc + Number(s.quantity || 1), 0);
+    const totalAmt = currentFilteredTodaySales.reduce((acc, s) => acc + Number(s.subtotal || s.total_amount || 0), 0);
+
+    if (countEl) countEl.textContent = uniqueInvoices.toLocaleString();
+    if (totalQtyEl) totalQtyEl.textContent = totalQty.toLocaleString();
+    if (totalAmountEl) totalAmountEl.textContent = `${totalAmt.toLocaleString()} Ks`;
+
+    if (currentFilteredTodaySales.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-slate-400 font-bold text-sm">ယနေ့ အရောင်းစာရင်း မရှိသေးပါ</td></tr>`;
+        todaySalesPagination.renderControls("today-sales-pagination");
+        return;
+    }
+
+    const pageItems = todaySalesPagination.getPageItems(currentFilteredTodaySales);
+    const startIdx = (todaySalesPagination.currentPage - 1) * todaySalesPagination.pageSize;
+
+    pageItems.forEach((s, idx) => {
+        const timeStr = s.created_at ? new Date(s.created_at).toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit', hour12: true }) : "-";
+        const qty = Number(s.quantity || 1);
+        const price = Number(s.unit_price || s.price || 0);
+        const amount = Number(s.subtotal || s.total_amount || (qty * price));
+        const method = String(s.payment_method || "cash").toLowerCase();
+        const unit = s.size || "ထည်";
+
+        let methodBadge = "";
+        if (method === "bank") {
+            methodBadge = `<span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[11px] font-bold border border-blue-500/20">ဘဏ် (${escapeHtml(s.bank_account_name || "KPay")})</span>`;
+        } else if (method === "credit") {
+            methodBadge = `<span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[11px] font-bold border border-rose-500/20">အကြွေး</span>`;
+        } else {
+            methodBadge = `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/20">ငွေသား</span>`;
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        tr.innerHTML = `
+            <td class="p-3.5 text-center text-slate-400 font-mono">${startIdx + idx + 1}</td>
+            <td class="p-3.5 font-mono text-slate-600 dark:text-slate-300">
+                <div class="font-bold text-blue-600 dark:text-blue-400">${escapeHtml(s.invoice_no || `INV-${s.id}`)}</div>
+                <div class="text-[11px] text-slate-400">${timeStr}</div>
+            </td>
+            <td class="p-3.5">
+                <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(s.customer_name || "Walk-in")}</div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold uppercase">${escapeHtml(s.sale_type || "Retail")}</span>
+            </td>
+            <td class="p-3.5">
+                <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    ${escapeHtml(s.category || "-")}
+                </span>
+            </td>
+            <td class="p-3.5">
+                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(s.item_name || "-")}</div>
+                <div class="text-[11px] text-slate-400">${escapeHtml(s.color || "")} ${s.pattern ? `• ${escapeHtml(s.pattern)}` : ''}</div>
+            </td>
+            <td class="p-3.5 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
+                ${qty.toLocaleString()} <span class="text-[11px] font-sans font-normal text-slate-400">${escapeHtml(unit)}</span>
+            </td>
+            <td class="p-3.5 text-right font-mono font-bold text-slate-700 dark:text-slate-300">${price.toLocaleString()}</td>
+            <td class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">${amount.toLocaleString()}</td>
+            <td class="p-3.5 text-center">${methodBadge}</td>
+            <td class="p-3.5 text-xs text-slate-500 dark:text-slate-400 max-w-[150px] truncate" title="${escapeHtml(s.notes || s.remark || '')}">
+                ${escapeHtml(s.notes || s.remark || "-")}
+            </td>
+            <td class="p-3.5 text-center">
+                <button type="button" data-inv="${escapeHtml(s.invoice_no || `INV-${s.id}`)}" class="btn-reprint-sale px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-700 transition cursor-pointer flex items-center gap-1 mx-auto shadow-sm" title="ဘောင်ချာ ပြန်ထုတ်မည်">
+                    <i class="fa-solid fa-print text-blue-500"></i>
+                    <span>Print</span>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll(".btn-reprint-sale").forEach(btn => {
+        btn.onclick = () => {
+            const invNo = btn.dataset.inv;
+            const items = todaySalesList.filter(s => (s.invoice_no || `INV-${s.id}`) === invNo);
+            if (items.length > 0) {
+                const sub = items.reduce((acc, it) => acc + Number(it.subtotal || (it.quantity * it.unit_price) || 0), 0);
+                const disc = Number(items[0].discount_amount || 0);
+                const fin = Math.max(0, sub - disc);
+                const paid = Number(items[0].paid_amount || fin);
+                showReceiptModal(invNo, items, sub, disc, fin, paid);
+            }
+        };
+    });
+
+    todaySalesPagination.renderControls("today-sales-pagination");
+}
+
+function exportTodaySalesToCSV() {
+    const dataToExport = currentFilteredTodaySales.length > 0 ? currentFilteredTodaySales : todaySalesList;
+    if (dataToExport.length === 0) {
+        return alert("ထုတ်ယူရန် အရောင်းစာရင်း မရှိသေးပါ။");
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    let csv = "Invoice No,Time,Customer Name,Sale Type,Category,Item Name,Quantity,Unit Price,Amount,Payment Method,Remark\n";
+
+    dataToExport.forEach(s => {
+        const timeStr = s.created_at ? new Date(s.created_at).toLocaleTimeString("en-GB") : "-";
+        const qty = Number(s.quantity || 1);
+        const price = Number(s.unit_price || s.price || 0);
+        const amount = Number(s.subtotal || s.total_amount || (qty * price));
+
+        const row = [
+            `"${escapeHtml(s.invoice_no || `INV-${s.id}`)}"`,
+            `"${timeStr}"`,
+            `"${escapeHtml(s.customer_name || 'Walk-in')}"`,
+            `"${escapeHtml(s.sale_type || 'Retail')}"`,
+            `"${escapeHtml(s.category || '-')}"`,
+            `"${escapeHtml(s.item_name || '-')}"`,
+            qty,
+            price,
+            amount,
+            `"${escapeHtml(s.payment_method || 'Cash')}"`,
+            `"${escapeHtml(s.notes || s.remark || '-')}"`
+        ];
+        csv += row.join(",") + "\n";
+    });
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Today_Sales_${todayStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }

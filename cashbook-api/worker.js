@@ -243,19 +243,49 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN (အဝယ်နှင့် စတော့အဝင်)
+            // 5. PURCHASES & STOCK IN (အဝယ်၊ စတော့အဝင် နှင့် ပြင်ဆင်/ဖျက်ပစ်ခြင်း)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || 1;
-                const { results } = await env.DB.prepare(`
-                    SELECT * FROM purchases WHERE branch_id = ? ORDER BY id DESC LIMIT 200
-                `).bind(branchId).all();
+                
+                // Item-level အချက်အလက်များအားလုံးပါဝင်သော JOIN Query
+                const sql = `
+                    SELECT 
+                        pi.id AS item_row_id,
+                        p.id AS purchase_id,
+                        p.purchase_no,
+                        p.supplier_name,
+                        p.payment_method,
+                        p.bank_account_name,
+                        p.total_amount,
+                        p.status,
+                        p.created_at,
+                        pi.product_id,
+                        pi.quantity,
+                        pi.unit_cost,
+                        pi.subtotal,
+                        pr.sku,
+                        pr.barcode,
+                        pr.category,
+                        pr.item_name,
+                        pr.pattern,
+                        pr.size,
+                        pr.color,
+                        pr.retail_price,
+                        pr.wholesale_price
+                    FROM purchases p
+                    INNER JOIN purchase_items pi ON p.id = pi.purchase_id
+                    INNER JOIN products pr ON pi.product_id = pr.id
+                    WHERE p.branch_id = ?
+                    ORDER BY p.id DESC, pi.id DESC LIMIT 300
+                `;
+                const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all();
                 return jsonResponse(results || []);
             }
 
             if (path === "/api/purchases" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const userId = 1; // ယာယီ (Auth Session မှ ယူရန်)
+                const userId = 1;
                 
                 const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
                 const purchaseNo = `PO-${body.branch_id}-${dateStr}`;
@@ -275,19 +305,26 @@ export default {
                 for (const item of body.items) {
                     let targetProductId = item.product_id;
 
-                    // အကယ်၍ ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲသို့ ဦးစွာ ထည့်သွင်းမည်
+                    // ပစ္စည်းအသစ်ဖြစ်ပါက products ဇယားထဲ ဦးစွာထည့်သွင်းမည် (Auto SKU ပါဝင်သည်)
                     if (item.is_new && item.new_product) {
                         const np = item.new_product;
                         const prodRes = await env.DB.prepare(`
                             INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `).bind(
-                            np.sku || null, null, np.category, np.item_name,
+                            np.sku || null, null, String(np.category), String(np.item_name),
                             null, np.size || "Free Size", np.color || null,
                             parseFloat(item.unit_cost), parseFloat(item.retail_price), parseFloat(item.wholesale_price)
                         ).run();
 
                         targetProductId = prodRes.meta.last_row_id;
+                    } else {
+                        // ရှိပြီးသား ပစ္စည်းဖြစ်ပါကလည်း နောက်ဆုံး ဝယ်ဈေးနှင့် ရောင်းဈေးများကို Update လုပ်ပေးမည်
+                        batchStatements.push(
+                            env.DB.prepare(`
+                                UPDATE products SET cost_price = ?, retail_price = ?, wholesale_price = ? WHERE id = ?
+                            `).bind(parseFloat(item.unit_cost), parseFloat(item.retail_price), parseFloat(item.wholesale_price), Number(targetProductId))
+                        );
                     }
 
                     // Purchase Items ထည့်ခြင်း
@@ -296,7 +333,7 @@ export default {
                         .bind(newPurId, Number(targetProductId), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
                     );
                     
-                    // Branch Inventory (စတော့) တိုးမြှင့်ခြင်း
+                    // Stock Balances (branch_inventory) တိုးမြှင့်ခြင်း
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) 
@@ -307,7 +344,7 @@ export default {
                     );
                 }
 
-                // ငွေပေးချေမှုမှာ credit (အကြွေး) မဟုတ်ပါက Cashbook သို့ အလိုအလျောက် စရိတ်ထွက်ငွေသွင်းမည်
+                // Cashbook Expense သို့ ထည့်သွင်းခြင်း
                 if (body.payment_method !== "credit") {
                     const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
                     batchStatements.push(
@@ -324,6 +361,34 @@ export default {
 
                 await env.DB.batch(batchStatements);
                 return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
+            }
+
+            // အဝယ်ဘောင်ချာ ဖျက်သိမ်းခြင်း (စတော့နှင့် Cashbook ပါ ပြန်လည် နုတ်ယူရှင်းလင်းမည်)
+            if (path.startsWith("/api/purchases/") && method === "DELETE") {
+                const purId = Number(path.split("/").pop());
+                
+                // ၁။ ဝယ်ယူခဲ့သော ပစ္စည်းစာရင်းများကို ရှာဖွေခြင်း
+                const { results: items } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
+                const pur = await env.DB.prepare("SELECT branch_id FROM purchases WHERE id = ?").bind(purId).first();
+                const branchId = pur?.branch_id || 1;
+
+                const batchRollback = [];
+
+                // ၂။ စတော့ထဲမှ အရေအတွက် ပြန်လည် နုတ်ယူခြင်း
+                (items || []).forEach(it => {
+                    batchRollback.push(
+                        env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
+                            .bind(Number(it.quantity), Number(branchId), Number(it.product_id))
+                    );
+                });
+
+                // ၃။ Cashbook စာရင်းနှင့် Purchases အချက်အလက်များ ဖျက်ပစ်ခြင်း
+                batchRollback.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
+                batchRollback.push(env.DB.prepare("DELETE FROM purchase_items WHERE purchase_id = ?").bind(purId));
+                batchRollback.push(env.DB.prepare("DELETE FROM purchases WHERE id = ?").bind(purId));
+
+                await env.DB.batch(batchRollback);
+                return jsonResponse({ message: "အဝယ်စာရင်း ဖျက်သိမ်းပြီး စတော့နှင့် ငွေစာရင်း ပြန်ညှိပြီးပါပြီ။" });
             }
 
             // =================================================================

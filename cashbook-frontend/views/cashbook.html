@@ -69,22 +69,28 @@
             <input type="hidden" id="entry-type" value="EXPENSE">
             
             <div>
-                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေစာရင်း ခေါင်းစဉ် (Category)</label>
-                <select id="entry-category" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ ▼</option>
-                </select>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေစာရင်း ခေါင်းစဉ်</label>
+                <div class="relative">
+                    <select id="entry-category" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                        <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-4 top-4 pointer-events-none"></i>
+                </div>
             </div>
 
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပေးချေမှု လိုင်း</label>
-                <select id="entry-payment-method" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="cash">💵 ငွေသား (Cash)</option>
-                    <option value="bank">🏦 KPay / ဘဏ် (Bank)</option>
-                </select>
+                <div class="relative">
+                    <select id="entry-payment-method" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                        <option value="cash">ငွေသား (Cash)</option>
+                        <option value="bank">KPay / ဘဏ် (Bank)</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-4 top-4 pointer-events-none"></i>
+                </div>
             </div>
 
             <div>
-                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပမာဏ (Amount)</label>
+                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပမာဏ</label>
                 <input type="number" id="entry-amount" required min="1" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 

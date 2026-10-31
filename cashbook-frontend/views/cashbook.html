@@ -1,21 +1,21 @@
 <!-- cashbook-frontend/views/cashbook.html -->
-<div class="h-full w-full flex flex-col bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm overflow-hidden">
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar (Matches POS Toolbar Height) -->
-    <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <!-- Top Filter & Action Toolbar -->
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div class="flex items-center gap-3 flex-1 min-w-[280px]">
             <div class="relative flex-1 max-w-md">
                 <i class="fa-solid fa-search absolute left-3.5 top-3.5 text-slate-400 text-sm pointer-events-none"></i>
                 <input type="text" id="cb-search" placeholder="ခေါင်းစဉ် သို့မဟုတ် အသေးစိတ် ရှာဖွေရန်..."
-                    class="w-full pl-10 pr-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
+                    class="w-full pl-10 pr-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
             </div>
 
             <input type="date" id="cb-date-filter"
-                class="px-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white cursor-pointer">
+                class="px-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white cursor-pointer">
         </div>
 
         <div class="flex items-center gap-2.5">
-            <button type="button" id="btn-export-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-700 transition flex items-center gap-2 cursor-pointer">
+            <button type="button" id="btn-export-csv" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-800 transition flex items-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-file-export text-emerald-500"></i>
                 <span>Export CSV</span>
             </button>
@@ -30,10 +30,10 @@
         </div>
     </div>
 
-    <!-- Entries Table -->
+    <!-- Entries Table Container -->
     <div class="flex-1 overflow-y-auto">
         <table class="w-full text-left text-sm whitespace-nowrap">
-            <thead class="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                     <th class="p-4">ရက်စွဲ</th>
                     <th class="p-4">အမျိုးအစား / ခေါင်းစဉ်</th>
@@ -43,18 +43,21 @@
                     <th class="p-4 text-center">လုပ်ဆောင်ချက်</th>
                 </tr>
             </thead>
-            <tbody id="cashbook-table-body" class="divide-y divide-slate-200/60 dark:divide-slate-700/60 font-semibold text-slate-800 dark:text-slate-200">
+            <tbody id="cashbook-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200">
                 <tr>
                     <td colspan="6" class="p-12 text-center text-slate-400 text-base">ယနေ့အတွက် မှတ်တမ်း မရှိသေးပါ</td>
                 </tr>
             </tbody>
         </table>
     </div>
+
+    <!-- 15-Rows Pagination Footer Container -->
+    <div id="cashbook-pagination" class="shrink-0"></div>
 </div>
 
 <!-- Cashbook Entry Modal -->
 <div id="entry-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
         <div id="entry-modal-header" class="p-5 bg-rose-600 text-white flex items-center justify-between">
             <div class="text-base font-bold flex items-center gap-2">
                 <i class="fa-solid fa-pen-to-square"></i>
@@ -71,7 +74,7 @@
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေစာရင်း ခေါင်းစဉ်</label>
                 <div class="relative">
-                    <select id="entry-category" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                    <select id="entry-category" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
                         <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-4 top-4 pointer-events-none"></i>
@@ -81,7 +84,7 @@
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပေးချေမှု လိုင်း</label>
                 <div class="relative">
-                    <select id="entry-payment-method" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                    <select id="entry-payment-method" required class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
                         <option value="cash">ငွေသား (Cash)</option>
                         <option value="bank">KPay / ဘဏ် (Bank)</option>
                     </select>
@@ -91,12 +94,12 @@
 
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ငွေပမာဏ</label>
-                <input type="number" id="entry-amount" required min="1" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <input type="number" id="entry-amount" required min="1" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
             <div>
                 <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">အသေးစိတ် ဖော်ပြချက်</label>
-                <textarea id="entry-desc" rows="2" placeholder="မှတ်ချက် ရေးရန်..." class="w-full text-sm font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                <textarea id="entry-desc" rows="2" placeholder="မှတ်ချက် ရေးရန်..." class="w-full text-sm font-semibold bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
             </div>
 
             <button type="submit" id="btn-submit-entry" class="w-full py-3.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-base rounded-xl shadow-lg transition cursor-pointer">

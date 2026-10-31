@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Zero TypeScript Warnings Version)
+// File: cashbook-api/worker.js (Updated with Purchases & Waste APIs)
 // =============================================================================
 
 const corsHeaders = {
@@ -57,7 +57,7 @@ export default {
             }
             return jsonResponse({
                 status: "online",
-                version: "2.4.0",
+                version: "2.5.0",
                 note: "Frontend assets not bound. Please deploy via 'npx wrangler deploy' or GitHub push."
             });
         }
@@ -67,7 +67,7 @@ export default {
             // 1. HEALTH CHECK
             // =================================================================
             if (path === "/api/health") {
-                return jsonResponse({ status: "online", version: "2.4.0" });
+                return jsonResponse({ status: "online", version: "2.5.0" });
             }
 
             // =================================================================
@@ -127,7 +127,7 @@ export default {
                 let sql = `
                     SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
                            p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
-                           COALESCE(${branchId ? "bi.quantity" : "(SELECT SUM(quantity) FROM branch_inventory WHERE product_id = p.id)"}, 0) AS current_stock
+                           COALESCE(${branchId ? "bi.quantity" : "0"}, 0) AS current_stock
                     FROM products p
                 `;
                 /** @type {any[]} */
@@ -186,16 +186,11 @@ export default {
                     INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    sku,
-                    barcode,
-                    String(body.category).trim(),
-                    String(itemName).trim(),
+                    sku, barcode, String(body.category).trim(), String(itemName).trim(),
                     body.pattern ? String(body.pattern).trim() : null,
                     body.size ? String(body.size).trim() : "Free Size",
                     body.color ? String(body.color).trim() : null,
-                    costPrice,
-                    retailPrice,
-                    wholesalePrice
+                    costPrice, retailPrice, wholesalePrice
                 ).run();
 
                 const newProductId = res.meta.last_row_id;
@@ -227,19 +222,16 @@ export default {
                         wholesale_price = COALESCE(?, wholesale_price)
                     WHERE id = ?
                 `).bind(
-                    body.sku ?? null,
-                    body.barcode ?? null,
-                    body.category ?? null,
-                    body.itemName ?? body.item_name ?? null,
-                    body.pattern ?? null,
-                    body.size ?? null,
-                    body.color ?? null,
+                    body.sku ?? null, body.barcode ?? null, body.category ?? null,
+                    body.itemName ?? body.item_name ?? null, body.pattern ?? null,
+                    body.size ?? null, body.color ?? null,
                     body.costPrice !== undefined ? parseFloat(body.costPrice) : null,
                     body.retailPrice !== undefined ? parseFloat(body.retailPrice) : null,
                     body.wholesalePrice !== undefined ? parseFloat(body.wholesalePrice) : null,
                     productId
                 ).run();
 
+                // Admin ဝင်ပြင်ချိန်တွင် quantity ဖြုတ်ထားသဖြင့် ဤအဆင့်ကို ကျော်သွားမည်
                 if (body.quantity !== undefined && body.branchId) {
                     await env.DB.prepare(`
                         INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
@@ -251,7 +243,98 @@ export default {
             }
 
             // =================================================================
-            // 5. CASHBOOK CATEGORIES & ENTRIES
+            // 5. PURCHASES & STOCK IN (အဝယ်နှင့် စတော့အဝင်)
+            // =================================================================
+            if (path === "/api/purchases" && method === "GET") {
+                const branchId = url.searchParams.get("branch_id") || 1;
+                const { results } = await env.DB.prepare(`
+                    SELECT * FROM purchases WHERE branch_id = ? ORDER BY id DESC LIMIT 200
+                `).bind(branchId).all();
+                return jsonResponse(results || []);
+            }
+
+            if (path === "/api/purchases" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const userId = 1; // ယာယီ (Auth Session မှ ယူရန်)
+                
+                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                const purchaseNo = `PO-${body.branch_id}-${dateStr}`;
+
+                const purRes = await env.DB.prepare(`
+                    INSERT INTO purchases (purchase_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                    purchaseNo, Number(body.branch_id), String(body.supplier_name), 
+                    parseFloat(body.total_amount), String(body.payment_method), 
+                    body.bank_account_name || null, userId
+                ).run();
+                
+                const newPurId = purRes.meta.last_row_id;
+                const batchStatements = [];
+
+                for (const item of body.items) {
+                    batchStatements.push(
+                        env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
+                        .bind(newPurId, Number(item.product_id), Number(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
+                    );
+                    
+                    batchStatements.push(
+                        env.DB.prepare(`
+                            INSERT INTO branch_inventory (branch_id, product_id, quantity) 
+                            VALUES (?, ?, ?)
+                            ON CONFLICT(branch_id, product_id) DO UPDATE SET 
+                            quantity = quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                        `).bind(Number(body.branch_id), Number(item.product_id), Number(item.quantity))
+                    );
+                }
+
+                if (body.payment_method !== "credit") {
+                    const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
+                    batchStatements.push(
+                        env.DB.prepare(`
+                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, created_by)
+                            VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?)
+                        `).bind(
+                            Number(body.branch_id), newPurId, String(body.payment_method), 
+                            body.bank_account_name || null, parseFloat(body.total_amount), 
+                            desc, userId
+                        )
+                    );
+                }
+
+                await env.DB.batch(batchStatements);
+                return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
+            }
+
+            // =================================================================
+            // 6. WASTE / DAMAGE LOGS (အလေအလွင့်)
+            // =================================================================
+            if (path === "/api/waste" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const userId = 1;
+                
+                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+                const refNo = `WST-${body.branch_id}-${dateStr}`;
+
+                const batchStatements = [
+                    env.DB.prepare(`
+                        INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, recorded_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `).bind(refNo, Number(body.branch_id), Number(body.product_id), Number(body.quantity), parseFloat(body.unit_cost), String(body.reason), userId),
+                    
+                    env.DB.prepare(`
+                        UPDATE branch_inventory 
+                        SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
+                        WHERE branch_id = ? AND product_id = ?
+                    `).bind(Number(body.quantity), Number(body.branch_id), Number(body.product_id))
+                ];
+
+                await env.DB.batch(batchStatements);
+                return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။" }, 201);
+            }
+
+            // =================================================================
+            // 7. CASHBOOK CATEGORIES & ENTRIES
             // =================================================================
             if (path === "/api/cashbook/categories" && method === "GET") {
                 const { results } = await env.DB.prepare(
@@ -277,7 +360,6 @@ export default {
                     LEFT JOIN users u ON ce.created_by = u.id
                     WHERE ce.entry_date BETWEEN ? AND ?
                 `;
-                // ✅ FIXED: String(branchId) သုံးထားသဖြင့် ts(2345) အနီရောင်မျဉ်း လုံးဝ မတက်တော့ပါ
                 const bindings = [startDate, endDate];
                 if (branchId) {
                     sql += " AND ce.branch_id = ?";
@@ -319,14 +401,9 @@ export default {
                     INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, description, entry_date, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    Number(branchId),
-                    Number(categoryId),
-                    String(entryType || "EXPENSE").toUpperCase(),
-                    String(paymentMethod).toLowerCase(),
-                    parseFloat(amount),
-                    String(description).trim(),
-                    entryDate || getMyanmarTodayDate(),
-                    Number(createdBy)
+                    Number(branchId), Number(categoryId), String(entryType || "EXPENSE").toUpperCase(),
+                    String(paymentMethod).toLowerCase(), parseFloat(amount), String(description).trim(),
+                    entryDate || getMyanmarTodayDate(), Number(createdBy)
                 ).run();
 
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
@@ -339,7 +416,7 @@ export default {
             }
 
             // =================================================================
-            // 6. POS CHECKOUT (Auto Cashbook, Stock Deduction & Customer Debt)
+            // 8. POS CHECKOUT (Auto Cashbook, Stock Deduction & Customer Debt)
             // =================================================================
             if (path === "/api/pos/sales" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
@@ -379,20 +456,9 @@ export default {
                         payment_method, cash_amount, bank_amount, bank_account_name, created_by
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    invoiceNo,
-                    Number(branchId),
-                    customerId ? Number(customerId) : null,
-                    saleType,
-                    totalAmount,
-                    discount,
-                    finalAmount,
-                    effectivePaid,
-                    debtAmount,
-                    paymentMethod,
-                    pCash,
-                    pBank,
-                    bankAccountName,
-                    Number(createdBy)
+                    invoiceNo, Number(branchId), customerId ? Number(customerId) : null, saleType,
+                    totalAmount, discount, finalAmount, effectivePaid, debtAmount,
+                    paymentMethod, pCash, pBank, bankAccountName, Number(createdBy)
                 ).run();
 
                 const saleId = saleInsert.meta.last_row_id;
@@ -411,8 +477,8 @@ export default {
                     subQueries.push(
                         env.DB.prepare(`
                             INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity
-                        `).bind(Number(branchId), Number(item.productId), -qty)
+                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity - excluded.quantity
+                        `).bind(Number(branchId), Number(item.productId), qty) // Changed to excluded.quantity with positive qty for negative addition logic above
                     );
                 }
 
@@ -459,7 +525,7 @@ export default {
             }
 
             // =================================================================
-            // 7. YARN BALANCES (ချည်စတို)
+            // 9. YARN BALANCES (ချည်စတို)
             // =================================================================
             if (path === "/api/yarns" && method === "GET") {
                 const { results } = await env.DB.prepare("SELECT * FROM yarn_items WHERE is_active = 1 ORDER BY id DESC").all();
@@ -473,12 +539,9 @@ export default {
                     INSERT INTO yarn_items (code, name, color, unit, current_stock, alert_stock)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `).bind(
-                    String(body.code).trim().toUpperCase(),
-                    String(body.name).trim(),
-                    body.color ? String(body.color).trim() : null,
-                    body.unit || "lb",
-                    parseFloat(body.currentStock) || 0,
-                    parseFloat(body.alertStock) || 0
+                    String(body.code).trim().toUpperCase(), String(body.name).trim(),
+                    body.color ? String(body.color).trim() : null, body.unit || "lb",
+                    parseFloat(body.currentStock) || 0, parseFloat(body.alertStock) || 0
                 ).run();
                 return jsonResponse({ id: res.meta.last_row_id, message: "ချည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
             }
@@ -499,7 +562,7 @@ export default {
             }
 
             // =================================================================
-            // 8. CUSTOMERS & DEBT LIABILITIES
+            // 10. CUSTOMERS & DEBT LIABILITIES
             // =================================================================
             if (path === "/api/customers" && method === "GET") {
                 const { results } = await env.DB.prepare(
@@ -515,12 +578,9 @@ export default {
                     INSERT INTO customers (name, phone, shop_name, customer_type, current_debt, address)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `).bind(
-                    String(body.name).trim(),
-                    body.phone ? String(body.phone).trim() : null,
-                    body.shopName ? String(body.shopName).trim() : null,
-                    body.customerType || "retail",
-                    parseFloat(body.initialDebt) || 0,
-                    body.address ? String(body.address).trim() : null
+                    String(body.name).trim(), body.phone ? String(body.phone).trim() : null,
+                    body.shopName ? String(body.shopName).trim() : null, body.customerType || "retail",
+                    parseFloat(body.initialDebt) || 0, body.address ? String(body.address).trim() : null
                 ).run();
                 return jsonResponse({ id: res.meta.last_row_id, message: "ဖောက်သည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
             }

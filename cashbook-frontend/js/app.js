@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     startClock();
     initTheme();
     setupNavigation();
+    setupTopKpiClickEvents();
 
     if (!state.isLoggedIn()) {
         await showLoginView();
@@ -58,6 +59,25 @@ function setupNavigation() {
             navigateTo(btn.dataset.view);
         });
     });
+}
+
+// Top Bar KPI Card ကို နှိပ်ပြီး ယနေ့အရောင်း အသေးစိတ်ဇယား ချက်ချင်းဖွင့်နိုင်ရန် ချိတ်ဆက်ခြင်း
+function setupTopKpiClickEvents() {
+    const kpi3Card = document.getElementById("kpi-3-value")?.closest(".kpi-card") || document.getElementById("kpi-3-value")?.parentElement;
+    if (kpi3Card) {
+        kpi3Card.classList.add("cursor-pointer", "hover:opacity-80", "transition");
+        kpi3Card.title = "ယနေ့အရောင်းစာရင်း အသေးစိတ် ကြည့်ရှုရန် နှိပ်ပါ";
+        kpi3Card.addEventListener("click", () => {
+            const todaySalesBtn = document.getElementById("btn-open-today-sales");
+            if (todaySalesBtn && currentActiveView === "pos") {
+                todaySalesBtn.click();
+            } else {
+                navigateTo("pos").then(() => {
+                    setTimeout(() => document.getElementById("btn-open-today-sales")?.click(), 300);
+                });
+            }
+        });
+    }
 }
 
 function setActiveNavButton(viewName) {
@@ -163,7 +183,7 @@ export async function refreshGlobalKPIs(viewOverride) {
         globalKpiBar?.classList.remove("hidden");
     }
 
-    // KPI ကို သီးသန့် တွက်ချက်မည့် မျက်နှာပြင်များ
+    // KPI ကို ကိုယ်ပိုင်သီးသန့် တွက်ချက်သည့် မျက်နှာပြင်များ
     if (
         view === "inventory" || 
         view === "yarn" || 
@@ -269,7 +289,7 @@ export async function navigateTo(viewName) {
         }
     } catch (err) {
         container.innerHTML = `
-            <div class="h-full w-full bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400">
+            <div class="h-full w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                 <i class="fa-solid fa-layer-group text-4xl text-emerald-500 mb-3"></i>
                 <div class="text-base font-bold text-slate-700 dark:text-slate-200">${VIEW_TITLES[viewName] || viewName}</div>
                 <div class="text-xs mt-1">ဤမော်ဂျူးကို ဖွင့်လှစ်ရာတွင် အခက်အခဲရှိနေပါသည် (${err.message})</div>

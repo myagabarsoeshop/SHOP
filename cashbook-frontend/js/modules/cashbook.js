@@ -2,11 +2,13 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI, getLocalTodayDate } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let entries = [];
 let categories = [];
+let currentFilteredEntries = [];
 
-// Fallback Categories (အင်္ဂလိပ်စာသားများ ဖယ်ရှားပြီး မြန်မာလိုသီးသန့် ပြုလုပ်ထားပါသည်)
+// Fallback Categories
 const FALLBACK_CATEGORIES = [
     { id: 1, name: "အထည်ရောင်းရငွေ", type: "INCOME" },
     { id: 2, name: "အကြွေးပြန်ရငွေ", type: "INCOME" },
@@ -17,6 +19,12 @@ const FALLBACK_CATEGORIES = [
     { id: 7, name: "သယ်ယူပို့ဆောင်ခ / ကားခ", type: "EXPENSE" },
     { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ", type: "EXPENSE" }
 ];
+
+// စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Instance
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -43,16 +51,20 @@ function bindEvents() {
     });
 
     document.getElementById("entry-form")?.addEventListener("submit", submitEntry);
-    document.getElementById("cb-date-filter")?.addEventListener("change", loadEntries);
+    document.getElementById("cb-date-filter")?.addEventListener("change", () => {
+        pagination.reset();
+        loadEntries();
+    });
 
     document.getElementById("cb-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
-        const filtered = entries.filter(r =>
+        currentFilteredEntries = entries.filter(r =>
             (r.category_name || "").toLowerCase().includes(kw) ||
             (r.description || "").toLowerCase().includes(kw) ||
             (r.payment_method || "").toLowerCase().includes(kw)
         );
-        renderTable(filtered);
+        pagination.reset();
+        renderTable();
     });
 
     document.getElementById("btn-export-csv")?.addEventListener("click", exportCSV);
@@ -80,6 +92,8 @@ async function loadEntries() {
     try {
         const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: date, end_date: date });
         entries = res.data?.entries || [];
+        currentFilteredEntries = [...entries];
+
         const s = res.data?.summary || {
             cash: { in: 0, out: 0, net: 0 },
             bank: { in: 0, out: 0, net: 0 },
@@ -93,7 +107,7 @@ async function loadEntries() {
         setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalOut, "fa-arrow-trend-down", "rose");
         setKPI(4, "စုစုပေါင်း အသားတင် (Total Net)", s.totalNet || 0, "fa-vault", "amber");
 
-        renderTable(entries);
+        renderTable();
     } catch (err) {
         console.error("Load entries error:", err);
         if (tbody) {
@@ -102,23 +116,26 @@ async function loadEntries() {
     }
 }
 
-function renderTable(data) {
+function renderTable() {
     const tbody = document.getElementById("cashbook-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (data.length === 0) {
+    if (currentFilteredEntries.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="p-12 text-center text-slate-400 text-base font-bold">ရွေးချယ်ထားသော ရက်စွဲအတွက် မှတ်တမ်း မရှိသေးပါ</td></tr>`;
+        pagination.renderControls("cashbook-pagination");
         return;
     }
 
-    data.forEach(item => {
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredEntries);
+
+    pageItems.forEach(item => {
         const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
         const isIncome = entryType === "INCOME";
         const colorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
         const sign = isIncome ? "+" : "-";
 
-        // Role ခွဲခြားမှုမရှိဘဲ မည်သည့် User မဆို Edit နှင့် အနီရောင် Delete Icon ကို အမြဲတမ်း အသုံးပြုနိုင်မည်
         const actionButtons = `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-entry w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
@@ -150,7 +167,7 @@ function renderTable(data) {
     // Edit ခလုတ်များအတွက် Event ချိတ်ဆက်ခြင်း
     tbody.querySelectorAll(".btn-edit-entry").forEach(btn => {
         btn.addEventListener("click", () => {
-            const item = data.find(r => r.id == btn.dataset.id);
+            const item = entries.find(r => r.id == btn.dataset.id);
             if (item) openEditModal(item);
         });
     });
@@ -159,6 +176,9 @@ function renderTable(data) {
     tbody.querySelectorAll(".btn-delete").forEach(btn => {
         btn.addEventListener("click", () => deleteEntry(btn.dataset.id));
     });
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("cashbook-pagination");
 }
 
 function openModal(type) {
@@ -171,7 +191,6 @@ function openModal(type) {
 
     document.getElementById("entry-form")?.reset();
     
-    // Edit ID ကို ဖယ်ရှားရန် (အသစ်ထည့်ခြင်းဖြစ်ကြောင်း ပြသရန်)
     const editIdInput = document.getElementById("entry-edit-id");
     if (editIdInput) editIdInput.value = "";
 
@@ -215,7 +234,6 @@ function openEditModal(item) {
 
     document.getElementById("entry-form")?.reset();
 
-    // Edit ID သိမ်းဆည်းရန် Hidden Input ဖန်တီးခြင်း (သို့မဟုတ် ရှိပြီးသားကို သုံးခြင်း)
     let editIdInput = document.getElementById("entry-edit-id");
     if (!editIdInput) {
         editIdInput = document.createElement("input");
@@ -267,7 +285,6 @@ async function submitEntry(e) {
     const amount = parseFloat(document.getElementById("entry-amount")?.value);
     const description = document.getElementById("entry-desc")?.value.trim();
 
-    // အသေးစိတ် ဖော်ပြချက် (Description) မပါခဲ့လျှင် လက်မခံဘဲ သတိပေးခြင်း
     if (!description) {
         alert("ကျေးဇူးပြု၍ အသေးစိတ် ဖော်ပြချက် (မှတ်ချက်) ထည့်သွင်းပေးပါ");
         document.getElementById("entry-desc")?.focus();
@@ -295,10 +312,8 @@ async function submitEntry(e) {
     try {
         let res;
         if (editId) {
-            // Edit လုပ်ခြင်း (Update API ခေါ်မည်)
             res = await api.put(`/cashbook/entries/${editId}`, payload);
         } else {
-            // အသစ်ထည့်ခြင်း (Post API ခေါ်မည်)
             res = await api.post("/cashbook/entries", payload);
         }
 

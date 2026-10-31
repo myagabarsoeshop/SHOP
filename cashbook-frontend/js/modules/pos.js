@@ -7,10 +7,12 @@ let allProducts = [];
 let cart = [];
 let currentSaleType = "retail";
 let selectedPaymentMethod = "cash";
+let allCustomers = [];
 
 export async function initPOS() {
     bindEvents();
     await loadProducts();
+    await loadCustomers(); // Checkout တွင် ရွေးချယ်ရန်
     renderCart();
     await updatePOSKPIs();
 }
@@ -34,6 +36,23 @@ async function loadProducts() {
         console.error("Failed to load products:", err);
     } finally {
         loading?.classList.add("hidden");
+    }
+}
+
+async function loadCustomers() {
+    try {
+        const res = await api.get("/customers");
+        allCustomers = res.data || [];
+        
+        const select = document.getElementById("pos-customer-select");
+        if (select) {
+            select.innerHTML = `<option value="">-- ဖောက်သည် ရွေးချယ်ပါ (Optional) --</option>`;
+            allCustomers.forEach(c => {
+                select.innerHTML += `<option value="${c.id}">${c.name} ${c.phone ? `(${c.phone})` : ''}</option>`;
+            });
+        }
+    } catch (err) {
+        console.error("Failed to load customers:", err);
     }
 }
 
@@ -113,9 +132,16 @@ function renderProductsGrid(products) {
 
 function addToCart(product) {
     const existing = cart.find(item => item.product.id === product.id);
+    const availableStock = product.current_stock || 0;
+
     if (existing) {
+        if (existing.quantity >= availableStock) {
+            alert(`လက်ကျန်မလောက်ပါ။ (${availableStock} ထည်သာ ကျန်ပါသည်)`);
+            return;
+        }
         existing.quantity += 1;
     } else {
+        if (availableStock <= 0) return;
         const price = currentSaleType === "retail" ? product.retail_price : product.wholesale_price;
         cart.push({ product, quantity: 1, unitPrice: price, costPrice: product.cost_price });
     }
@@ -152,6 +178,7 @@ function renderCart() {
     cart.forEach((item, index) => {
         const lineTotal = item.quantity * item.unitPrice;
         subtotal += lineTotal;
+        const stockLimit = item.product.current_stock || 0;
 
         const row = document.createElement("div");
         row.className = "py-3.5 flex items-center justify-between gap-3";
@@ -163,7 +190,7 @@ function renderCart() {
             <div class="flex items-center gap-2 shrink-0">
                 <button data-idx="${index}" class="btn-qty-minus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold cursor-pointer">-</button>
                 <span class="w-7 text-center text-sm font-black font-mono text-slate-900 dark:text-white">${item.quantity}</span>
-                <button data-idx="${index}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold cursor-pointer">+</button>
+                <button data-idx="${index}" data-max="${stockLimit}" class="btn-qty-plus w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-bold cursor-pointer">+</button>
             </div>
             <div class="text-right shrink-0 w-24">
                 <div class="text-sm font-black text-slate-900 dark:text-white font-mono">${Number(lineTotal).toLocaleString()}</div>
@@ -182,7 +209,17 @@ function renderCart() {
     if (checkoutBtn) checkoutBtn.disabled = false;
 
     container.querySelectorAll(".btn-qty-plus").forEach(btn => {
-        btn.onclick = () => { cart[btn.dataset.idx].quantity += 1; renderCart(); updatePOSKPIs(); };
+        btn.onclick = () => { 
+            const idx = btn.dataset.idx;
+            const max = parseInt(btn.dataset.max, 10);
+            if (cart[idx].quantity >= max) {
+                alert(`လက်ကျန်မလောက်ပါ။ (${max} ထည်သာ ကျန်ပါသည်)`);
+                return;
+            }
+            cart[idx].quantity += 1; 
+            renderCart(); 
+            updatePOSKPIs(); 
+        };
     });
     container.querySelectorAll(".btn-qty-minus").forEach(btn => {
         btn.onclick = () => {
@@ -239,14 +276,20 @@ function bindEvents() {
             });
             btn.className = "method-btn active p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer";
             selectedPaymentMethod = btn.dataset.method;
+            
             const bankGroup = document.getElementById("bank-input-group");
             if (selectedPaymentMethod === "bank") bankGroup?.classList.remove("hidden");
             else bankGroup?.classList.add("hidden");
 
             const paidInput = document.getElementById("modal-paid-amount");
             const dueAmount = getFinalTotal();
-            if (selectedPaymentMethod === "credit") paidInput.value = 0;
-            else paidInput.value = dueAmount;
+            if (selectedPaymentMethod === "credit") {
+                paidInput.value = 0;
+                paidInput.disabled = true; // အကြွေးဆိုလျှင် Paid Amount ပြင်ခွင့်ပိတ်မည်
+            } else {
+                paidInput.value = dueAmount;
+                paidInput.disabled = false;
+            }
             calculateChange();
         });
     });
@@ -279,30 +322,36 @@ function openCheckoutModal() {
     const dueEl = document.getElementById("modal-due-amount");
     const paidInput = document.getElementById("modal-paid-amount");
     const finalTotal = getFinalTotal();
+    
+    // Default to Cash payment when opening modal
+    document.querySelector('.method-btn[data-method="cash"]')?.click();
+    
     if (dueEl) dueEl.textContent = finalTotal.toLocaleString();
     if (paidInput) paidInput.value = finalTotal;
+    
     calculateChange();
     modal?.classList.remove("hidden");
 }
 
 function calculateChange() {
     const finalTotal = getFinalTotal();
-    const paid = parseFloat(document.getElementById("modal-paid-amount")?.value) || 0;
+    const paidInput = document.getElementById("modal-paid-amount");
+    const paid = parseFloat(paidInput?.value) || 0;
     const changeBox = document.getElementById("modal-debt-change-box");
     const changeText = document.getElementById("modal-change-text");
 
-    if (paid >= finalTotal) {
+    if (selectedPaymentMethod === "credit") {
+        changeBox.className = "p-3.5 rounded-xl text-sm flex justify-between font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400";
+        changeText.textContent = `အကြွေးကျန်: ${finalTotal.toLocaleString()}`;
+    } else if (paid >= finalTotal) {
         changeBox.className = "p-3.5 rounded-xl text-sm flex justify-between font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-        changeText.textContent = `+${(paid - finalTotal).toLocaleString()}`;
+        changeText.textContent = `ပြန်အမ်းငွေ (Change): ${(paid - finalTotal).toLocaleString()}`;
     } else {
         changeBox.className = "p-3.5 rounded-xl text-sm flex justify-between font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400";
-        changeText.textContent = `အကြွေးကျန်: ${(finalTotal - paid).toLocaleString()}`;
+        changeText.textContent = `လိုငွေ (အကြွေး): ${(finalTotal - paid).toLocaleString()}`;
     }
 }
 
-/**
- * တောင်းဆိုထားသော KPI ၄ ကွက် (Cash, Bank, Total Today Sale, Total Sale Items) တွက်ချက်ပြသခြင်း
- */
 async function updatePOSKPIs() {
     try {
         const branchId = state.currentBranch?.id || 1;
@@ -325,6 +374,22 @@ async function updatePOSKPIs() {
 }
 
 async function submitSale() {
+    const customerId = document.getElementById("pos-customer-select")?.value || null;
+    const finalTotal = getFinalTotal();
+    const paidAmount = parseFloat(document.getElementById("modal-paid-amount")?.value) || 0;
+    
+    // အကြွေး (Credit) သို့မဟုတ် ငွေအပြည့်မချေလျှင် ဖောက်သည် ရွေးချယ်ရန် မဖြစ်မနေတောင်းဆိုမည်
+    if (paidAmount < finalTotal && !customerId) {
+        alert("အကြွေး (သို့) ငွေအပြည့်မချေပါက ကျေးဇူးပြု၍ ဖောက်သည် (Customer) ရွေးချယ်ပေးပါ။");
+        return;
+    }
+
+    const bankName = document.getElementById("modal-bank-name")?.value;
+    if (selectedPaymentMethod === "bank" && !bankName) {
+        alert("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ထည့်သွင်းပေးပါ။");
+        return;
+    }
+
     const btn = document.getElementById("btn-confirm-sale");
     btn.disabled = true;
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>သိမ်းဆည်းနေပါသည်...</span>`;
@@ -332,20 +397,20 @@ async function submitSale() {
     try {
         const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
         const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
-        const finalTotal = Math.max(0, subtotal - discountAmount);
-        const paidAmount = parseFloat(document.getElementById("modal-paid-amount")?.value) || 0;
-        const customerId = document.getElementById("pos-customer-select")?.value || null;
-        const bankName = document.getElementById("modal-bank-name")?.value;
 
         const payload = {
             branchId: state.currentBranch?.id || 1,
             customerId: customerId ? parseInt(customerId) : null,
             saleType: currentSaleType,
             items: cart.map(i => ({
-                productId: i.product.id, quantity: i.quantity,
-                unitPrice: i.unitPrice, costPrice: i.costPrice
+                productId: i.product.id, 
+                quantity: i.quantity,
+                unitPrice: i.unitPrice, 
+                costPrice: i.costPrice
             })),
-            discountAmount, paidAmount, paymentMethod: selectedPaymentMethod,
+            discountAmount, 
+            paidAmount: selectedPaymentMethod === "credit" ? 0 : paidAmount,
+            paymentMethod: selectedPaymentMethod,
             cashAmount: selectedPaymentMethod === "cash" ? paidAmount : 0,
             bankAmount: selectedPaymentMethod === "bank" ? paidAmount : 0,
             bankAccountName: selectedPaymentMethod === "bank" ? bankName : null,
@@ -355,10 +420,14 @@ async function submitSale() {
         const res = await api.post("/pos/sales", payload);
         if (res.success) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
-            showReceiptModal(res.data.invoiceNo, cart, subtotal, discountAmount, finalTotal, paidAmount);
+            
+            // ဘောင်ချာပြသမည်
+            showReceiptModal(res.data.invoiceNo, cart, subtotal, discountAmount, finalTotal, payload.paidAmount);
 
+            // စာရင်းများ ရှင်းလင်းမည်
             cart = [];
             document.getElementById("pos-discount").value = 0;
+            document.getElementById("pos-customer-select").value = "";
             renderCart();
             await loadProducts();
             await updatePOSKPIs();
@@ -375,24 +444,38 @@ async function submitSale() {
 function showReceiptModal(invoiceNo, items, subtotal, discount, finalTotal, paid) {
     document.getElementById("rcp-branch").textContent = state.currentBranch?.name || "Main Home Shop";
     document.getElementById("rcp-inv").textContent = invoiceNo;
-    document.getElementById("rcp-date").textContent = new Date().toLocaleString();
-    document.getElementById("rcp-method").textContent = selectedPaymentMethod;
+    document.getElementById("rcp-date").textContent = new Date().toLocaleString("en-GB", { hour12: true });
+    
+    // Receipt ပေါ်တွင် Payment Method ကို မြန်မာလို ပြသရန်
+    let methodText = "လက်ငင်း (Cash)";
+    if (selectedPaymentMethod === "bank") methodText = "ဘဏ်လွှဲ (Bank)";
+    if (selectedPaymentMethod === "credit") methodText = "အကြွေး (Credit)";
+    document.getElementById("rcp-method").textContent = methodText;
 
     const tbody = document.getElementById("rcp-items");
-    tbody.innerHTML = "";
-    items.forEach(item => {
-        tbody.innerHTML += `
-            <tr>
-                <td class="py-1.5 font-semibold">${item.product.item_name}</td>
-                <td class="py-1.5 text-center font-mono">${item.quantity}</td>
-                <td class="py-1.5 text-right font-mono">${(item.quantity * item.unitPrice).toLocaleString()}</td>
-            </tr>
-        `;
-    });
+    if (tbody) {
+        tbody.innerHTML = "";
+        items.forEach(item => {
+            tbody.innerHTML += `
+                <tr class="border-b border-dashed border-gray-300">
+                    <td class="py-2 text-[13px] font-semibold">${item.product.item_name}</td>
+                    <td class="py-2 text-[13px] text-center font-mono">${item.quantity}</td>
+                    <td class="py-2 text-[13px] text-right font-mono">${(item.quantity * item.unitPrice).toLocaleString()}</td>
+                </tr>
+            `;
+        });
+    }
 
     document.getElementById("rcp-subtotal").textContent = subtotal.toLocaleString();
     document.getElementById("rcp-discount").textContent = `-${discount.toLocaleString()}`;
     document.getElementById("rcp-final").textContent = finalTotal.toLocaleString();
     document.getElementById("rcp-paid").textContent = paid.toLocaleString();
+    
+    const change = paid - finalTotal;
+    const changeEl = document.getElementById("rcp-change");
+    if (changeEl) {
+        changeEl.textContent = change >= 0 ? change.toLocaleString() : `(အကြွေး) ${Math.abs(change).toLocaleString()}`;
+    }
+
     document.getElementById("receipt-modal")?.classList.remove("hidden");
 }

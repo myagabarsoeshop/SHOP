@@ -147,6 +147,15 @@ function renderTable(data) {
         tbody.appendChild(row);
     });
 
+    // Edit ခလုတ်များအတွက် Event ချိတ်ဆက်ခြင်း
+    tbody.querySelectorAll(".btn-edit-entry").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const item = data.find(r => r.id == btn.dataset.id);
+            if (item) openEditModal(item);
+        });
+    });
+
+    // Delete ခလုတ်များအတွက် Event ချိတ်ဆက်ခြင်း
     tbody.querySelectorAll(".btn-delete").forEach(btn => {
         btn.addEventListener("click", () => deleteEntry(btn.dataset.id));
     });
@@ -161,6 +170,11 @@ function openModal(type) {
     const typeInput = document.getElementById("entry-type");
 
     document.getElementById("entry-form")?.reset();
+    
+    // Edit ID ကို ဖယ်ရှားရန် (အသစ်ထည့်ခြင်းဖြစ်ကြောင်း ပြသရန်)
+    const editIdInput = document.getElementById("entry-edit-id");
+    if (editIdInput) editIdInput.value = "";
+
     if (typeInput) typeInput.value = type;
 
     if (type === "EXPENSE") {
@@ -188,10 +202,67 @@ function openModal(type) {
     document.getElementById("entry-amount")?.focus();
 }
 
+function openEditModal(item) {
+    const modal = document.getElementById("entry-modal");
+    const header = document.getElementById("entry-modal-header");
+    const title = document.getElementById("entry-modal-title");
+    const select = document.getElementById("entry-category");
+    const typeInput = document.getElementById("entry-type");
+    const amountInput = document.getElementById("entry-amount");
+    const methodSelect = document.getElementById("entry-payment-method");
+    const descInput = document.getElementById("entry-desc");
+    const btn = document.getElementById("btn-submit-entry");
+
+    document.getElementById("entry-form")?.reset();
+
+    // Edit ID သိမ်းဆည်းရန် Hidden Input ဖန်တီးခြင်း (သို့မဟုတ် ရှိပြီးသားကို သုံးခြင်း)
+    let editIdInput = document.getElementById("entry-edit-id");
+    if (!editIdInput) {
+        editIdInput = document.createElement("input");
+        editIdInput.type = "hidden";
+        editIdInput.id = "entry-edit-id";
+        document.getElementById("entry-form")?.appendChild(editIdInput);
+    }
+    editIdInput.value = item.id;
+
+    const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
+    if (typeInput) typeInput.value = entryType;
+
+    if (entryType === "EXPENSE") {
+        if (header) header.className = "p-5 bg-rose-600 text-white flex items-center justify-between";
+        if (title) title.textContent = "အသုံးစရိတ် စာရင်း ပြင်ဆင်မည်";
+        if (btn) btn.className = "w-full py-3.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-base rounded-xl shadow-lg transition cursor-pointer";
+    } else {
+        if (header) header.className = "p-5 bg-emerald-600 text-white flex items-center justify-between";
+        if (title) title.textContent = "ဝင်ငွေ စာရင်း ပြင်ဆင်မည်";
+        if (btn) btn.className = "w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition cursor-pointer";
+    }
+
+    const filteredCats = categories.filter(c => (c.type || c.entry_type || "").toUpperCase() === entryType);
+    if (select) {
+        select.innerHTML = '<option value="" disabled>ခေါင်းစဉ် ရွေးချယ်ပါ</option>';
+        filteredCats.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.id;
+            opt.textContent = c.name;
+            if (c.id == item.category_id) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+
+    if (amountInput) amountInput.value = item.amount;
+    if (methodSelect) methodSelect.value = item.payment_method || "cash";
+    if (descInput) descInput.value = item.description || "";
+
+    modal?.classList.remove("hidden");
+    amountInput?.focus();
+}
+
 async function submitEntry(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-entry");
 
+    const editId = document.getElementById("entry-edit-id")?.value;
     const categoryId = parseInt(document.getElementById("entry-category")?.value, 10);
     const amount = parseFloat(document.getElementById("entry-amount")?.value);
     const description = document.getElementById("entry-desc")?.value.trim();
@@ -222,8 +293,19 @@ async function submitEntry(e) {
     };
 
     try {
-        const res = await api.post("/cashbook/entries", payload);
+        let res;
+        if (editId) {
+            // Edit လုပ်ခြင်း (Update API ခေါ်မည်)
+            res = await api.put(`/cashbook/entries/${editId}`, payload);
+        } else {
+            // အသစ်ထည့်ခြင်း (Post API ခေါ်မည်)
+            res = await api.post("/cashbook/entries", payload);
+        }
+
         if (res.success !== false) {
+            const editIdInput = document.getElementById("entry-edit-id");
+            if (editIdInput) editIdInput.value = "";
+
             document.getElementById("entry-modal")?.classList.add("hidden");
             await loadEntries();
         } else {

@@ -2,10 +2,18 @@
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { setKPI } from "../app.js";
+import { PaginationController } from "../core/pagination.js";
 
 let transfersList = [];
+let currentFilteredTransfers = [];
 let branchesList = [];
 let availableProducts = [];
+
+// စတော့လွှဲပြောင်းမှုအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
+const pagination = new PaginationController({
+    pageSize: 15,
+    onPageChange: () => renderTable()
+});
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -23,7 +31,7 @@ export async function initTransfers() {
 }
 
 function bindEvents() {
-    // Search Box
+    // Search Box (စာရင်းရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
     document.getElementById("trf-search")?.addEventListener("input", filterAndRender);
 
     // Export CSV
@@ -78,9 +86,11 @@ async function loadTransfers() {
     try {
         const res = await api.get("/transfers", { branch_id: branchId });
         transfersList = res.data || [];
+        currentFilteredTransfers = [...transfersList];
 
         updateTransferKPIs();
-        renderTable(transfersList);
+        pagination.reset();
+        renderTable();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="10" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
@@ -116,28 +126,32 @@ function updateTransferKPIs() {
 function filterAndRender() {
     const kw = (document.getElementById("trf-search")?.value || "").trim().toLowerCase();
 
-    const filtered = transfersList.filter(t => {
+    currentFilteredTransfers = transfersList.filter(t => {
         if (!kw) return true;
         const hay = `${t.transfer_no || ""} ${t.sku || ""} ${t.barcode || ""} ${t.item_name || ""} ${t.from_branch_name || ""} ${t.to_branch_name || ""} ${t.notes || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
-    renderTable(filtered);
+    pagination.reset();
+    renderTable();
 }
 
-function renderTable(list) {
+function renderTable() {
     const tbody = document.getElementById("trf-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (list.length === 0) {
+    if (currentFilteredTransfers.length === 0) {
         tbody.innerHTML = `<tr><td colspan="10" class="p-12 text-center text-slate-400 font-bold text-base">လွှဲပြောင်းမှု မှတ်တမ်း မရှိသေးပါ</td></tr>`;
+        pagination.renderControls("transfers-pagination");
         return;
     }
 
+    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
+    const pageItems = pagination.getPageItems(currentFilteredTransfers);
     const currentBranchId = state.currentBranch?.id || 1;
 
-    list.forEach(t => {
+    pageItems.forEach(t => {
         const isOutbound = Number(t.from_branch_id) === currentBranchId;
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const unit = t.size || "ထည်";
@@ -214,6 +228,9 @@ function renderTable(list) {
             btn.onclick = () => deleteTransfer(Number(btn.dataset.id));
         });
     }
+
+    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
+    pagination.renderControls("transfers-pagination");
 }
 
 // --- Create Transfer Modal Logic ---
@@ -368,14 +385,15 @@ async function deleteTransfer(id) {
 
 // --- CSV Export Logic ---
 function exportTransfersToCSV() {
-    if (transfersList.length === 0) {
+    const dataToExport = currentFilteredTransfers.length > 0 ? currentFilteredTransfers : transfersList;
+    if (dataToExport.length === 0) {
         return alert("ထုတ်ယူရန် လွှဲပြောင်းမှုစာရင်း မရှိပါ။");
     }
 
     const currentYear = new Date().getFullYear();
     let csvContent = "Transfer No,Date,From Branch,To Branch,SKU,Barcode,Category,Item Name,Color,Unit,Quantity,Notes,Recorded By\n";
 
-    transfersList.forEach(t => {
+    dataToExport.forEach(t => {
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const row = [
             `"${escapeHtml(t.transfer_no || '')}"`,

@@ -8,12 +8,18 @@ import { initInventory } from "./modules/inventory.js";
 import { initYarn } from "./modules/yarn.js";
 import { initCustomers } from "./modules/customers.js";
 
+// နောက်ပိုင်းတွင် ရေးသားမည့် Module များအတွက် နေရာချန်ထားပါသည်
+// import { initPurchases } from "./modules/purchases.js";
+// import { initMasterProducts } from "./modules/master_products.js";
+
 const VIEW_TITLES = {
     pos: "Sale Counter (POS)",
     cashbook: "Cash Book (နေ့စဉ်ငွေစာရင်း)",
     inventory: "Stock Balances (အထည်လက်ကျန်)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
-    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
+    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)",
+    purchases: "Purchases (အဝယ်နှင့် စတော့အဝင်)",
+    master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)"
 };
 
 let currentActiveView = "pos";
@@ -82,6 +88,16 @@ function showAppLayout() {
     if (nameEl) nameEl.textContent = displayName;
     if (roleEl) roleEl.textContent = user.role || "cashier";
     if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
+
+    // Admin Role ဖြစ်မှသာ Product Master Menu ကို ပြသမည်
+    const masterMenu = document.getElementById("nav-master-products");
+    if (masterMenu) {
+        if (state.isAdmin()) {
+            masterMenu.classList.remove("hidden");
+        } else {
+            masterMenu.classList.add("hidden");
+        }
+    }
 }
 
 async function loadBranches() {
@@ -120,9 +136,6 @@ async function loadBranches() {
     }
 }
 
-/**
- * Local Timezone ဖြင့် YYYY-MM-DD ရက်စွဲမှန် ရယူခြင်း
- */
 export function getLocalTodayDate() {
     const now = new Date();
     const year = now.getFullYear();
@@ -131,13 +144,10 @@ export function getLocalTodayDate() {
     return `${year}-${month}-${day}`;
 }
 
-/**
- * Global 4-Box KPI ကို View အလိုက် အချက်အလက် ပြောင်းလဲပေးခြင်း
- */
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
-    // inventory, yarn, customers မော်ဂျူးများသည် ၎င်းတို့ကိုယ်ပိုင် KPI ကို တွက်ချက်ပြသပေးသည်
-    if (view === "inventory" || view === "yarn" || view === "customers") return;
+    // KPI ကို သီးသန့် တွက်ချက်မည့် မျက်နှာပြင်များ
+    if (view === "inventory" || view === "yarn" || view === "customers" || view === "purchases" || view === "master_products") return;
 
     try {
         const branchId = state.currentBranch?.id || 1;
@@ -215,6 +225,12 @@ export async function navigateTo(viewName) {
             await initYarn();
         } else if (viewName === "customers") {
             await initCustomers();
+        } else if (viewName === "purchases") {
+            // await initPurchases(); // TODO: Purchases Module ရေးပြီးလျှင် Uncomment လုပ်မည်
+            container.innerHTML = `<div class="p-12 text-center text-slate-400">Purchases မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။</div>`;
+        } else if (viewName === "master_products") {
+            // await initMasterProducts(); // TODO: Master Products Module ရေးပြီးလျှင် Uncomment လုပ်မည်
+            container.innerHTML = `<div class="p-12 text-center text-slate-400">Product Master မျက်နှာပြင် မကြာမီ ရေးသားပါမည်။</div>`;
         }
     } catch (err) {
         container.innerHTML = `

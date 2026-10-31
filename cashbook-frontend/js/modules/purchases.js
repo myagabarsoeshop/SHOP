@@ -93,8 +93,11 @@ function renderPurchasesTable() {
             paymentBadge = `<span class="px-3 py-1.5 bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
         }
 
+        const unitDisplay = pur.size || "ထည်";
+
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        
         tr.innerHTML = `
             <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
                 <div class="font-bold text-blue-600 dark:text-blue-400 text-sm">${escapeHtml(pur.purchase_no || "-")}</div>
@@ -114,12 +117,12 @@ function renderPurchasesTable() {
                 <div class="text-sm text-slate-400">${escapeHtml(pur.pattern || "-")}</div>
             </td>
             <td class="p-4 text-sm">
-                <div>${escapeHtml(pur.color || "-")}</div>
-                <div class="text-slate-400">${escapeHtml(pur.size || "Free Size")}</div>
+                <div class="font-bold text-slate-700 dark:text-slate-300">${escapeHtml(pur.color || "-")}</div>
+                <div class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">${escapeHtml(unitDisplay)}</div>
             </td>
             <td class="p-4 text-center">
                 <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-blue-500/15 text-blue-600 dark:text-blue-400">
-                    ${Number(pur.quantity || 0).toLocaleString()}
+                    ${Number(pur.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(unitDisplay)}</span>
                 </span>
             </td>
             <td class="p-4 text-center">${paymentBadge}</td>
@@ -169,7 +172,8 @@ function renderPurchasesTable() {
 function generateAutoSKU(categoryName = "") {
     let prefix = "GAR";
     const cat = categoryName.toLowerCase();
-    if (cat.includes("အင်္ကျီ") || cat.includes("shirt")) prefix = "SHRT";
+    if (cat.includes("ချည်") || cat.includes("yarn")) prefix = "YARN";
+    else if (cat.includes("အင်္ကျီ") || cat.includes("shirt")) prefix = "SHRT";
     else if (cat.includes("ပုဆိုး") || cat.includes("pasho")) prefix = "PASHO";
     else if (cat.includes("လုံချည်") || cat.includes("lon")) prefix = "LON";
 
@@ -229,18 +233,40 @@ function addPurchaseRow(existingData = null) {
                 ${productOptions}
             </select>
             
+            <!-- ပစ္စည်းအသစ် Inline Form -->
             <div class="new-product-fields hidden mt-2 space-y-2 p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-emerald-500/30">
-                <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
+                <input type="text" placeholder="အမျိုးအစား (Category) ဥပမာ - ချည် သို့မဟုတ် အင်္ကျီ" class="new-cat w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                 <input type="text" placeholder="ပစ္စည်းအမည် (Item Name) *" class="new-name w-full text-xs font-bold px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
                 <div class="grid grid-cols-3 gap-1.5">
-                    <input type="text" placeholder="SKU ကုတ် *" class="new-sku text-xs font-mono font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500/50 text-emerald-600 rounded-lg" title="Auto SKU သတ်မှတ်ပေးထားပါသည်">
+                    <input type="text" placeholder="SKU ကုတ် *" class="new-sku text-xs font-mono font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-500/50 text-emerald-600 rounded-lg" title="Auto SKU သတ်မှတ်ပေးပါသည်">
                     <input type="text" placeholder="အရောင်" class="new-color text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg">
-                    <input type="text" placeholder="ဆိုဒ်" class="new-size text-xs px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg" value="Free Size">
+                    
+                    <!-- ရေတွက်ပုံ / ယူနစ် / ဆိုဒ် ရွေးချယ်မှု -->
+                    <select class="new-size text-xs font-bold px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                        <optgroup label="ချည်ယူနစ်များ">
+                            <option value="ပေါင်">ပေါင် (lb)</option>
+                            <option value="လိပ်">လိပ်</option>
+                            <option value="ထုပ်">ထုပ်</option>
+                            <option value="ခင်">ခင်</option>
+                            <option value="လုံး">လုံး</option>
+                        </optgroup>
+                        <optgroup label="အထည်ယူနစ် / ဆိုဒ်များ">
+                            <option value="ထည်" selected>ထည်</option>
+                            <option value="အုပ်">အုပ်</option>
+                            <option value="စုံ">စုံ</option>
+                            <option value="Free Size">Free Size</option>
+                            <option value="S">S</option>
+                            <option value="M">M</option>
+                            <option value="L">L</option>
+                            <option value="XL">XL</option>
+                            <option value="2XL">2XL</option>
+                        </optgroup>
+                    </select>
                 </div>
             </div>
         </td>
         <td class="p-3 align-top">
-            <input type="number" min="1" value="${existingData?.quantity || 1}" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <input type="number" min="0.1" step="any" value="${existingData?.quantity || 1}" class="pur-item-qty w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
         </td>
         <td class="p-3 align-top">
             <input type="number" min="0" value="${existingData?.unit_cost || 0}" step="any" class="pur-item-cost w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="ဝယ်ဈေး">
@@ -278,6 +304,7 @@ function addPurchaseRow(existingData = null) {
     const newFields = tr.querySelector(".new-product-fields");
     const newCatInput = tr.querySelector(".new-cat");
     const newSkuInput = tr.querySelector(".new-sku");
+    const newSizeSelect = tr.querySelector(".new-size");
     const qtyInput = tr.querySelector(".pur-item-qty");
     const costInput = tr.querySelector(".pur-item-cost");
     const retailInput = tr.querySelector(".pur-item-retail");
@@ -305,8 +332,16 @@ function addPurchaseRow(existingData = null) {
         calculateRow(tr);
     });
 
+    // Category ရိုက်သည့်အခါ Auto SKU နှင့် သင့်တော်သော Unit ကို အလိုအလျောက် ရွေးချယ်ပေးခြင်း
     newCatInput.addEventListener("input", () => {
-        newSkuInput.value = generateAutoSKU(newCatInput.value);
+        const catVal = newCatInput.value.trim().toLowerCase();
+        newSkuInput.value = generateAutoSKU(catVal);
+
+        if (catVal.includes("ချည်") || catVal.includes("yarn")) {
+            newSizeSelect.value = "ပေါင်";
+        } else if (catVal.includes("ပုဆိုး") || catVal.includes("လုံချည်") || catVal.includes("အင်္ကျီ")) {
+            newSizeSelect.value = "ထည်";
+        }
     });
 
     const updatePricesLive = () => {
@@ -380,7 +415,7 @@ async function submitPurchase() {
     document.querySelectorAll(".pur-item-row").forEach(tr => {
         const select = tr.querySelector(".pur-item-select");
         const prodVal = select.value;
-        const qty = parseInt(tr.querySelector(".pur-item-qty").value, 10) || 0;
+        const qty = parseFloat(tr.querySelector(".pur-item-qty").value) || 0;
         const cost = parseFloat(tr.querySelector(".pur-item-cost").value) || 0;
         const retail = parseFloat(tr.querySelector(".pur-item-retail").value) || 0;
         const wholesale = parseFloat(tr.querySelector(".pur-item-wholesale").value) || 0;
@@ -413,7 +448,7 @@ async function submitPurchase() {
             const name = tr.querySelector(".new-name").value.trim();
             const sku = tr.querySelector(".new-sku").value.trim();
             const color = tr.querySelector(".new-color").value.trim() || null;
-            const size = tr.querySelector(".new-size").value.trim() || "Free Size";
+            const size = tr.querySelector(".new-size").value.trim() || "ထည်";
 
             if (!name) {
                 hasError = true;

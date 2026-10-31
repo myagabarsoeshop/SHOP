@@ -6,7 +6,7 @@ import { setKPI, getLocalTodayDate } from "../app.js";
 let entries = [];
 let categories = [];
 
-// Fallback Categories (English စာသားများ ဖယ်ရှားပြီး မြန်မာလိုသီးသန့် ပြုလုပ်ထားပါသည်)
+// Fallback Categories (အင်္ဂလိပ်စာသားများ ဖယ်ရှားပြီး မြန်မာလိုသီးသန့် ပြုလုပ်ထားပါသည်)
 const FALLBACK_CATEGORIES = [
     { id: 1, name: "အထည်ရောင်းရငွေ", type: "INCOME" },
     { id: 2, name: "အကြွေးပြန်ရငွေ", type: "INCOME" },
@@ -120,7 +120,6 @@ function renderTable(data) {
         const colorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
         const sign = isIncome ? "+" : "-";
 
-        // Inventory ကဲ့သို့ Edit နှင့် အနီရောင် Delete Icon ပါဝင်သော လုပ်ဆောင်ချက်ခလုတ်များ
         const actionButtons = canDelete ? `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-entry w-9 h-9 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
@@ -193,16 +192,24 @@ function openModal(type) {
 async function submitEntry(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-entry");
-    if (btn) btn.disabled = true;
 
     const categoryId = parseInt(document.getElementById("entry-category")?.value, 10);
     const amount = parseFloat(document.getElementById("entry-amount")?.value);
+    const description = document.getElementById("entry-desc")?.value.trim();
+
+    // အသေးစိတ် ဖော်ပြချက် (Description) မပါခဲ့လျှင် လက်မခံဘဲ သတိပေးခြင်း
+    if (!description) {
+        alert("ကျေးဇူးပြု၍ အသေးစိတ် ဖော်ပြချက် (မှတ်ချက်) ထည့်သွင်းပေးပါ");
+        document.getElementById("entry-desc")?.focus();
+        return;
+    }
 
     if (!categoryId || isNaN(amount) || amount <= 0) {
         alert("ကျေးဇူးပြု၍ ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ");
-        if (btn) btn.disabled = false;
         return;
     }
+
+    if (btn) btn.disabled = true;
 
     const payload = {
         branchId: state.currentBranch?.id || 1,
@@ -210,7 +217,7 @@ async function submitEntry(e) {
         entryType: document.getElementById("entry-type")?.value || "EXPENSE",
         paymentMethod: document.getElementById("entry-payment-method")?.value || "cash",
         amount,
-        description: document.getElementById("entry-desc")?.value.trim() || "",
+        description,
         entryDate: document.getElementById("cb-date-filter")?.value || getLocalTodayDate(),
         createdBy: state.user?.id || 1
     };

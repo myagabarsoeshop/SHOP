@@ -6,7 +6,7 @@
         
         <!-- Dual Filter Bar: Category Dropdown + Multi-Keyword Search -->
         <div class="p-4 border-b border-slate-200 dark:border-slate-700/70 flex items-center gap-3 shrink-0">
-            <!-- Category Select Dropdown (Scales to 100+ Categories) -->
+            <!-- Category Select Dropdown -->
             <div class="relative w-52 shrink-0">
                 <i class="fa-solid fa-layer-group text-emerald-500 text-sm absolute left-3.5 top-3.5 pointer-events-none"></i>
                 <select id="pos-category-select" class="w-full pl-9 pr-8 py-3 text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none">
@@ -68,16 +68,16 @@
                 </div>
             </div>
 
-            <!-- Customer Selector -->
+            <!-- Customer Selector in Cart Header -->
             <select id="pos-customer-select" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
-                <option value="">👤 အမည်မဖော်ပြထားသော ဖောက်သည် (Walk-in)</option>
+                <option value="">👤 ဖောက်သည် ရွေးချယ်ပါ (Optional)</option>
             </select>
         </div>
 
         <!-- Cart Items List -->
         <div id="pos-cart-items" class="flex-1 overflow-y-auto px-4 divide-y divide-slate-200/70 dark:divide-slate-700/60"></div>
 
-        <!-- Cart Totals & Checkout Button (No 'Ks' suffix) -->
+        <!-- Cart Totals & Checkout Button -->
         <div class="p-4 bg-slate-50 dark:bg-slate-900/70 border-t border-slate-200 dark:border-slate-700/70 space-y-2.5 shrink-0">
             <div class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300 font-bold">
                 <span>ကျသင့်ငွေ စုစုပေါင်း</span>
@@ -105,10 +105,10 @@
     </div>
 </div>
 
-<!-- 1. Checkout Payment Modal -->
+<!-- 1. Checkout Payment Modal (Enhanced with Customer Selection & Quick Create) -->
 <div id="checkout-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
-        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[92vh]">
+        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
             <div class="text-base font-bold flex items-center gap-2.5">
                 <i class="fa-solid fa-receipt text-emerald-400"></i>
                 <span>ငွေပေးချေမှု အတည်ပြုခြင်း</span>
@@ -116,52 +116,88 @@
             <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-white text-lg cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
-        <div class="p-6 space-y-5">
+        <div class="p-6 space-y-4 overflow-y-auto">
+            <!-- Due Amount Card -->
             <div class="text-center p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
                 <div class="text-xs text-emerald-600 dark:text-emerald-400 font-bold mb-1">ပေးချေရမည့် ကျသင့်ငွေ</div>
                 <div id="modal-due-amount" class="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">0</div>
             </div>
 
+            <!-- Customer Selection Section -->
+            <div class="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        <i class="fa-solid fa-user-tag text-emerald-500 mr-1"></i> ဖောက်သည် ရွေးချယ်ပါ
+                    </label>
+                    <span class="text-[11px] text-slate-400 font-bold">(အကြွေးဝယ်ပါက မဖြစ်မနေ လိုအပ်သည်)</span>
+                </div>
+                <select id="modal-customer-select" class="w-full text-sm font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                    <!-- Loaded dynamically in pos.js -->
+                </select>
+
+                <!-- Quick Create New Customer Inline Form -->
+                <div id="modal-new-customer-box" class="hidden space-y-2 p-3 bg-white dark:bg-slate-900/90 rounded-xl border border-emerald-500/30">
+                    <div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-plus"></i> ဖောက်သည်အသစ် အချက်အလက်
+                    </div>
+                    <input type="text" id="modal-new-cust-name" placeholder="ဖောက်သည် အမည် *" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="modal-new-cust-phone" placeholder="ဖုန်းနံပါတ် (09...)" class="text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <input type="text" id="modal-new-cust-shop" placeholder="ဆိုင်အမည် / လိပ်စာ" class="text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Methods -->
             <div>
-                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">ငွေပေးချေသည့် နည်းလမ်း</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">ငွေပေးချေသည့် နည်းလမ်း</label>
                 <div class="grid grid-cols-3 gap-2.5">
-                    <button type="button" data-method="cash" class="method-btn active p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-money-bill-1-wave text-lg"></i>
+                    <button type="button" data-method="cash" class="method-btn active p-3 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-money-bill-1-wave text-base"></i>
                         <span>ငွေသား</span>
                     </button>
-                    <button type="button" data-method="bank" class="method-btn p-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-building-columns text-lg"></i>
+                    <button type="button" data-method="bank" class="method-btn p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-building-columns text-base"></i>
                         <span>KPay / ဘဏ်</span>
                     </button>
-                    <button type="button" data-method="credit" class="method-btn p-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
+                    <button type="button" data-method="credit" class="method-btn p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold flex flex-col items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-hand-holding-dollar text-base"></i>
                         <span>အကြွေး</span>
                     </button>
                 </div>
             </div>
 
+            <!-- Bank Selection -->
             <div id="bank-input-group" class="hidden">
-                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">ဘဏ် / Mobile Pay အမည်</label>
-                <select id="modal-bank-name" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ဘဏ် / Mobile Pay အမည်</label>
+                <select id="modal-bank-name" class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-3.5 py-2.5">
                     <option value="KBZPay">KBZPay (KPay)</option>
                     <option value="WavePay">WavePay</option>
                     <option value="KBZ Bank">KBZ Bank</option>
                     <option value="CB Bank">CB Bank</option>
                     <option value="AYA Bank">AYA Bank</option>
+                    <option value="A Bank">A Bank</option>
+                    <option value="UAB Bank">UAB Bank</option>
                 </select>
             </div>
 
+            <!-- Paid Amount Input (Always Editable) -->
             <div>
-                <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">လက်ခံရရှိငွေ (Paid Amount)</label>
-                <input type="number" id="modal-paid-amount" step="any" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500">
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">လက်ခံရရှိငွေ (Paid Amount)</label>
+                    <span class="text-[11px] text-slate-400 font-bold">စရန်ငွေ (သို့) အပြည့်ပေးငွေ ရိုက်ပါ</span>
+                </div>
+                <input type="number" id="modal-paid-amount" step="any" placeholder="0" class="w-full text-xl font-mono font-black bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
+            <!-- Change / Remaining Debt Status Box -->
             <div id="modal-debt-change-box" class="p-3.5 rounded-xl text-sm flex justify-between font-bold bg-slate-100 dark:bg-slate-800">
-                <span id="modal-change-label">ပြန်အမ်းငွေ / အကြွေးကျန်:</span>
-                <span id="modal-change-text" class="font-mono text-base font-black">0</span>
+                <span id="modal-change-label">အခြေအနေ:</span>
+                <span id="modal-change-text" class="font-mono text-base font-black">0 Ks</span>
             </div>
 
-            <button type="button" id="btn-confirm-sale" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
+            <!-- Confirm Button -->
+            <button type="button" id="btn-confirm-sale" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-base rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fa-solid fa-check"></i>
                 <span>အရောင်း အတည်ပြုပြီး ဘောင်ချာထုတ်မည်</span>
             </button>
@@ -206,7 +242,7 @@
                     <span>ပေးချေရမည့်ငွေ:</span> <span id="rcp-final" class="font-mono">0</span>
                 </div>
                 <div class="flex justify-between"><span>ပေးငွေ:</span> <span id="rcp-paid" class="font-mono font-bold">0</span></div>
-                <div class="flex justify-between"><span id="rcp-change-label">ပြန်အမ်းငွေ:</span> <span id="rcp-change" class="font-mono font-bold">0</span></div>
+                <div class="flex justify-between"><span id="rcp-change-label">ပြန်အမ်းငွေ / အကြွေးကျန်:</span> <span id="rcp-change" class="font-mono font-bold">0</span></div>
             </div>
 
             <div class="text-center pt-3 border-t border-dashed border-slate-400 text-[11px] font-bold">

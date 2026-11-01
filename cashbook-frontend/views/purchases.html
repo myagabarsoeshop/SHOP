@@ -127,7 +127,7 @@
                     </div>
                     <button type="button" id="btn-open-create-prod-modal" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-600 hover:text-white text-blue-600 dark:text-blue-400 font-bold text-xs rounded-xl border border-blue-500/30 transition cursor-pointer flex items-center gap-1.5 shadow-sm">
                         <i class="fa-solid fa-plus-circle"></i>
-                        <span>ပစ္စည်းအမည်အသစ် စာရင်းသွင်းမည်</span>
+                        <span>ပစ္စည်းအမည်သစ် စာရင်းသွင်းမည်</span>
                     </button>
                 </div>
 
@@ -217,14 +217,14 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Dedicated Create Product Sub-Modal (Independent, Doesn't break UI)    -->
+<!-- Dedicated Create Product Sub-Modal (Fixed Inline z-index: 70)       -->
 <!-- ===================================================================== -->
-<div id="new-prod-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-60 p-4">
+<div id="new-prod-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" style="z-index: 70;">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
         <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
             <span class="text-sm font-bold flex items-center gap-2">
                 <i class="fa-solid fa-sparkles text-emerald-400"></i>
-                <span>ပစ္စည်းအမည်အသစ် စာရင်းသွင်းမည်</span>
+                <span>ပစ္စည်းအမည်သစ် စာရင်းသွင်းမည်</span>
             </span>
             <button type="button" id="btn-close-new-prod-modal" class="text-slate-400 hover:text-white cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -267,7 +267,7 @@
                 </div>
             </div>
             <div class="pt-2">
-                <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition cursor-pointer">
+                <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20">
                     စာရင်းထဲသို့ ပေါင်းထည့်မည်
                 </button>
             </div>

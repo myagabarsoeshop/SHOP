@@ -71,7 +71,7 @@ export default {
             }
 
             // =================================================================
-            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Resend API with Excel/CSV Attachment)
+            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Multi-Sheet Excel Workbook)
             // =================================================================
             if (path === "/api/system/send-report-email" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
@@ -86,11 +86,16 @@ export default {
                     return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
                 }
 
-                // ၁။ D1 Database မှ သက်ဆိုင်ရာ နှစ်အတွက် Products နှင့် လအလိုက် စတော့အချက်အလက်များ ဆွဲယူခြင်း
+                // -------------------------------------------------------------
+                // ၁။ D1 Database Tables များမှ အချက်အလက်များ ဆွဲယူခြင်း
+                // -------------------------------------------------------------
+                
+                // (A) Products & Stock Valuation
                 const { results: products } = await env.DB.prepare(`
-                    SELECT 
-                        p.id, p.sku, p.category, p.item_name, p.cost_price,
-                        COALESCE(SUM(bi.quantity), 0) AS current_balance
+                    SELECT p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color,
+                           p.cost_price, p.retail_price, p.wholesale_price,
+                           COALESCE(SUM(bi.quantity), 0) AS total_stock,
+                           (COALESCE(SUM(bi.quantity), 0) * p.cost_price) AS total_value
                     FROM products p
                     LEFT JOIN branch_inventory bi ON p.id = bi.product_id
                     WHERE p.is_active = 1
@@ -98,116 +103,174 @@ export default {
                     ORDER BY p.category ASC, p.item_name ASC
                 `).all();
 
-                // အဝယ် (Purchases)
-                const { results: purchases } = await env.DB.prepare(`
-                    SELECT pi.product_id, CAST(strftime('%m', p.created_at) AS INTEGER) AS m, SUM(pi.quantity) AS qty
-                    FROM purchase_items pi
-                    JOIN purchases p ON pi.purchase_id = p.id
-                    WHERE strftime('%Y', p.created_at) = ?
-                    GROUP BY pi.product_id, m
-                `).bind(targetYear).all();
-
-                // အရောင်း (Sales)
+                // (B) Sales (အရောင်းဘောင်ချာများ)
                 const { results: sales } = await env.DB.prepare(`
-                    SELECT si.product_id, CAST(strftime('%m', s.created_at) AS INTEGER) AS m, SUM(si.quantity) AS qty
-                    FROM sale_items si
-                    JOIN sales s ON si.sale_id = s.id
+                    SELECT s.invoice_no, b.name AS branch_name, COALESCE(c.name, 'Walk-in') AS customer_name,
+                           s.sale_type, s.payment_method, s.total_amount, s.discount_amount,
+                           s.final_amount, s.paid_amount, s.debt_amount, s.created_at
+                    FROM sales s
+                    LEFT JOIN branches b ON s.branch_id = b.id
+                    LEFT JOIN customers c ON s.customer_id = c.id
                     WHERE strftime('%Y', s.created_at) = ?
-                    GROUP BY si.product_id, m
+                    ORDER BY s.id DESC LIMIT 2000
                 `).bind(targetYear).all();
 
-                // အလေအလွင့်/ပျက်စီး (Waste)
+                // (C) Cashbook (ငွေဝင်/ငွေထွက် နေ့စဉ်စာရင်း)
+                const { results: cashbook } = await env.DB.prepare(`
+                    SELECT ce.entry_date, b.name AS branch_name, cc.name AS category_name,
+                           ce.entry_type, ce.payment_method, ce.bank_account_name,
+                           ce.amount, ce.description
+                    FROM cashbook_entries ce
+                    LEFT JOIN branches b ON ce.branch_id = b.id
+                    LEFT JOIN cash_categories cc ON ce.category_id = cc.id
+                    WHERE strftime('%Y', ce.entry_date) = ?
+                    ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 3000
+                `).bind(targetYear).all();
+
+                // (D) Customers & Debt (ဖောက်သည်နှင့် အကြွေးကျန်)
+                const { results: customers } = await env.DB.prepare(`
+                    SELECT name, phone, shop_name, customer_type, credit_limit, current_debt, address
+                    FROM customers
+                    WHERE is_active = 1
+                    ORDER BY current_debt DESC, name ASC
+                `).all();
+
+                // (E) Purchases (အဝယ်စာရင်း)
+                const { results: purchases } = await env.DB.prepare(`
+                    SELECT p.purchase_no, b.name AS branch_name, p.supplier_name,
+                           p.payment_method, p.total_amount, p.status, p.created_at
+                    FROM purchases p
+                    LEFT JOIN branches b ON p.branch_id = b.id
+                    WHERE strftime('%Y', p.created_at) = ?
+                    ORDER BY p.id DESC LIMIT 1000
+                `).bind(targetYear).all();
+
+                // (F) Yarn Stock & Issues (ချည်စတိုနှင့် ရက်ကန်းထုတ်ပေးမှု)
+                const { results: yarns } = await env.DB.prepare(`
+                    SELECT p.sku, p.item_name, p.color, p.size AS unit, p.cost_price,
+                           COALESCE(SUM(bi.quantity), 0) AS current_stock
+                    FROM products p
+                    LEFT JOIN branch_inventory bi ON p.id = bi.product_id
+                    WHERE p.is_active = 1 AND (p.category = 'ချည်' OR p.category LIKE 'ချည်%')
+                    GROUP BY p.id
+                    ORDER BY p.id DESC
+                `).all();
+
+                // (G) Waste & Damage (ပျက်စီးအလေအလွင့်)
                 let waste = [];
                 try {
                     const resW = await env.DB.prepare(`
-                        SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
-                        FROM waste_logs
-                        WHERE strftime('%Y', created_at) = ?
-                        GROUP BY product_id, m
+                        SELECT w.reference_no, b.name AS branch_name, p.item_name, p.sku,
+                               w.quantity, w.unit_cost, (w.quantity * w.unit_cost) AS total_loss,
+                               w.reason, w.created_at
+                        FROM waste_logs w
+                        LEFT JOIN branches b ON w.branch_id = b.id
+                        LEFT JOIN products p ON w.product_id = p.id
+                        WHERE strftime('%Y', w.created_at) = ?
+                        ORDER BY w.id DESC
                     `).bind(targetYear).all();
                     waste = resW.results || [];
                 } catch (e) {
                     waste = [];
                 }
 
-                // ၂။ Excel တွင် မြန်မာစာ မှန်ကန်စွာဖတ်နိုင်ရန် UTF-8 BOM ဖြင့် CSV ဖိုင် တည်ဆောက်ခြင်း
-                const MONTH_KEYS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                let csvContent = "\uFEFF"; // UTF-8 BOM for Microsoft Excel
-                csvContent += `စဉ်,အမျိုးအစား,ပစ္စည်းအမည်,SKU,${MONTH_KEYS.map(m => `${m} ${targetYear.slice(-2)}`).join(",")},စုစုပေါင်းအဝင်,စုစုပေါင်းအထွက်,လက်ရှိလက်ကျန်,အရင်းဈေး,စတော့တန်ဖိုး (ကျပ်)\n`;
-
-                let grandTotalStock = 0;
-                let grandTotalValuation = 0;
-                let grandTotalIn = 0;
-                let grandTotalOut = 0;
-
-                (products || []).forEach((prod, index) => {
-                    const pid = prod.id;
-                    const inMap = {};
-                    const outMap = {};
-
-                    purchases.filter(r => r.product_id === pid).forEach(r => {
-                        inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
+                // -------------------------------------------------------------
+                // ၂။ Excel Multi-Sheet XML (SpreadsheetML) တည်ဆောက်ခြင်း
+                // -------------------------------------------------------------
+                const cleanXml = (val) => String(val ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                
+                const buildSheet = (sheetName, headers, rows) => {
+                    let xml = `<Worksheet ss:Name="${cleanXml(sheetName)}"><Table>`;
+                    // Header Row
+                    xml += `<Row ss:StyleID="Header">`;
+                    headers.forEach(h => {
+                        xml += `<Cell><Data ss:Type="String">${cleanXml(h)}</Data></Cell>`;
                     });
-
-                    sales.filter(r => r.product_id === pid).forEach(r => {
-                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
+                    xml += `</Row>`;
+                    // Data Rows
+                    rows.forEach(r => {
+                        xml += `<Row>`;
+                        r.forEach(c => {
+                            const isNum = typeof c === 'number' || (!isNaN(c) && c !== "" && typeof c !== 'string');
+                            const type = isNum ? "Number" : "String";
+                            xml += `<Cell><Data ss:Type="${type}">${cleanXml(c)}</Data></Cell>`;
+                        });
+                        xml += `</Row>`;
                     });
+                    xml += `</Table></Worksheet>`;
+                    return xml;
+                };
 
-                    waste.filter(r => r.product_id === pid).forEach(r => {
-                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
-                    });
+                let workbookXml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#064E3B" ss:Pattern="Solid"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+  </Style>
+ </Styles>
+`;
 
-                    let totalIn = 0;
-                    let totalOut = 0;
-                    for (let m = 1; m <= 12; m++) {
-                        totalIn += (inMap[m] || 0);
-                        totalOut += (outMap[m] || 0);
-                    }
+                // Sheet 1: Products & Stock
+                workbookXml += buildSheet("Products (အထည်နှင့်စတော့)", 
+                    ["ID", "SKU", "အမျိုးအစား", "ပစ္စည်းအမည်", "ဒီဇိုင်း/အဆင်", "ဆိုဒ်", "အရောင်", "အရင်းဈေး", "လက်လီဈေး", "လက်ကားဈေး", "လက်ကျန်အရေအတွက်", "စုစုပေါင်းတန်ဖိုး (Ks)"],
+                    (products || []).map(p => [p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color, p.cost_price, p.retail_price, p.wholesale_price, p.total_stock, p.total_value])
+                );
 
-                    const monthlyBalances = {};
-                    let running = Number(prod.current_balance || 0);
-                    for (let m = 12; m >= 1; m--) {
-                        monthlyBalances[m] = Math.max(0, running);
-                        running = running - (inMap[m] || 0) + (outMap[m] || 0);
-                    }
+                // Sheet 2: Sales Invoices
+                workbookXml += buildSheet("Sales (အရောင်းစာရင်း)", 
+                    ["ဘောင်ချာအမှတ်", "ဆိုင်ခွဲ", "ဖောက်သည်", "အရောင်းအမျိုးအစား", "ငွေပေးချေမှု", "စုစုပေါင်း", "လျှော့ဈေး", "ကျသင့်ငွေ", "ပေးချေငွေ", "အကြွေးကျန်", "ရက်စွဲ"],
+                    (sales || []).map(s => [s.invoice_no, s.branch_name, s.customer_name, s.sale_type, s.payment_method, s.total_amount, s.discount_amount, s.final_amount, s.paid_amount, s.debt_amount, s.created_at])
+                );
 
-                    const curBal = Number(prod.current_balance || 0);
-                    const cost = Number(prod.cost_price || 0);
-                    const val = curBal * cost;
+                // Sheet 3: Cashbook Entries
+                workbookXml += buildSheet("Cashbook (ငွေစာရင်း)", 
+                    ["ရက်စွဲ", "ဆိုင်ခွဲ", "ခေါင်းစဉ်", "အမျိုးအစား (IN/OUT)", "ငွေပေးချေမှု", "ဘဏ်အကောင့်", "ပမာဏ (Ks)", "အကြောင်းအရာ"],
+                    (cashbook || []).map(c => [c.entry_date, c.branch_name, c.category_name, c.entry_type, c.payment_method, c.bank_account_name, c.amount, c.description])
+                );
 
-                    grandTotalStock += curBal;
-                    grandTotalValuation += val;
-                    grandTotalIn += totalIn;
-                    grandTotalOut += totalOut;
+                // Sheet 4: Customers & Debt
+                workbookXml += buildSheet("Customers (ဖောက်သည်နှင့်အကြွေး)", 
+                    ["အမည်", "ဖုန်းနံပါတ်", "ဆိုင်အမည်", "အမျိုးအစား", "အကြွေးကန့်သတ်ချက်", "လက်ရှိပေးရန်ကျန်ငွေ (Ks)", "လိပ်စာ"],
+                    (customers || []).map(c => [c.name, c.phone, c.shop_name, c.customer_type, c.credit_limit, c.current_debt, c.address])
+                );
 
-                    const rowValues = [
-                        index + 1,
-                        `"${String(prod.category || '').replace(/"/g, '""')}"`,
-                        `"${String(prod.item_name || '').replace(/"/g, '""')}"`,
-                        `"${String(prod.sku || '').replace(/"/g, '""')}"`,
-                        ...Array.from({ length: 12 }, (_, i) => monthlyBalances[i + 1] || 0),
-                        totalIn,
-                        totalOut,
-                        curBal,
-                        cost,
-                        val
-                    ];
+                // Sheet 5: Purchases
+                workbookXml += buildSheet("Purchases (အဝယ်စာရင်း)", 
+                    ["အဝယ်အမှတ်", "ဆိုင်ခွဲ", "ကုန်သည်/ဆိုင်အမည်", "ငွေပေးချေမှု", "စုစုပေါင်းကျသင့်ငွေ (Ks)", "အခြေအနေ", "ရက်စွဲ"],
+                    (purchases || []).map(p => [p.purchase_no, p.branch_name, p.supplier_name, p.payment_method, p.total_amount, p.status, p.created_at])
+                );
 
-                    csvContent += rowValues.join(",") + "\n";
-                });
+                // Sheet 6: Yarn Production
+                workbookXml += buildSheet("Yarn (ချည်စတို)", 
+                    ["ကုတ်", "ချည်အမည်", "အရောင်", "ယူနစ်", "အရင်းဈေး", "လက်ကျန်စတော့"],
+                    (yarns || []).map(y => [y.sku, y.item_name, y.color, y.unit, y.cost_price, y.current_stock])
+                );
 
-                // Total Summary Row
-                csvContent += `စုစုပေါင်း,"-","-","-",${Array(12).fill("-").join(",")},${grandTotalIn},${grandTotalOut},${grandTotalStock},-,${grandTotalValuation}\n`;
+                // Sheet 7: Waste & Loss
+                workbookXml += buildSheet("Waste (ပျက်စီးဆုံးရှုံးမှု)", 
+                    ["မှတ်တမ်းအမှတ်", "ဆိုင်ခွဲ", "ပစ္စည်းအမည်", "SKU", "ပျက်စီးအရေအတွက်", "တစ်ခုအရင်း", "ဆုံးရှုံးမှုတန်ဖိုး (Ks)", "အကြောင်းရင်း", "ရက်စွဲ"],
+                    (waste || []).map(w => [w.reference_no, w.branch_name, w.item_name, w.sku, w.quantity, w.unit_cost, w.total_loss, w.reason, w.created_at])
+                );
 
-                // ၃။ CSV Text ကို Base64 အဖြစ် ပြောင်းလဲခြင်း
-                const utf8Bytes = new TextEncoder().encode(csvContent);
+                workbookXml += `</Workbook>`;
+
+                // -------------------------------------------------------------
+                // ၃။ Base64 Encoding & Email Dispatching
+                // -------------------------------------------------------------
+                const utf8Bytes = new TextEncoder().encode(workbookXml);
                 let binaryStr = "";
-                for (let i = 0; i < utf8Bytes.length; i++) {
-                    binaryStr += String.fromCharCode(utf8Bytes[i]);
+                const chunkSize = 8192;
+                for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+                    binaryStr += String.fromCharCode.apply(null, utf8Bytes.subarray(i, i + chunkSize));
                 }
-                const base64Csv = btoa(binaryStr);
+                const base64Excel = btoa(binaryStr);
 
-                // ၄။ Resend API သို့ Attached ဖိုင်နှင့်တကွ အီးမေးလ် ပေးပို့ခြင်း
                 const resendResponse = await fetch("https://api.resend.com/emails", {
                     method: "POST",
                     headers: {
@@ -217,50 +280,42 @@ export default {
                     body: JSON.stringify({
                         from: "Garment ERP <onboarding@resend.dev>",
                         to: [targetEmail],
-                        subject: `မြကမ္ဘာစိုး ပိုးထည်တိုက် - စတော့နှင့် ဘဏ္ဍာရေး အစီရင်ခံစာ (${targetYear})`,
+                        subject: `မြကမ္ဘာစိုး ပိုးထည်တိုက် - All-in-One Database Backup Report (${targetYear})`,
                         html: `
                             <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; background-color: #f8fafc; border-radius: 12px; max-width: 650px; margin: auto;">
                                 <div style="border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px;">
                                     <h2 style="color: #064e3b; margin: 0; font-size: 22px;">မြကမ္ဘာစိုး ပိုးထည်တိုက် (GARMENT ERP)</h2>
-                                    <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Executive Financial & Stock Movement Report</p>
+                                    <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Comprehensive Cloudflare D1 Multi-Sheet Backup</p>
                                 </div>
                                 <p style="font-size: 14px; line-height: 1.6;">မင်္ဂလာပါရှင်၊</p>
                                 <p style="font-size: 14px; line-height: 1.6;">
-                                    Cloudflare D1 Database စနစ်မှ ထုတ်ယူထားသော <b>${targetYear} ခုနှစ်</b> အတွက် ကုန်လက်ကျန်နှင့် စတော့လှုပ်ရှားမှု စာရင်းချုပ် ဖြစ်ပါသည်။
+                                    <b>${targetYear} ခုနှစ်</b> အတွက် Cloudflare D1 Database စနစ်တစ်ခုလုံး၏ ဇယားများကို သက်ဆိုင်ရာ Sheet အသီးသီးဖြင့် ပူးတွဲတင်ပြအပ်ပါသည်။
                                 </p>
                                 <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-                                    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-                                        <tr>
-                                            <td style="padding: 8px 0; color: #475569;">လက်ရှိ စုစုပေါင်း လက်ကျန်:</td>
-                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #2563eb;">${grandTotalStock.toLocaleString()} ထည်</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 8px 0; color: #475569;">စုစုပေါင်း စတော့တန်ဖိုး:</td>
-                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #d97706;">${grandTotalValuation.toLocaleString()} ကျပ်</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 8px 0; color: #475569;">ယခုနှစ် စုစုပေါင်း အဝင်:</td>
-                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #059669;">+${grandTotalIn.toLocaleString()}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 8px 0; color: #475569;">ယခုနှစ် စုစုပေါင်း အထွက်:</td>
-                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #e11d48;">-${grandTotalOut.toLocaleString()}</td>
-                                        </tr>
-                                    </table>
+                                    <h4 style="margin: 0 0 10px 0; color: #064e3b; font-size: 14px;">ပါဝင်သော Excel Sheet (Tabs) များ -</h4>
+                                    <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.8;">
+                                        <li><b>Products:</b> ကုန်ပစ္စည်းနှင့် ဆိုင်ခွဲလက်ကျန် စတော့တန်ဖိုးများ</li>
+                                        <li><b>Sales:</b> အရောင်းဘောင်ချာများနှင့် ရောင်းရငွေစာရင်းများ</li>
+                                        <li><b>Cashbook:</b> နေ့စဉ် ဝင်ငွေ/ထွက်ငွေ နှင့် ဘဏ်/ငွေသားစာရင်းများ</li>
+                                        <li><b>Customers:</b> ဖောက်သည်များနှင့် လက်ရှိရရန်ကျန် အကြွေးစာရင်းများ</li>
+                                        <li><b>Purchases:</b> ပြင်ပမှ အထည်နှင့် ကုန်ကြမ်း ဝယ်ယူမှုမှတ်တမ်းများ</li>
+                                        <li><b>Yarn:</b> ချည်စတို လက်ကျန်စာရင်းများ</li>
+                                        <li><b>Waste:</b> ချည်နှင့် အထည် ပျက်စီးဆုံးရှုံးမှု မှတ်တမ်းများ</li>
+                                    </ul>
                                 </div>
                                 <p style="font-size: 13px; color: #334155;">
-                                    📎 အသေးစိတ် လအလိုက် ကုန်လက်ကျန်ဇယား အပြည့်အစုံကို ပူးတွဲပါ <b>Stock_Movement_Report_${targetYear}.csv</b> (Excel ဖြင့် ဖွင့်နိုင်သည်) ဖိုင်တွင် ကြည့်ရှုနိုင်ပါသည်။
+                                    📎 ပူးတွဲပါ <b>Garment_ERP_Full_Backup_${targetYear}.xls</b> ဖိုင်ကို Microsoft Excel သို့မဟုတ် Google Sheets ဖြင့် တိုက်ရိုက် ဖွင့်လှစ်ကြည့်ရှုနိုင်ပါသည်။
                                 </p>
                                 <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0 16px 0;" />
                                 <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
-                                    ဤအီးမေးလ်သည် Cloudflare Workers & D1 Engine မှ အလိုအလျောက် ပေးပို့သော စနစ်သုံး အီးမေးလ် ဖြစ်ပါသည်။
+                                    ဤအီးမေးလ်သည် Cloudflare Workers & D1 Engine မှ အလိုအလျောက် ပေးပို့သော စနစ်သုံး အစီရင်ခံစာ ဖြစ်ပါသည်။
                                 </p>
                             </div>
                         `,
                         attachments: [
                             {
-                                filename: `Stock_Movement_Report_${targetYear}.csv`,
-                                content: base64Csv
+                                filename: `Garment_ERP_Full_Backup_${targetYear}.xls`,
+                                content: base64Excel
                             }
                         ]
                     })
@@ -272,9 +327,8 @@ export default {
                     return errorResponse(resendData.message || "Failed to send email via Resend", 500);
                 }
 
-                return jsonResponse({ success: true, message: "Email with attachment sent successfully", data: resendData });
+                return jsonResponse({ success: true, message: "Multi-sheet Excel report sent successfully", data: resendData });
             }
-
             // =================================================================
             // 2. AUTH LOGIN
             // =================================================================

@@ -1,13 +1,13 @@
 <!-- cashbook-frontend/views/cashbook.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar (KPI Card 1 နှင့် အကျယ် အတိအကျ ချိန်ညှိထားပါသည်) -->
-    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <!-- Top Filter & Action Toolbar (KPI ကတ်များနှင့် ဒေါင်လိုက်လိုင်း အတိအကျ တန်းညီစေရန် ချိန်ညှိထားပါသည်) -->
+    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း ညီညာစွာထားရှိခြင်း) နှင့် Calendar -->
-        <div class="flex items-center gap-3 flex-1 min-w-[320px]">
-            <!-- Search Box: Screen ကြီးချိန်တွင် ပထမ KPI Card ၏ အကျယ်အတိုင်း တိကျစေရန် w-full sm:w-[280px] lg:w-[calc(25%-12px)] ထားရှိပါသည် -->
-            <div class="relative w-full sm:w-[280px] lg:w-[calc(25%-12px)] shrink-0">
+        <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း တိကျစွာ တန်းညှိခြင်း) နှင့် Calendar -->
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+            <!-- Search Box: အပေါ်က KPI Card 1 ၏ ညာဘက်အနားသတ်လိုင်းအတိုင်း အတိအကျ ကျစေရန် တွက်ချက်ထားပါသည် -->
+            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 250px;">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="cb-search" placeholder="ခေါင်းစဉ်၊ ဘောင်ချာ သို့မဟုတ် အကြောင်းအရာ ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
@@ -49,7 +49,6 @@
     <!-- Entries Table Container -->
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
         <table class="w-full text-left border-collapse min-w-[1100px]">
-            <!-- Table Head (REF ကော်လံအား w-44 သို့ ချဲ့ထားပါသည်) -->
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-12">
                     <th class="py-3 px-3 w-14 text-center">NO</th>
@@ -60,7 +59,6 @@
                     <th class="py-3 px-3 w-24 text-center">METHOD</th>
                     <th class="py-3 px-4 w-36 text-right">AMOUNT</th>
                     <th class="py-3 px-4 w-44 text-center">REF</th>
-                    <!-- Sticky Right Action Column Header -->
                     <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>

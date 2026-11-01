@@ -2,15 +2,16 @@
 
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js";
 import { refreshGlobalKPIs, setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let allProducts = [];
 let cart = []; // Each item: { product, quantity, unitPrice, costPrice, itemSaleType: 'retail' | 'wholesale' }
-let defaultSaleType = "retail"; // Default for newly added items
+let defaultSaleType = "retail";
 let selectedPaymentMethod = "cash";
 let allCustomers = [];
-let isEventsBound = false; // SPA Re-render Safety flag
+let isEventsBound = false;
 
 // Today Sales State
 let todaySalesList = [];
@@ -40,13 +41,11 @@ function getLocalBusinessDate() {
 }
 
 export async function initPOS() {
-    // Prevent duplicate event bindings when navigating back to POS
     if (!isEventsBound) {
         bindEvents();
         isEventsBound = true;
     }
     
-    // Clear state safely on fresh init
     cart = [];
     defaultSaleType = "retail";
     
@@ -73,6 +72,7 @@ async function loadProducts() {
         filterAndRenderProducts();
     } catch (err) {
         console.error("Failed to load products:", err);
+        ui.toast.error("ကုန်ပစ္စည်းများ ဆွဲယူ၍မရပါ");
     } finally {
         loading?.classList.add("hidden");
     }
@@ -158,7 +158,7 @@ function renderProductsGrid(products) {
         const unit = p.size || 'ထည်';
 
         const card = document.createElement("div");
-        card.className = `bg-white dark:bg-slate-900/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-40 pointer-events-none' : ''}`;
+        card.className = `product-card bg-white dark:bg-slate-900/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? 'opacity-40 pointer-events-none' : ''}`;
         
         card.innerHTML = `
             <div>
@@ -195,13 +195,13 @@ function addToCart(product) {
 
     if (existing) {
         if (existing.quantity >= availableStock) {
-            alert(`လက်ကျန်စတော့ မလုံလောက်ပါ။ (${availableStock} ${product.size || 'ထည်'} သာ ကျန်ပါသည်)`);
+            ui.toast.warning(`လက်ကျန်စတော့ မလုံလောက်ပါ။ (${availableStock} ${product.size || 'ထည်'} သာ ကျန်ပါသည်)`);
             return;
         }
         existing.quantity += 1;
     } else {
         if (availableStock <= 0) {
-            alert("ပစ္စည်းလက်ကျန် ပြတ်လပ်နေပါသဖြင့် ရောင်းချ၍မရပါ။");
+            ui.toast.warning("ပစ္စည်းလက်ကျန် ပြတ်လပ်နေပါသဖြင့် ရောင်းချ၍မရပါ။");
             return;
         }
         const initialType = defaultSaleType;
@@ -218,9 +218,6 @@ function addToCart(product) {
     renderCart();
 }
 
-/**
- * Toggle individual item in cart between Retail and Wholesale
- */
 function toggleCartItemPriceType(index) {
     const item = cart[index];
     if (!item) return;
@@ -269,7 +266,7 @@ function renderCart() {
         const isWholesale = item.itemSaleType === "wholesale";
 
         const row = document.createElement("div");
-        row.className = "py-3 flex items-center justify-between gap-2.5";
+        row.className = "py-3 flex items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800/60 last:border-0";
         row.innerHTML = `
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 mb-0.5">
@@ -308,7 +305,6 @@ function renderCart() {
     if (finalTotalEl) finalTotalEl.textContent = `${finalTotal.toLocaleString()} Ks`;
     if (checkoutBtn) checkoutBtn.disabled = false;
 
-    // Attach Row Listeners
     container.querySelectorAll(".btn-toggle-price-type").forEach(btn => {
         btn.onclick = () => toggleCartItemPriceType(Number(btn.dataset.idx));
     });
@@ -318,7 +314,7 @@ function renderCart() {
             const idx = Number(btn.dataset.idx);
             const max = parseInt(btn.dataset.max, 10);
             if (cart[idx].quantity >= max) {
-                alert(`လက်ကျန်စတော့ (${max}) ထက် ပိုမိုရောင်းချ၍ မရပါ။`);
+                ui.toast.warning(`လက်ကျန်စတော့ (${max}) ထက် ပိုမိုရောင်းချ၍ မရပါ။`);
                 return;
             }
             cart[idx].quantity += 1; 
@@ -369,12 +365,14 @@ function bindEvents() {
     }
 
     if (clearCartBtn) {
-        clearCartBtn.onclick = () => {
+        clearCartBtn.onclick = async () => {
             if (cart.length === 0) return;
-            if (confirm("ခြင်းတောင်းထဲရှိ ရွေးချယ်ထားသော ပစ္စည်းများ အားလုံးကို ရှင်းလင်းလိုပါသလား?")) {
+            const confirmed = await ui.confirm("ခြင်းတောင်းထဲရှိ ရွေးချယ်ထားသော ပစ္စည်းများ အားလုံးကို ရှင်းလင်းလိုပါသလား?", "warning");
+            if (confirmed) {
                 cart = [];
                 if (discountInput) discountInput.value = 0;
                 renderCart();
+                ui.toast.info("ခြင်းတောင်းအား ရှင်းလင်းပြီးပါပြီ");
             }
         };
     }
@@ -582,7 +580,7 @@ async function submitSale() {
         const newShop = document.getElementById("modal-new-cust-shop")?.value.trim() || null;
 
         if (!newName) {
-            alert("ဖောက်သည်အသစ်အတွက် အမည် ဖြည့်သွင်းပေးပါ။");
+            ui.toast.warning("ဖောက်သည်အသစ်အတွက် အမည် ဖြည့်သွင်းပေးပါ။");
             document.getElementById("modal-new-cust-name")?.focus();
             return;
         }
@@ -599,7 +597,7 @@ async function submitSale() {
             customerDisplayName = newName;
             await loadCustomers();
         } catch (e) {
-            alert("ဖောက်သည်အသစ် သိမ်းဆည်း၍မရပါ: " + e.message);
+            ui.toast.error("ဖောက်သည်အသစ် သိမ်းဆည်း၍မရပါ: " + e.message);
             return;
         }
     } else if (customerSelectVal) {
@@ -609,14 +607,14 @@ async function submitSale() {
     }
 
     if (remainingDebt > 0 && !customerId) {
-        alert("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ကျေးဇူးပြု၍ ဖောက်သည် (Customer) ရွေးချယ်ပေးပါ (သို့မဟုတ် အသစ်ထည့်ပါ)။");
+        ui.toast.warning("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ကျေးဇူးပြု၍ ဖောက်သည် (Customer) ရွေးချယ်ပေးပါ (သို့မဟုတ် အသစ်ထည့်ပါ)။");
         document.getElementById("modal-customer-select")?.focus();
         return;
     }
 
     const bankName = document.getElementById("modal-bank-name")?.value.trim();
     if (selectedPaymentMethod === "bank" && paidAmount > 0 && !bankName) {
-        alert("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ထည့်သွင်းပေးပါ။");
+        ui.toast.warning("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ထည့်သွင်းပေးပါ။");
         document.getElementById("modal-bank-name")?.focus();
         return;
     }
@@ -630,11 +628,10 @@ async function submitSale() {
     try {
         const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
         const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
-
         const actualPaid = Math.min(paidAmount, finalTotal);
+
         let pCash = 0;
         let pBank = 0;
-
         if (selectedPaymentMethod === "cash") {
             pCash = actualPaid;
         } else if (selectedPaymentMethod === "bank") {
@@ -659,13 +656,13 @@ async function submitSale() {
             paymentMethod: selectedPaymentMethod,
             cashAmount: pCash,
             bankAmount: pBank,
-            bankAccountName: pBank > 0 ? (bankName || "KPay") : null,
-            createdBy: state.user?.id || 1
+            bankAccountName: pBank > 0 ? (bankName || "KPay") : null
         };
 
         const res = await api.post("/pos/sales", payload);
         if (res.success) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
+            ui.toast.success("အရောင်းဘောင်ချာ အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ");
             
             showReceiptModal({
                 invoiceNo: res.data?.invoiceNo || `INV-${Date.now()}`,
@@ -692,7 +689,7 @@ async function submitSale() {
             await refreshGlobalKPIs();
         }
     } catch (err) {
-        alert(`အရောင်းမှတ်တမ်း မအောင်မြင်ပါ: ${err.message}`);
+        ui.toast.error(`အရောင်းမှတ်တမ်း မအောင်မြင်ပါ: ${err.message}`);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -919,7 +916,7 @@ function renderTodaySalesTable() {
 function exportTodaySalesToCSV() {
     const dataToExport = currentFilteredTodaySales.length > 0 ? currentFilteredTodaySales : todaySalesList;
     if (dataToExport.length === 0) {
-        return alert("ထုတ်ယူရန် အရောင်းစာရင်း မရှိသေးပါ။");
+        return ui.toast.warning("ထုတ်ယူရန် အရောင်းစာရင်း မရှိသေးပါ။");
     }
 
     const todayStr = getLocalBusinessDate();

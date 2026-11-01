@@ -9,7 +9,7 @@ let entries = [];
 let categories = [];
 let currentFilteredEntries = [];
 
-// Fallback Categories
+// Fallback Categories ("ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" ထည့်သွင်းထားပါသည်)
 const FALLBACK_CATEGORIES = [
     { id: 1, name: "အထည်ရောင်းရငွေ", type: "INCOME" },
     { id: 2, name: "အကြွေးပြန်ရငွေ", type: "INCOME" },
@@ -18,7 +18,8 @@ const FALLBACK_CATEGORIES = [
     { id: 5, name: "ရက်ကန်းလက်ခ / လုပ်အားခ", type: "EXPENSE" },
     { id: 6, name: "ဆိုင်အသုံးစရိတ် / မီးဖိုချောင်", type: "EXPENSE" },
     { id: 7, name: "သယ်ယူပို့ဆောင်ခ / ကားခ", type: "EXPENSE" },
-    { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ", type: "EXPENSE" }
+    { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ", type: "EXPENSE" },
+    { id: 10, name: "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ", type: "EXPENSE" }
 ];
 
 // စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Instance
@@ -92,6 +93,9 @@ async function loadCategories() {
     try {
         const res = await api.get("/cashbook/categories");
         categories = (res.data && res.data.length > 0) ? res.data : FALLBACK_CATEGORIES;
+        if (!categories.some(c => c.id === 10 || c.name.includes("ပိုင်ရှင်"))) {
+            categories.push({ id: 10, name: "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ", type: "EXPENSE" });
+        }
     } catch (err) {
         console.warn("Using fallback categories:", err.message);
         categories = FALLBACK_CATEGORIES;
@@ -119,18 +123,41 @@ async function loadEntries() {
         entries = res.data?.entries || [];
         currentFilteredEntries = [...entries];
 
-        const s = res.data?.summary || {
-            cash: { in: 0, out: 0, net: 0 },
-            bank: { in: 0, out: 0, net: 0 },
-            totalNet: 0
-        };
+        const s = res.data?.summary || {};
 
-        const totalOut = Number(s.cash?.out || 0) + Number(s.bank?.out || 0);
+        // ၁။ ဆိုင်ရှိ တကယ့်လက်ကျန်ငွေသား
+        const cashBal = s.cash_balance !== undefined ? Number(s.cash_balance) : Number(s.cash?.net || 0);
 
-        setKPI(1, "လက်ကျန် ငွေသား (Cash Net)", s.cash?.net || 0, "fa-money-bill-wave", "emerald");
-        setKPI(2, "လက်ကျန် ဘဏ်ငွေ (Bank Net)", s.bank?.net || 0, "fa-building-columns", "blue");
-        setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalOut, "fa-arrow-trend-down", "rose");
-        setKPI(4, "စုစုပေါင်း အသားတင် (Total Net)", s.totalNet || 0, "fa-vault", "amber");
+        // ၂။ KPay/ဘဏ်အကောင့်ထဲရှိ တကယ့်လက်ကျန်ငွေ
+        const bankBal = s.bank_balance !== undefined ? Number(s.bank_balance) : Number(s.bank?.net || 0);
+
+        // ၃။ ယနေ့ စစ်မှန်သော ဆိုင်အသုံးစရိတ် နှင့် ပိုင်ရှင်ထံအပ်ငွေ ခွဲထုတ်တွက်ချက်ခြင်း
+        let todayExpense = 0;
+        let todayRemittance = 0;
+
+        if (s.today_expense !== undefined && s.today_remittance !== undefined) {
+            todayExpense = Number(s.today_expense);
+            todayRemittance = Number(s.today_remittance);
+        } else {
+            entries.forEach(r => {
+                const isExp = (r.entry_type || r.type || "").toUpperCase() === "EXPENSE";
+                const cat = (r.category_name || r.category || "").toLowerCase();
+                const amt = Number(r.amount || 0);
+                if (isExp) {
+                    if (cat.includes("ပိုင်ရှင်") || cat.includes("အပ်ငွေ") || cat.includes("လွှဲ") || r.category_id === 10) {
+                        todayRemittance += amt;
+                    } else {
+                        todayExpense += amt;
+                    }
+                }
+            });
+        }
+
+        // Standard KPI Boxes
+        setKPI(1, "Cash Balance", cashBal, "fa-money-bill-wave", "emerald");
+        setKPI(2, "Bank Balance", bankBal, "fa-building-columns", "blue");
+        setKPI(3, "Total Expense", todayExpense, "fa-arrow-trend-down", "rose");
+        setKPI(4, "Owner Remittance", todayRemittance, "fa-hand-holding-dollar", "purple");
 
         renderTable();
     } catch (err) {
@@ -166,16 +193,29 @@ function renderTable() {
         const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
         const isIncome = entryType === "INCOME";
         const sign = isIncome ? "+" : "-";
-        const amountColorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
 
-        // ၁။ Category Format (Text 16px - text-base font-bold)
+        // ၁။ Category Format
         const catName = item.category_name || item.category || "General";
-        let catColor = "text-slate-700 dark:text-slate-300";
-        if (catName.includes("ရောင်း") || isIncome) catColor = "text-emerald-600 dark:text-emerald-400 font-bold";
-        else if (catName.includes("ဝယ်")) catColor = "text-rose-600 dark:text-rose-400 font-bold";
-        else catColor = "text-amber-600 dark:text-amber-400 font-bold";
+        const isRemittance = catName.includes("ပိုင်ရှင်") || catName.includes("အပ်ငွေ") || catName.includes("လွှဲ") || item.category_id === 10;
 
-        // ၂။ Description နှင့် Reference (VR No) ခွဲထုတ်ပြီး Auto Voucher No ထုတ်ပေးခြင်း
+        let catColor = "text-slate-700 dark:text-slate-300";
+        let amountColorClass = "text-rose-600 dark:text-rose-400";
+
+        if (isRemittance) {
+            catColor = "text-purple-600 dark:text-purple-400 font-bold";
+            amountColorClass = "text-purple-600 dark:text-purple-400 font-bold";
+        } else if (isIncome || catName.includes("ရောင်း")) {
+            catColor = "text-emerald-600 dark:text-emerald-400 font-bold";
+            amountColorClass = "text-emerald-600 dark:text-emerald-400";
+        } else if (catName.includes("ဝယ်")) {
+            catColor = "text-rose-600 dark:text-rose-400 font-bold";
+            amountColorClass = "text-rose-600 dark:text-rose-400";
+        } else {
+            catColor = "text-amber-600 dark:text-amber-400 font-bold";
+            amountColorClass = "text-rose-600 dark:text-rose-400";
+        }
+
+        // ၂။ Description နှင့် Reference (VR No)
         let desc = String(item.description || "-");
         let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
 
@@ -200,7 +240,7 @@ function renderTable() {
         // ၄။ Method (CASH / BANK)
         const method = String(item.payment_method || "cash").toUpperCase();
 
-        // ၅။ Sticky Right Action Buttons (Edit = Blue, Delete = Red)
+        // ၅။ Sticky Right Action Buttons
         const actionButtons = `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" 
@@ -219,20 +259,16 @@ function renderTable() {
         row.innerHTML = `
             <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
             <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
-            <!-- မြန်မာစာ Category: text-base (16px) -->
             <td class="py-3 px-4 text-base ${catColor} truncate max-w-[170px]">${ui.escapeHtml(catName)}</td>
-            <!-- မြန်မာစာ Description: text-base (16px) နှင့် လိုင်းအကွာအဝေး လျှော့ချထားသော leading-snug -->
             <td class="py-3 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[260px] max-w-md truncate leading-snug" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc || "-")}
             </td>
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
             <td class="py-3 px-4 text-right font-black font-mono text-base ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <!-- REF: ဘယ်ဘက်ကပ် text-left ဖြစ်ပြီး Badge နောက်ခံလုံးဝမပါသော Plain Font သီးသန့် -->
             <td class="py-3 px-4 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                 ${ui.escapeHtml(refNo)}
             </td>
-            <!-- Sticky Right Action Cell -->
             <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                 ${actionButtons}
             </td>
@@ -240,7 +276,6 @@ function renderTable() {
         tbody.appendChild(row);
     });
 
-    // Row Event Listeners
     tbody.querySelectorAll(".btn-edit-entry").forEach(btn => {
         btn.addEventListener("click", () => {
             const item = entries.find(r => r.id == btn.dataset.id);
@@ -255,9 +290,6 @@ function renderTable() {
     pagination.renderControls("cashbook-pagination");
 }
 
-/**
- * Modal Switcher Tabs: Expense vs Income အပြန်အလှန် ပြောင်းလဲခြင်း
- */
 function switchModalTab(type) {
     const typeInput = document.getElementById("entry-type");
     const tabExpense = document.getElementById("tab-btn-expense");
@@ -417,22 +449,59 @@ async function deleteEntry(id) {
     }
 }
 
+/**
+ * UI Table တွင် ပြသထားသည့်အတိုင်း ၁၀၀% ထပ်တူကျသော CSV Export စနစ်
+ * Columns: NO, DATE, CATEGORY, DESCRIPTION, QTY, METHOD, AMOUNT, REF
+ */
 function exportCSV() {
-    if (entries.length === 0) {
+    const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
+
+    if (listToExport.length === 0) {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
     
-    let csv = "Date,Category,Description,Method,Amount,Ref,Type\n";
-    entries.forEach(r => {
-        const date = r.entry_date || r.date || "";
-        const cat = r.category_name || r.category || "";
-        const desc = r.description || "";
-        const method = String(r.payment_method || "").toUpperCase();
-        const amt = r.amount || 0;
-        const ref = r.reference_no || r.invoice_no || r.purchase_no || `VR-CB-${String(r.id).padStart(5, "0")}`;
-        const type = r.entry_type || r.type || "";
-        
-        csv += `${ui.escapeCsv(date)},${ui.escapeCsv(cat)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${amt},${ui.escapeCsv(ref)},${ui.escapeCsv(type)}\n`;
+    // UI Table Header အတိုင်း တိကျစွာ သတ်မှတ်ခြင်း
+    let csv = "NO,DATE,CATEGORY,DESCRIPTION,QTY,METHOD,AMOUNT,REF\n";
+
+    listToExport.forEach((item, idx) => {
+        const no = idx + 1;
+        const date = item.entry_date || item.date || "";
+        const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
+        const isIncome = entryType === "INCOME";
+        const sign = isIncome ? "+" : "-";
+
+        // ၁။ Category
+        const catName = item.category_name || item.category || "General";
+
+        // ၂။ Description နှင့် Reference (VR No)
+        let desc = String(item.description || "-");
+        let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
+
+        if (!refNo || refNo === "-") {
+            const matchInv = desc.match(/INV-[A-Za-z0-9-]+/);
+            const matchPo = desc.match(/PO-[A-Za-z0-9-]+/);
+            if (matchInv) {
+                refNo = matchInv[0];
+                desc = desc.replace(matchInv[0], "").replace(/\(ငွေသား\)|\(KPay\)|\(Bank\)/gi, "").trim();
+            } else if (matchPo) {
+                refNo = matchPo[0];
+                desc = desc.replace(matchPo[0], "").trim();
+            } else {
+                refNo = `VR-CB-${String(item.id).padStart(5, "0")}`;
+            }
+        }
+
+        // ၃။ Qty
+        const qtyVal = item.total_quantity || item.quantity;
+        const qtyStr = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0 ? Number(qtyVal) : "-";
+
+        // ၄။ Method
+        const method = String(item.payment_method || "cash").toUpperCase();
+
+        // ၅။ Amount (Sign ပါဝင်သော ဂဏန်း)
+        const amountStr = `${sign}${Number(item.amount || 0)}`;
+
+        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(method)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)}\n`;
     });
     
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });

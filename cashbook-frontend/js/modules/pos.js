@@ -5,11 +5,10 @@ import { refreshGlobalKPIs, setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let allProducts = [];
-let cart = [];
-let currentSaleType = "retail";
+let cart = []; // Each item: { product, quantity, unitPrice, costPrice, itemSaleType: 'retail' | 'wholesale' }
+let defaultSaleType = "retail"; // Default for newly added items
 let selectedPaymentMethod = "cash";
 let allCustomers = [];
-let isEventsBound = false; // Prevent duplicate event bindings in SPA navigation
 
 // Today Sales State
 let todaySalesList = [];
@@ -27,31 +26,20 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;");
 }
 
-/**
- * RFC 4180 Compliant CSV Escaping & Excel Injection Prevention
- */
 function escapeCsv(val) {
     let str = String(val ?? "").trim();
-    // Neutralize Excel Formula Injections
-    if (/^[=+@-]/.test(str)) {
-        str = "'" + str;
-    }
+    if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
 }
 
-/**
- * Myanmar Standard Business Date (UTC + 6:30)
- */
 function getLocalBusinessDate() {
     const d = new Date(Date.now() + 6.5 * 60 * 60 * 1000);
     return d.toISOString().split("T")[0];
 }
 
 export async function initPOS() {
-    if (!isEventsBound) {
-        bindEvents();
-        isEventsBound = true;
-    }
+    // SPA Re-render Safety: Always bind events to fresh DOM elements
+    bindEvents();
     await loadProducts();
     await loadCustomers();
     renderCart();
@@ -153,7 +141,7 @@ function renderProductsGrid(products) {
     empty?.classList.add("hidden");
 
     products.forEach(p => {
-        const price = currentSaleType === "retail" ? Number(p.retail_price || 0) : Number(p.wholesale_price || 0);
+        const price = defaultSaleType === "retail" ? Number(p.retail_price || 0) : Number(p.wholesale_price || 0);
         const stock = Number(p.current_stock || 0);
         const isOutOfStock = stock <= 0;
         const itemCode = p.sku || p.barcode || 'N/A';
@@ -179,7 +167,7 @@ function renderProductsGrid(products) {
                 <div class="text-[10px] text-slate-400 font-mono mt-0.5">Code: ${escapeHtml(itemCode)}</div>
             </div>
             <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">${price.toLocaleString()} Ks</span>
+                <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">${price.toLocaleString()} Ks</span>
                 <div class="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
                     <i class="fa-solid fa-plus text-xs"></i>
                 </div>
@@ -206,8 +194,34 @@ function addToCart(product) {
             alert("ပစ္စည်းလက်ကျန် ပြတ်လပ်နေပါသဖြင့် ရောင်းချ၍မရပါ။");
             return;
         }
-        const price = currentSaleType === "retail" ? Number(product.retail_price || 0) : Number(product.wholesale_price || 0);
-        cart.push({ product, quantity: 1, unitPrice: price, costPrice: Number(product.cost_price || 0) });
+        const initialType = defaultSaleType;
+        const initialPrice = initialType === "retail" ? Number(product.retail_price || 0) : Number(product.wholesale_price || 0);
+        
+        cart.push({
+            product,
+            quantity: 1,
+            itemSaleType: initialType,
+            unitPrice: initialPrice,
+            costPrice: Number(product.cost_price || 0)
+        });
+    }
+    renderCart();
+    updatePOSKPIs();
+}
+
+/**
+ * Toggle individual item in cart between Retail and Wholesale
+ */
+function toggleCartItemPriceType(index) {
+    const item = cart[index];
+    if (!item) return;
+
+    if (item.itemSaleType === "retail") {
+        item.itemSaleType = "wholesale";
+        item.unitPrice = Number(item.product.wholesale_price || item.product.retail_price || 0);
+    } else {
+        item.itemSaleType = "retail";
+        item.unitPrice = Number(item.product.retail_price || 0);
     }
     renderCart();
     updatePOSKPIs();
@@ -231,9 +245,10 @@ function renderCart() {
                 <span class="text-xs font-bold">ခြင်းတောင်းထဲတွင် ပစ္စည်းမရှိသေးပါ</span>
             </div>
         `;
-        if (subtotalEl) subtotalEl.textContent = "0";
-        if (finalTotalEl) finalTotalEl.textContent = "0";
-        if (discountDisplay) discountDisplay.textContent = "-0";
+        if (subtotalEl) subtotalEl.textContent = "0 Ks";
+        if (finalTotalEl) finalTotalEl.textContent = "0 Ks";
+        if (discountDisplay) discountDisplay.textContent = "-0 Ks";
+        if (discountInput) discountInput.value = 0; // Fix: Reset discount to 0 on empty cart
         if (checkoutBtn) checkoutBtn.disabled = true;
         updatePOSKPIs();
         return;
@@ -244,40 +259,54 @@ function renderCart() {
         const lineTotal = item.quantity * item.unitPrice;
         subtotal += lineTotal;
         const stockLimit = Number(item.product.current_stock || 0);
+        const isWholesale = item.itemSaleType === "wholesale";
 
         const row = document.createElement("div");
         row.className = "py-3 flex items-center justify-between gap-2.5";
         row.innerHTML = `
             <div class="flex-1 min-w-0">
-                <div class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(item.product.item_name)}</div>
-                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">${Number(item.unitPrice).toLocaleString()} Ks</div>
+                <div class="flex items-center gap-1.5 mb-0.5">
+                    <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(item.product.item_name)}</span>
+                    <!-- Row-level Retail/Wholesale Toggle Badge -->
+                    <button type="button" data-idx="${index}" class="btn-toggle-price-type px-1.5 py-0.5 rounded text-[10px] font-black cursor-pointer transition ${isWholesale ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'}" title="လက်လီ/လက်ကား ဈေးနှုန်းပြောင်းရန် နှိပ်ပါ">
+                        ${isWholesale ? 'လက်ကား' : 'လက်လီ'}
+                    </button>
+                </div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                    ${Number(item.unitPrice).toLocaleString()} Ks ${item.product.color ? `• ${escapeHtml(item.product.color)}` : ''}
+                </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
                 <button data-idx="${index}" class="btn-qty-minus w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer">-</button>
                 <span class="w-6 text-center text-xs font-black font-mono text-slate-900 dark:text-white">${item.quantity}</span>
                 <button data-idx="${index}" data-max="${stockLimit}" class="btn-qty-plus w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer">+</button>
             </div>
-            <div class="text-right shrink-0 w-20">
-                <div class="text-xs font-black text-slate-900 dark:text-white font-mono">${Number(lineTotal).toLocaleString()}</div>
+            <div class="text-right shrink-0 w-24">
+                <div class="text-xs font-black text-slate-900 dark:text-white font-mono">${Number(lineTotal).toLocaleString()} Ks</div>
                 <button data-idx="${index}" class="btn-remove-item text-[10px] text-rose-500 hover:text-rose-400 font-bold cursor-pointer">ဖယ်မည်</button>
             </div>
         `;
         container.appendChild(row);
     });
 
-    // Discount Validation: Cannot be negative and cannot exceed subtotal
+    // Discount Validation: Ensure discount never exceeds subtotal
     let rawDiscount = parseFloat(discountInput?.value) || 0;
     let discount = Math.min(Math.max(0, rawDiscount), subtotal);
-    if (discountInput && discountInput.value !== String(discount)) {
+    if (discountInput && discountInput.value !== String(discount) && rawDiscount > subtotal) {
         discountInput.value = discount;
     }
 
     const finalTotal = Math.max(0, subtotal - discount);
 
-    if (subtotalEl) subtotalEl.textContent = subtotal.toLocaleString();
-    if (discountDisplay) discountDisplay.textContent = `-${discount.toLocaleString()}`;
-    if (finalTotalEl) finalTotalEl.textContent = finalTotal.toLocaleString();
+    if (subtotalEl) subtotalEl.textContent = `${subtotal.toLocaleString()} Ks`;
+    if (discountDisplay) discountDisplay.textContent = `-${discount.toLocaleString()} Ks`;
+    if (finalTotalEl) finalTotalEl.textContent = `${finalTotal.toLocaleString()} Ks`;
     if (checkoutBtn) checkoutBtn.disabled = false;
+
+    // Attach Row Event Listeners
+    container.querySelectorAll(".btn-toggle-price-type").forEach(btn => {
+        btn.onclick = () => toggleCartItemPriceType(Number(btn.dataset.idx));
+    });
 
     container.querySelectorAll(".btn-qty-plus").forEach(btn => {
         btn.onclick = () => { 
@@ -292,6 +321,7 @@ function renderCart() {
             updatePOSKPIs(); 
         };
     });
+
     container.querySelectorAll(".btn-qty-minus").forEach(btn => {
         btn.onclick = () => {
             const idx = Number(btn.dataset.idx);
@@ -301,9 +331,12 @@ function renderCart() {
             updatePOSKPIs();
         };
     });
+
     container.querySelectorAll(".btn-remove-item").forEach(btn => {
         btn.onclick = () => { 
             cart.splice(Number(btn.dataset.idx), 1); 
+            // If cart is now empty, zero out discount
+            if (cart.length === 0 && discountInput) discountInput.value = 0;
             renderCart(); 
             updatePOSKPIs(); 
         };
@@ -325,48 +358,55 @@ function bindEvents() {
     const closeModalBtn = document.getElementById("btn-close-modal");
     const confirmSaleBtn = document.getElementById("btn-confirm-sale");
 
-    categorySelect?.addEventListener("change", filterAndRenderProducts);
-    searchInput?.addEventListener("input", filterAndRenderProducts);
+    if (categorySelect) categorySelect.onchange = filterAndRenderProducts;
+    if (searchInput) searchInput.oninput = filterAndRenderProducts;
 
-    // Working Clear Search Button
-    clearSearchBtn?.addEventListener("click", () => {
-        if (searchInput) searchInput.value = "";
-        filterAndRenderProducts();
-        searchInput?.focus();
-    });
+    if (clearSearchBtn) {
+        clearSearchBtn.onclick = () => {
+            if (searchInput) searchInput.value = "";
+            filterAndRenderProducts();
+            searchInput?.focus();
+        };
+    }
 
-    // Working Clear Cart Button with Prompt
-    clearCartBtn?.addEventListener("click", () => {
-        if (cart.length === 0) return;
-        if (confirm("ခြင်းတောင်းထဲရှိ ရွေးချယ်ထားသော ပစ္စည်းများ အားလုံးကို ရှင်းလင်းလိုပါသလား?")) {
-            cart = [];
-            if (discountInput) discountInput.value = 0;
-            renderCart();
-            updatePOSKPIs();
-        }
-    });
+    if (clearCartBtn) {
+        clearCartBtn.onclick = () => {
+            if (cart.length === 0) return;
+            if (confirm("ခြင်းတောင်းထဲရှိ ရွေးချယ်ထားသော ပစ္စည်းများ အားလုံးကို ရှင်းလင်းလိုပါသလား?")) {
+                cart = [];
+                if (discountInput) discountInput.value = 0;
+                renderCart();
+                updatePOSKPIs();
+            }
+        };
+    }
 
-    retailBtn?.addEventListener("click", () => {
-        currentSaleType = "retail";
-        retailBtn.className = "px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer";
-        wholesaleBtn.className = "px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer";
-        updatePricesForSaleType();
-    });
+    // Default Sale Type Toggles
+    if (retailBtn) {
+        retailBtn.onclick = () => {
+            defaultSaleType = "retail";
+            retailBtn.className = "px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer";
+            if (wholesaleBtn) wholesaleBtn.className = "px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer";
+            filterAndRenderProducts();
+        };
+    }
 
-    wholesaleBtn?.addEventListener("click", () => {
-        currentSaleType = "wholesale";
-        wholesaleBtn.className = "px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer";
-        retailBtn.className = "px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer";
-        updatePricesForSaleType();
-    });
+    if (wholesaleBtn) {
+        wholesaleBtn.onclick = () => {
+            defaultSaleType = "wholesale";
+            wholesaleBtn.className = "px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-sm transition cursor-pointer";
+            if (retailBtn) retailBtn.className = "px-3 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer";
+            filterAndRenderProducts();
+        };
+    }
 
-    discountInput?.addEventListener("input", renderCart);
-    checkoutBtn?.addEventListener("click", openCheckoutModal);
-    closeModalBtn?.addEventListener("click", () => modal?.classList.add("hidden"));
+    if (discountInput) discountInput.oninput = renderCart;
+    if (checkoutBtn) checkoutBtn.onclick = openCheckoutModal;
+    if (closeModalBtn) closeModalBtn.onclick = () => modal?.classList.add("hidden");
 
     // Payment Method Selection Tabs
     document.querySelectorAll(".method-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.onclick = () => {
             document.querySelectorAll(".method-btn").forEach(b => {
                 b.className = "method-btn p-2.5 rounded-xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold flex flex-col items-center gap-1 cursor-pointer";
             });
@@ -391,7 +431,7 @@ function bindEvents() {
             }
 
             calculateChange();
-        });
+        };
     });
 
     // Customer Selection Sync
@@ -411,32 +451,34 @@ function bindEvents() {
         if (modalSelect && modalSelect !== e.target) modalSelect.value = val;
     };
 
-    document.getElementById("pos-customer-select")?.addEventListener("change", handleCustomerChange);
-    document.getElementById("modal-customer-select")?.addEventListener("change", handleCustomerChange);
+    const posCust = document.getElementById("pos-customer-select");
+    const modalCust = document.getElementById("modal-customer-select");
+    if (posCust) posCust.onchange = handleCustomerChange;
+    if (modalCust) modalCust.onchange = handleCustomerChange;
 
-    document.getElementById("modal-paid-amount")?.addEventListener("input", calculateChange);
-    confirmSaleBtn?.addEventListener("click", submitSale);
+    const modalPaid = document.getElementById("modal-paid-amount");
+    if (modalPaid) modalPaid.oninput = calculateChange;
 
-    document.getElementById("btn-print-receipt")?.addEventListener("click", () => window.print());
-    document.getElementById("btn-close-receipt")?.addEventListener("click", () => {
-        document.getElementById("receipt-modal")?.classList.add("hidden");
-    });
+    if (confirmSaleBtn) confirmSaleBtn.onclick = submitSale;
 
-    // Today Sales Modal
-    document.getElementById("btn-open-today-sales")?.addEventListener("click", openTodaySalesModal);
-    document.getElementById("btn-close-today-sales-modal")?.addEventListener("click", () => {
-        document.getElementById("today-sales-modal")?.classList.add("hidden");
-    });
-    document.getElementById("today-sales-search")?.addEventListener("input", filterAndRenderTodaySales);
-    document.getElementById("btn-export-today-sales-csv")?.addEventListener("click", exportTodaySalesToCSV);
-}
+    const printReceiptBtn = document.getElementById("btn-print-receipt");
+    if (printReceiptBtn) printReceiptBtn.onclick = () => window.print();
 
-function updatePricesForSaleType() {
-    cart.forEach(item => {
-        item.unitPrice = currentSaleType === "retail" ? Number(item.product.retail_price || 0) : Number(item.product.wholesale_price || 0);
-    });
-    renderCart();
-    filterAndRenderProducts();
+    const closeReceiptBtn = document.getElementById("btn-close-receipt");
+    if (closeReceiptBtn) closeReceiptBtn.onclick = () => document.getElementById("receipt-modal")?.classList.add("hidden");
+
+    // Today Sales Modal Events
+    const openTodayBtn = document.getElementById("btn-open-today-sales");
+    if (openTodayBtn) openTodayBtn.onclick = openTodaySalesModal;
+
+    const closeTodayBtn = document.getElementById("btn-close-today-sales-modal");
+    if (closeTodayBtn) closeTodayBtn.onclick = () => document.getElementById("today-sales-modal")?.classList.add("hidden");
+
+    const todaySearch = document.getElementById("today-sales-search");
+    if (todaySearch) todaySearch.oninput = filterAndRenderTodaySales;
+
+    const exportCsvBtn = document.getElementById("btn-export-today-sales-csv");
+    if (exportCsvBtn) exportCsvBtn.onclick = exportTodaySalesToCSV;
 }
 
 function getFinalTotal() {
@@ -455,9 +497,7 @@ function openCheckoutModal() {
     document.querySelector('.method-btn[data-method="cash"]')?.click();
     
     if (dueEl) dueEl.textContent = `${finalTotal.toLocaleString()} Ks`;
-    if (paidInput) {
-        paidInput.value = finalTotal;
-    }
+    if (paidInput) paidInput.value = finalTotal;
     
     const sideCust = document.getElementById("pos-customer-select")?.value || "";
     const modalCust = document.getElementById("modal-customer-select");
@@ -553,7 +593,7 @@ async function submitSale() {
                 name: newName,
                 phone: newPhone,
                 shopName: newShop,
-                customerType: currentSaleType,
+                customerType: defaultSaleType,
                 initialDebt: 0
             });
             customerId = custRes.data?.id;
@@ -582,14 +622,16 @@ async function submitSale() {
     }
 
     const btn = document.getElementById("btn-confirm-sale");
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> <span>သိမ်းဆည်းနေပါသည်...</span>`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> <span>သိမ်းဆည်းနေပါသည်...</span>`;
+    }
 
     try {
         const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
         const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
 
-        // Accounting Integrity Fix: Prevent deposit loss during Credit Sales
+        // Money-Leak Prevention: Route deposit during credit sales to Cash or Bank correctly
         const actualPaid = Math.min(paidAmount, finalTotal);
         let pCash = 0;
         let pBank = 0;
@@ -599,7 +641,6 @@ async function submitSale() {
         } else if (selectedPaymentMethod === "bank") {
             pBank = actualPaid;
         } else if (selectedPaymentMethod === "credit") {
-            // When credit sale has deposit paid, route it to Cash (or Bank if bankName provided)
             if (bankName) pBank = actualPaid;
             else pCash = actualPaid;
         }
@@ -607,7 +648,7 @@ async function submitSale() {
         const payload = {
             branchId: state.currentBranch?.id || 1,
             customerId: customerId,
-            saleType: currentSaleType,
+            saleType: defaultSaleType,
             items: cart.map(i => ({
                 productId: i.product.id, 
                 quantity: i.quantity,
@@ -627,7 +668,6 @@ async function submitSale() {
         if (res.success) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
             
-            // Show Thermal Receipt
             showReceiptModal({
                 invoiceNo: res.data?.invoiceNo || `INV-${Date.now()}`,
                 items: cart,
@@ -656,14 +696,13 @@ async function submitSale() {
     } catch (err) {
         alert(`အရောင်းမှတ်တမ်း မအောင်မြင်ပါ: ${err.message}`);
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = `<i class="fa-solid fa-check mr-1"></i> <span>အရောင်း အတည်ပြုပြီး ဘောင်ချာထုတ်မည်</span>`;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-check mr-1"></i> <span>အရောင်း အတည်ပြုပြီး ဘောင်ချာထုတ်မည်</span>`;
+        }
     }
 }
 
-/**
- * Thermal Receipt Modal Display with Correct Customer & Payment Data
- */
 function showReceiptModal(data) {
     document.getElementById("rcp-branch").textContent = state.currentBranch?.name || "Main Home Shop";
     document.getElementById("rcp-inv").textContent = data.invoiceNo;
@@ -717,7 +756,7 @@ function showReceiptModal(data) {
 }
 
 // =========================================================================
-// --- Today Sales Modal Logic with Double-Summing Fix ---------------------
+// --- Today Sales Modal Logic with Accurate Sums -------------------------
 // =========================================================================
 
 async function openTodaySalesModal() {
@@ -770,7 +809,6 @@ function renderTodaySalesTable() {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    // Double-Summing Fix: Calculate unique invoices and net revenue accurately
     const invoiceMap = new Map();
     let totalQty = 0;
 
@@ -856,7 +894,6 @@ function renderTodaySalesTable() {
         tbody.appendChild(tr);
     });
 
-    // Accurate Reprint with Original Invoice Payment Method & Customer Name
     tbody.querySelectorAll(".btn-reprint-sale").forEach(btn => {
         btn.onclick = () => {
             const invNo = btn.dataset.inv;

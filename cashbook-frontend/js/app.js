@@ -2,6 +2,8 @@
 
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
+import { ui } from "./core/ui.js"; // UI Utilities (Toast & Confirm) ကို Import လုပ်ခြင်း
+
 import { initAuth } from "./modules/auth.js";
 import { initDashboard } from "./modules/dashboard.js";
 import { initPOS } from "./modules/pos.js";
@@ -47,8 +49,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function setupNavigation() {
-    document.getElementById("btn-logout")?.addEventListener("click", () => {
-        if (confirm("စနစ်မှ အမှန်တကယ် ထွက်ခွာလိုပါသလား?")) {
+    document.getElementById("btn-logout")?.addEventListener("click", async () => {
+        // Native confirm() အစား Professional ui.confirm() ကို အသုံးပြုခြင်း
+        const confirmed = await ui.confirm("စနစ်မှ အမှန်တကယ် ထွက်ခွာလိုပါသလား?", "warning");
+        if (confirmed) {
             state.logout();
         }
     });

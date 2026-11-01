@@ -23,7 +23,6 @@
                         '68': '17rem',
                     },
                     colors: {
-                        // စနစ်တစ်ခုလုံးရှိ slate ကာလာများကို Deep Midnight Navy ဖြင့် Global Override ပြုလုပ်ခြင်း
                         slate: {
                             50: '#f8fafc',
                             100: '#f1f5f9',
@@ -33,10 +32,29 @@
                             500: '#64748b',
                             600: '#475569',
                             700: '#1e293b',
-                            800: '#0f172a', // နက်မှောင်သော Card / Container ဘောင်များ
+                            800: '#0f172a',
                             850: '#0b1120',
-                            900: '#090d16', // Dashboard & Workspace နောက်ခံ နက်နက်မှောင်မှောင်
-                            950: '#030712'  // Sidebar နှင့် Topbar နောက်ခံ (True Midnight Black)
+                            900: '#090d16',
+                            950: '#030712'
+                        }
+                    },
+                    animation: {
+                        'slide-in-right': 'slideInRight 0.3s ease-out forwards',
+                        'fade-out': 'fadeOut 0.3s ease-in forwards',
+                        'pop-in': 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    },
+                    keyframes: {
+                        slideInRight: {
+                            '0%': { transform: 'translateX(100%)', opacity: '0' },
+                            '100%': { transform: 'translateX(0)', opacity: '1' },
+                        },
+                        fadeOut: {
+                            '0%': { opacity: '1' },
+                            '100%': { opacity: '0' },
+                        },
+                        popIn: {
+                            '0%': { transform: 'scale(0.9)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' },
                         }
                     }
                 }
@@ -53,56 +71,57 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
-        body {
-            font-family: 'Inter', 'Padauk', sans-serif;
-        }
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
-            border-radius: 6px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(148, 163, 184, 0.5);
-        }
+        body { font-family: 'Inter', 'Padauk', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
 
         /* Thermal Receipt Printer (80mm) Styles */
         @media print {
-            @page {
-                size: 80mm auto;
-                margin: 0;
-            }
-            body * {
-                visibility: hidden;
-            }
-            #receipt-print-area, #receipt-print-area * {
-                visibility: visible;
-            }
+            @page { size: 80mm auto; margin: 0; }
+            body * { visibility: hidden; }
+            #receipt-print-area, #receipt-print-area * { visibility: visible; }
             #receipt-print-area {
-                position: fixed;
-                left: 0;
-                top: 0;
+                position: absolute;
+                left: 0; top: 0;
                 width: 80mm;
                 padding: 4mm;
                 background: #fff !important;
                 color: #000 !important;
                 box-shadow: none !important;
             }
-            .no-print {
-                display: none !important;
-            }
+            .no-print { display: none !important; }
+            /* Hide toasts and dialogs when printing */
+            #toast-container, #global-confirm-dialog { display: none !important; }
         }
     </style>
 </head>
-<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen">
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen relative">
 
     <!-- Global Toast Notification Container -->
-    <div id="toast-container" class="fixed top-5 right-5 z-50 space-y-2 pointer-events-none no-print"></div>
+    <div id="toast-container" class="fixed top-5 right-5 z-[100] space-y-3 flex flex-col items-end pointer-events-none no-print"></div>
+
+    <!-- Global Confirm Dialog Container -->
+    <div id="global-confirm-dialog" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4 no-print">
+        <div id="confirm-box" class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden scale-90 opacity-0 transition-all duration-200">
+            <div class="p-6 text-center space-y-4">
+                <div id="confirm-icon-box" class="w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl">
+                    <i id="confirm-icon" class="fa-solid fa-circle-exclamation"></i>
+                </div>
+                <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900 dark:text-white">အတည်ပြုပါ</h3>
+                <p id="confirm-message" class="text-sm text-slate-500 dark:text-slate-400 font-semibold"></p>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-slate-950/50 border-t border-slate-100 dark:border-slate-800 flex gap-3">
+                <button type="button" id="btn-confirm-cancel" class="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition cursor-pointer">
+                    မလုပ်ပါ
+                </button>
+                <button type="button" id="btn-confirm-ok" class="flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer">
+                    အတည်ပြုမည်
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Login Container -->
     <div id="login-container" class="hidden min-h-screen w-full"></div>
@@ -134,7 +153,7 @@
                     </div>
                 </div>
 
-                <!-- Navigation Menu Container (Compact Spacing) -->
+                <!-- Navigation Menu Container -->
                 <nav class="flex-1 overflow-y-auto p-3 space-y-2 text-sm font-bold">
                     
                     <!-- 1. DASHBOARD -->
@@ -328,7 +347,7 @@
                 </div>
             </section>
 
-            <!-- 3. Dynamic View Workspace (pb-0 ဖြင့် Window အောက်ခြေထိ တစ်သားတည်း ကွက်တိကျစေသည်) -->
+            <!-- 3. Dynamic View Workspace -->
             <main id="view-container" class="flex-1 overflow-hidden px-6 pt-2 pb-0 relative"></main>
         </div>
     </div>

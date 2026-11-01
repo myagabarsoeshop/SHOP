@@ -1,7 +1,7 @@
 <!-- cashbook-frontend/views/cashbook.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar -->
+    <!-- Top Filter & Action Toolbar (KPI Card 1 အကျယ်နှင့် အညီ တန်းညှိထားခြင်း) -->
     <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
         <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း ညီညာစွာထားရှိခြင်း) နှင့် Calendar -->
@@ -54,7 +54,7 @@
                 <tr class="h-12">
                     <th class="py-3 px-3 w-14 text-center">NO</th>
                     <th class="py-3 px-3 w-28 text-center">DATE</th>
-                    <th class="py-3 px-4 w-40">CATEGORY</th>
+                    <th class="py-3 px-4 w-44">CATEGORY</th>
                     <th class="py-3 px-4 min-w-[260px]">DESCRIPTION</th>
                     <th class="py-3 px-3 w-20 text-center">QTY</th>
                     <th class="py-3 px-3 w-24 text-center">METHOD</th>
@@ -115,7 +115,7 @@
             </div>
         </div>
 
-        <!-- Form Body: စာလုံးအရွယ်အစား ၁၆ (text-base) နှင့် လိုင်းအကွာအဝေး ကျစ်လျစ်စေရန် leading-normal/snug ထားရှိခြင်း -->
+        <!-- Form Body: မြန်မာစာ ၁၆ (text-base) နှင့် leading-normal ဖြင့် ချိန်ညှိထားပါသည် -->
         <form id="entry-form" class="p-5 pt-3 space-y-3">
             <input type="hidden" id="entry-type" value="EXPENSE">
             
@@ -123,7 +123,7 @@
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေစာရင်း ခေါင်းစဉ် (Category) *</label>
                 <div class="relative">
-                    <select id="entry-category" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                    <select id="entry-category" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
                         <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
@@ -134,7 +134,7 @@
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေပေးချေမှု လိုင်း (Method) *</label>
                 <div class="relative">
-                    <select id="entry-payment-method" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer font-mono">
+                    <select id="entry-payment-method" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer font-mono">
                         <option value="cash">ငွေသား (CASH)</option>
                         <option value="bank">KPay / ဘဏ်လွှဲ (BANK)</option>
                     </select>
@@ -152,7 +152,7 @@
                 </div>
             </div>
 
-            <!-- Description (Text 16px, leading-normal ဖြင့် လိုင်းအကွာအဝေး လျှော့ချထားပါသည်) -->
+            <!-- Description (Text 16px, leading-normal) -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description) *</label>
                 <textarea id="entry-desc" required rows="3" placeholder="ဥပမာ - မီးဖိုချောင် ကုန်ကျစရိတ် / ဆိုင်လခ / ကားခ..." 

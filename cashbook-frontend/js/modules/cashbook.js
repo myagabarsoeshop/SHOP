@@ -65,7 +65,7 @@ function bindEvents() {
             const cat = (r.category_name || r.category || "").toLowerCase();
             const desc = (r.description || "").toLowerCase();
             const method = (r.payment_method || "").toLowerCase();
-            const ref = (r.reference_no || r.invoice_no || r.purchase_no || "").toLowerCase();
+            const ref = (r.reference_no || r.invoice_no || r.purchase_no || `VR-CB-${String(r.id).padStart(5, "0")}`).toLowerCase();
             return cat.includes(kw) || desc.includes(kw) || method.includes(kw) || ref.includes(kw);
         });
         pagination.reset();
@@ -168,19 +168,18 @@ function renderTable() {
         const sign = isIncome ? "+" : "-";
         const amountColorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
 
-        // ၁။ Category Format (Tag background မပါ၊ စာသားအရောင် သီးသန့်)
+        // ၁။ Category Format (စာလုံးဆိုက် ရှင်းလင်းသော text-sm font-bold)
         const catName = item.category_name || item.category || "General";
         let catColor = "text-slate-700 dark:text-slate-300";
         if (catName.includes("ရောင်း") || isIncome) catColor = "text-emerald-600 dark:text-emerald-400 font-bold";
         else if (catName.includes("ဝယ်")) catColor = "text-rose-600 dark:text-rose-400 font-bold";
         else catColor = "text-amber-600 dark:text-amber-400 font-bold";
 
-        // ၂။ Description နှင့် Reference (VR No) ခွဲထုတ်ခြင်း
+        // ၂။ Description နှင့် Reference (VR No) ခွဲထုတ်ပြီး Auto Voucher No ထုတ်ပေးခြင်း
         let desc = String(item.description || "-");
-        let refNo = item.reference_no || item.invoice_no || item.purchase_no || "-";
+        let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
 
-        // Description ထဲတွင် ဘောင်ချာနံပါတ် ကပ်ပါနေပါက သပ်ရပ်စွာ ခွဲထုတ်ခြင်း
-        if (refNo === "-") {
+        if (!refNo || refNo === "-") {
             const matchInv = desc.match(/INV-[A-Za-z0-9-]+/);
             const matchPo = desc.match(/PO-[A-Za-z0-9-]+/);
             if (matchInv) {
@@ -189,6 +188,9 @@ function renderTable() {
             } else if (matchPo) {
                 refNo = matchPo[0];
                 desc = desc.replace(matchPo[0], "").trim();
+            } else {
+                // Direct Cashbook သွင်းသော စရိတ်/ဝင်ငွေများအတွက် Auto Voucher Number သတ်မှတ်ခြင်း
+                refNo = `VR-CB-${String(item.id).padStart(5, "0")}`;
             }
         }
 
@@ -201,7 +203,7 @@ function renderTable() {
 
         // ၅။ Sticky Right Action Buttons (Edit = Blue, Delete = Red)
         const actionButtons = `
-            <div class="flex items-center justify-center gap-1.5">
+            <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" 
                     class="btn-edit-entry w-7 h-7 flex items-center justify-center text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
@@ -214,18 +216,22 @@ function renderTable() {
         `;
 
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 text-xs";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
         row.innerHTML = `
-            <td class="py-3 px-3 text-center font-mono text-slate-400">${startIdx + idx + 1}</td>
-            <td class="py-3 px-3 text-center font-mono text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
-            <td class="py-3 px-4 ${catColor} truncate max-w-[150px]">${ui.escapeHtml(catName)}</td>
-            <td class="py-3 px-4 text-slate-900 dark:text-slate-100 font-medium min-w-[220px] max-w-sm truncate leading-relaxed" title="${ui.escapeHtml(desc)}">
+            <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
+            <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
+            <td class="py-3 px-4 text-sm ${catColor} truncate max-w-[160px]">${ui.escapeHtml(catName)}</td>
+            <td class="py-3 px-4 text-sm font-semibold text-slate-900 dark:text-slate-100 min-w-[240px] max-w-md truncate leading-relaxed" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc || "-")}
             </td>
-            <td class="py-3 px-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
-            <td class="py-3 px-3 text-center font-mono font-bold text-[11px] text-slate-500 dark:text-slate-400">${method}</td>
-            <td class="py-3 px-4 text-right font-black font-mono text-xs ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <td class="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-[150px]" title="${ui.escapeHtml(refNo)}">${ui.escapeHtml(refNo)}</td>
+            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
+            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
+            <td class="py-3 px-4 text-right font-black font-mono text-sm ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
+            <td class="py-3 px-4 text-center">
+                <span class="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20" title="${ui.escapeHtml(refNo)}">
+                    ${ui.escapeHtml(refNo)}
+                </span>
+            </td>
             <!-- Sticky Right Action Cell -->
             <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                 ${actionButtons}
@@ -265,16 +271,15 @@ function switchModalTab(type) {
     if (type === "EXPENSE") {
         if (tabExpense) tabExpense.className = "py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-sm";
         if (tabIncome) tabIncome.className = "py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
-        if (submitBtn) submitBtn.className = "w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95";
+        if (submitBtn) submitBtn.className = "w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95";
         if (submitText) submitText.textContent = "အသုံးစရိတ် သိမ်းဆည်းမည်";
     } else {
         if (tabExpense) tabExpense.className = "py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
         if (tabIncome) tabIncome.className = "py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow-sm";
-        if (submitBtn) submitBtn.className = "w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95";
+        if (submitBtn) submitBtn.className = "w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95";
         if (submitText) submitText.textContent = "အခြားဝင်ငွေ သိမ်းဆည်းမည်";
     }
 
-    // Category Dropdown Filter ပြုလုပ်ခြင်း
     const filteredCats = categories.filter(c => (c.type || c.entry_type || "").toUpperCase() === type);
     if (select) {
         select.innerHTML = '<option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>';
@@ -417,16 +422,17 @@ function exportCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
     
-    let csv = "Date,Category,Description,Method,Amount,Type\n";
+    let csv = "Date,Category,Description,Method,Amount,Ref,Type\n";
     entries.forEach(r => {
         const date = r.entry_date || r.date || "";
         const cat = r.category_name || r.category || "";
         const desc = r.description || "";
         const method = String(r.payment_method || "").toUpperCase();
         const amt = r.amount || 0;
+        const ref = r.reference_no || r.invoice_no || r.purchase_no || `VR-CB-${String(r.id).padStart(5, "0")}`;
         const type = r.entry_type || r.type || "";
         
-        csv += `${ui.escapeCsv(date)},${ui.escapeCsv(cat)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${amt},${ui.escapeCsv(type)}\n`;
+        csv += `${ui.escapeCsv(date)},${ui.escapeCsv(cat)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${amt},${ui.escapeCsv(ref)},${ui.escapeCsv(type)}\n`;
     });
     
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });

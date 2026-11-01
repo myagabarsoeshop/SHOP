@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/transfers.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
 import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -21,6 +22,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initTransfers() {
@@ -147,7 +155,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredTransfers);
     const currentBranchId = state.currentBranch?.id || 1;
 
@@ -229,7 +236,6 @@ function renderTable() {
         });
     }
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("transfers-pagination");
 }
 
@@ -242,7 +248,6 @@ function openCreateTransferModal() {
 
     const currentBranchId = state.currentBranch?.id || 1;
 
-    // ပစ္စည်းစာရင်း ဖြည့်သွင်းခြင်း
     if (prodSelect) {
         prodSelect.innerHTML = `<option value="">-- ပစ္စည်း ရွေးချယ်ပါ --</option>`;
         availableProducts.forEach(p => {
@@ -252,7 +257,6 @@ function openCreateTransferModal() {
         });
     }
 
-    // ဆိုင်ခွဲစာရင်း ဖြည့်သွင်းခြင်း (လက်ရှိဆိုင်မှအပ ကျန်ဆိုင်များ)
     if (destSelect) {
         destSelect.innerHTML = `<option value="">-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
@@ -291,12 +295,12 @@ async function submitCreateTransfer(e) {
     const fromBranchId = state.currentBranch?.id || 1;
 
     if (!prodId || !toBranchId || qty <= 0) {
-        return alert("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ");
+        return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
     }
 
     const prod = availableProducts.find(p => p.id === prodId);
     if (prod && qty > Number(prod.current_stock || 0)) {
-        return alert(`လက်ရှိဆိုင်တွင် လက်ကျန်ပစ္စည်း (${prod.current_stock}) ထက် ပိုမို၍ လွှဲပြောင်း၍ မရပါ`);
+        return ui.toast.warning(`လက်ရှိဆိုင်တွင် လက်ကျန်ပစ္စည်း (${prod.current_stock}) ထက် ပိုမို၍ လွှဲပြောင်း၍ မရပါ။`);
     }
 
     if (btn) btn.disabled = true;
@@ -313,11 +317,11 @@ async function submitCreateTransfer(e) {
     try {
         await api.post("/transfers", payload);
         document.getElementById("create-trf-modal")?.classList.add("hidden");
-        alert("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်းများ ညှိပြီးပါပြီ။");
+        ui.toast.success("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်းများ ညှိပြီးပါပြီ။");
         await loadProductsForTransfer();
         await loadTransfers();
     } catch (err) {
-        alert("လွှဲပြောင်း၍မရပါ: " + err.message);
+        ui.toast.error("လွှဲပြောင်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -347,7 +351,7 @@ async function submitEditTransfer(e) {
     const notes = document.getElementById("edit-trf-notes")?.value.trim();
 
     if (!id || newQty <= 0) {
-        return alert("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပေးပါ");
+        return ui.toast.warning("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပေးပါ။");
     }
 
     if (btn) btn.disabled = true;
@@ -360,26 +364,27 @@ async function submitEditTransfer(e) {
     try {
         await api.put(`/transfers/${id}`, payload);
         document.getElementById("edit-trf-modal")?.classList.add("hidden");
-        alert("လွှဲပြောင်းမှုမှတ်တမ်း ပြင်ဆင်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("လွှဲပြောင်းမှုမှတ်တမ်း ပြင်ဆင်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadProductsForTransfer();
         await loadTransfers();
     } catch (err) {
-        alert("ပြင်ဆင်၍မရပါ: " + err.message);
+        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function deleteTransfer(id) {
-    if (!confirm("ဤလွှဲပြောင်းမှုမှတ်တမ်းကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား?\n(ဆိုင်နှစ်ဖက်စလုံးရှိ စတော့များကို မူလအတိုင်း အလိုအလျောက် ပြန်ပေါင်း/နုတ် ပေးပါမည်)")) return;
+    const confirmed = await ui.confirm("ဤလွှဲပြောင်းမှုမှတ်တမ်းကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား?\n(ဆိုင်နှစ်ဖက်စလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်လည်ညှိနှိုင်းပေးပါမည်)", "error");
+    if (!confirmed) return;
 
     try {
         await api.delete(`/transfers/${id}`);
-        alert("လွှဲပြောင်းမှုမှတ်တမ်း ပယ်ဖျက်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("လွှဲပြောင်းမှုမှတ်တမ်း ပယ်ဖျက်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadProductsForTransfer();
         await loadTransfers();
     } catch (err) {
-        alert("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }
 
@@ -387,7 +392,7 @@ async function deleteTransfer(id) {
 function exportTransfersToCSV() {
     const dataToExport = currentFilteredTransfers.length > 0 ? currentFilteredTransfers : transfersList;
     if (dataToExport.length === 0) {
-        return alert("ထုတ်ယူရန် လွှဲပြောင်းမှုစာရင်း မရှိပါ။");
+        return ui.toast.warning("ထုတ်ယူရန် လွှဲပြောင်းမှုစာရင်း မရှိပါ။");
     }
 
     const currentYear = new Date().getFullYear();
@@ -396,19 +401,19 @@ function exportTransfersToCSV() {
     dataToExport.forEach(t => {
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const row = [
-            `"${escapeHtml(t.transfer_no || '')}"`,
-            `"${dateStr}"`,
-            `"${escapeHtml(t.from_branch_name || '')}"`,
-            `"${escapeHtml(t.to_branch_name || '')}"`,
-            `"${escapeHtml(t.sku || '')}"`,
-            `"${escapeHtml(t.barcode || '')}"`,
-            `"${escapeHtml(t.category || '')}"`,
-            `"${escapeHtml(t.item_name || '')}"`,
-            `"${escapeHtml(t.color || '')}"`,
-            `"${escapeHtml(t.size || 'ထည်')}"`,
+            escapeCsv(t.transfer_no),
+            escapeCsv(dateStr),
+            escapeCsv(t.from_branch_name),
+            escapeCsv(t.to_branch_name),
+            escapeCsv(t.sku),
+            escapeCsv(t.barcode),
+            escapeCsv(t.category),
+            escapeCsv(t.item_name),
+            escapeCsv(t.color),
+            escapeCsv(t.size || 'ထည်'),
             t.quantity || 0,
-            `"${escapeHtml(t.notes || '')}"`,
-            `"${escapeHtml(t.created_by_name || 'Admin')}"`
+            escapeCsv(t.notes),
+            escapeCsv(t.created_by_name || 'Admin')
         ];
         csvContent += row.join(",") + "\n";
     });

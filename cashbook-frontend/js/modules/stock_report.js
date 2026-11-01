@@ -184,16 +184,25 @@ function renderTable(list) {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    const tfoot = document.getElementById("sr-table-foot");
+    // HTML ရှိ Footer ID နှစ်မျိုးလုံးကို စစ်ဆေးရှာဖွေခြင်း
+    const tfoot = document.getElementById("sr-table-footer") || document.getElementById("sr-table-foot");
 
     if (list.length === 0) {
         tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center text-slate-400 font-bold text-sm">စတော့မှတ်တမ်း မတွေ့ရှိပါ</td></tr>`;
-        if (tfoot) tfoot.innerHTML = "";
+        if (tfoot) {
+            const inEl = document.getElementById("sr-grand-in");
+            const outEl = document.getElementById("sr-grand-out");
+            const stockEl = document.getElementById("sr-grand-stock");
+            const valEl = document.getElementById("sr-grand-value");
+            if (inEl) inEl.textContent = "0";
+            if (outEl) outEl.textContent = "0";
+            if (stockEl) stockEl.textContent = "0";
+            if (valEl) valEl.textContent = "0 Ks";
+        }
         return;
     }
 
-    // Totals Initialization
-    const monthlyTotals = Array(13).fill(0); // 1-12
+    const monthlyTotals = Array(13).fill(0);
     let sumIn = 0;
     let sumOut = 0;
     let sumBal = 0;
@@ -227,7 +236,6 @@ function renderTable(list) {
             </td>
         `;
 
-        // 12 Months Closing Balances (m1 to m12)
         for (let m = 1; m <= 12; m++) {
             const mQty = Number(item.monthly_balances?.[m] ?? item[`m${m}`] ?? 0);
             monthlyTotals[m] += mQty;
@@ -257,34 +265,47 @@ function renderTable(list) {
         tbody.appendChild(tr);
     });
 
-    // Render Table Footer Summary (Total Row)
+    // 1. HTML ထဲတွင် တိုက်ရိုက် ID များ ပါရှိပါက ထိုနေရာသို့ ချက်ချင်း အစားထိုးခြင်း
+    const inEl = document.getElementById("sr-grand-in");
+    const outEl = document.getElementById("sr-grand-out");
+    const stockEl = document.getElementById("sr-grand-stock");
+    const valEl = document.getElementById("sr-grand-value");
+
+    if (inEl && outEl && stockEl && valEl) {
+        inEl.textContent = `+${sumIn.toLocaleString()}`;
+        outEl.textContent = `-${sumOut.toLocaleString()}`;
+        stockEl.textContent = sumBal.toLocaleString();
+        valEl.textContent = `${sumVal.toLocaleString()} Ks`;
+    }
+
+    // 2. လအလိုက် စုစုပေါင်းကော်လံများ အပါအဝင် Footer Row တစ်ခုလုံးကို ပြည့်စုံစွာ ပြန်လည်တည်ဆောက်ခြင်း
     if (tfoot) {
         let footHtml = `
-            <tr class="bg-slate-100/90 dark:bg-slate-950/80 font-black border-t-2 border-slate-300 dark:border-slate-700">
-                <td colspan="3" class="p-3 text-right uppercase text-xs tracking-wider text-slate-600 dark:text-slate-300">
-                    စုစုပေါင်း (Total)
+            <tr>
+                <td colspan="3" class="p-3.5 text-center tracking-wide font-black uppercase text-xs text-slate-500 dark:text-slate-400">
+                    Total Summary
                 </td>
         `;
 
         for (let m = 1; m <= 12; m++) {
             footHtml += `
-                <td class="p-3 text-center font-mono text-slate-800 dark:text-slate-200">
+                <td class="p-3.5 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
                     ${monthlyTotals[m].toLocaleString()}
                 </td>
             `;
         }
 
         footHtml += `
-                <td class="p-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                <td id="sr-grand-in" class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-base">
                     +${sumIn.toLocaleString()}
                 </td>
-                <td class="p-3 text-right font-mono text-rose-600 dark:text-rose-400">
+                <td id="sr-grand-out" class="p-3.5 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-base">
                     -${sumOut.toLocaleString()}
                 </td>
-                <td class="p-3 text-right font-mono text-blue-600 dark:text-blue-400 text-sm">
+                <td id="sr-grand-stock" class="p-3.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-base">
                     ${sumBal.toLocaleString()}
                 </td>
-                <td class="p-3 text-right font-mono text-amber-600 dark:text-amber-400">
+                <td id="sr-grand-value" class="p-3.5 text-right font-mono font-black text-amber-600 dark:text-amber-400 text-base">
                     ${sumVal.toLocaleString()} Ks
                 </td>
             </tr>

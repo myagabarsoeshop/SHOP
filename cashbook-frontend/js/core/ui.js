@@ -1,7 +1,7 @@
 // cashbook-frontend/js/core/ui.js
 
 /**
- * Global UI Utilities for Professional Notifications & Confirmations
+ * Global UI Utilities for Professional Notifications, Confirmations & Security Helpers
  */
 
 const toastConfig = {
@@ -25,7 +25,7 @@ function showToast(message, type = 'success') {
     
     toast.innerHTML = `
         <i class="fa-solid ${theme.icon} text-lg shrink-0"></i>
-        <div class="text-sm font-bold flex-1 leading-snug">${message}</div>
+        <div class="text-sm font-bold flex-1 leading-snug">${escapeHtml(message)}</div>
         <button type="button" class="text-current opacity-60 hover:opacity-100 cursor-pointer shrink-0 transition p-1">
             <i class="fa-solid fa-xmark"></i>
         </button>
@@ -33,7 +33,6 @@ function showToast(message, type = 'success') {
 
     container.appendChild(toast);
 
-    // Auto-remove logic
     let timeoutId;
     const removeToast = () => {
         toast.classList.remove('animate-slide-in-right');
@@ -43,7 +42,6 @@ function showToast(message, type = 'success') {
 
     timeoutId = setTimeout(removeToast, toastConfig.duration);
 
-    // Click to close early
     toast.querySelector('button').addEventListener('click', () => {
         clearTimeout(timeoutId);
         removeToast();
@@ -52,7 +50,7 @@ function showToast(message, type = 'success') {
 
 /**
  * Global Confirm Dialog Promise
- * Usage: const confirmed = await ui.confirm("Are you sure?", "warning");
+ * Usage: const confirmed = await ui.confirm("ဖျက်သိမ်းရန် သေချာပါသလား?", "error");
  */
 function confirmDialog(message, type = 'warning') {
     return new Promise((resolve) => {
@@ -60,49 +58,51 @@ function confirmDialog(message, type = 'warning') {
         const box = document.getElementById('confirm-box');
         const titleEl = document.getElementById('confirm-title');
         const msgEl = document.getElementById('confirm-message');
-        const iconEl = document.getElementById('confirm-icon');
         const iconBoxEl = document.getElementById('confirm-icon-box');
         
         const btnCancel = document.getElementById('btn-confirm-cancel');
         const btnOk = document.getElementById('btn-confirm-ok');
 
         if (!dialog) {
-            // Fallback to native confirm if UI elements are missing
             resolve(window.confirm(message));
             return;
         }
 
-        // Configure theme based on type (warning or error)
         if (type === 'error') {
-            iconBoxEl.className = 'w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl bg-rose-500/10 text-rose-500';
-            btnOk.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer bg-rose-600 hover:bg-rose-500 shadow-rose-500/20';
-            titleEl.textContent = 'ဖျက်သိမ်းရန် သေချာပါသလား?';
-            btnOk.textContent = 'ဖျက်သိမ်းမည်';
+            if (iconBoxEl) iconBoxEl.className = 'w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl bg-rose-500/10 text-rose-500';
+            if (btnOk) {
+                btnOk.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer bg-rose-600 hover:bg-rose-500 shadow-rose-500/20';
+                btnOk.textContent = 'ဖျက်သိမ်းမည်';
+            }
+            if (titleEl) titleEl.textContent = 'ဖျက်သိမ်းရန် သေချာပါသလား?';
         } else {
-            iconBoxEl.className = 'w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl bg-amber-500/10 text-amber-500';
-            btnOk.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20';
-            titleEl.textContent = 'အတည်ပြုပါ';
-            btnOk.textContent = 'အတည်ပြုမည်';
+            if (iconBoxEl) iconBoxEl.className = 'w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl bg-amber-500/10 text-amber-500';
+            if (btnOk) {
+                btnOk.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20';
+                btnOk.textContent = 'အတည်ပြုမည်';
+            }
+            if (titleEl) titleEl.textContent = 'အတည်ပြုပါ';
         }
 
-        msgEl.textContent = message;
+        if (msgEl) msgEl.textContent = message;
         
-        // Show dialog
         dialog.classList.remove('hidden');
         setTimeout(() => {
-            box.classList.remove('scale-90', 'opacity-0');
-            box.classList.add('scale-100', 'opacity-100');
+            if (box) {
+                box.classList.remove('scale-90', 'opacity-0');
+                box.classList.add('scale-100', 'opacity-100');
+            }
         }, 10);
 
-        // Define close and resolve logic
         const closeAndResolve = (result) => {
-            box.classList.remove('scale-100', 'opacity-100');
-            box.classList.add('scale-90', 'opacity-0');
+            if (box) {
+                box.classList.remove('scale-100', 'opacity-100');
+                box.classList.add('scale-90', 'opacity-0');
+            }
             setTimeout(() => {
                 dialog.classList.add('hidden');
-                // Clean up listeners
-                btnCancel.removeEventListener('click', onCancel);
-                btnOk.removeEventListener('click', onOk);
+                btnCancel?.removeEventListener('click', onCancel);
+                btnOk?.removeEventListener('click', onOk);
                 resolve(result);
             }, 200);
         };
@@ -110,12 +110,40 @@ function confirmDialog(message, type = 'warning') {
         const onCancel = () => closeAndResolve(false);
         const onOk = () => closeAndResolve(true);
 
-        btnCancel.addEventListener('click', onCancel);
-        btnOk.addEventListener('click', onOk);
+        btnCancel?.addEventListener('click', onCancel);
+        btnOk?.addEventListener('click', onOk);
     });
 }
 
-// Export as a unified UI object
+/**
+ * XSS ကာကွယ်ရေး Single-Source String Sanitizer (Single Quote အပါအဝင်)
+ */
+export function escapeHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+/**
+ * CSV Formula Injection (=, +, -, @) ကာကွယ်ရေး Escaper
+ */
+export function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
+}
+
+/**
+ * ငွေပမာဏ ကော်မာထည့်သွင်းဖော်ပြခြင်း
+ */
+export function formatMoney(val) {
+    return `${Number(val || 0).toLocaleString()} Ks`;
+}
+
+// Unified UI Object
 export const ui = {
     toast: {
         success: (msg) => showToast(msg, 'success'),
@@ -123,5 +151,8 @@ export const ui = {
         warning: (msg) => showToast(msg, 'warning'),
         info: (msg) => showToast(msg, 'info')
     },
-    confirm: confirmDialog
+    confirm: confirmDialog,
+    escapeHtml,
+    escapeCsv,
+    formatMoney
 };

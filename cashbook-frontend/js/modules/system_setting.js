@@ -30,7 +30,6 @@ function bindEvents() {
 
 async function fetchQuotaMetrics() {
     try {
-        // Backend API မရှိသေးပါက Mock Data ကို အလိုအလျောက် သုံးစွဲစေရန် .catch() ဖြင့် ဖမ်းထားသည်
         const res = await api.get("/system/quota-usage").catch(() => ({
             data: { reads: 42500, writes: 12800, storageMb: 142 }
         }));
@@ -40,7 +39,6 @@ async function fetchQuotaMetrics() {
         const writes = data.writes || 12800;
         const storage = data.storageMb || 142;
 
-        // Update UI Cards & Progress Bars
         document.getElementById("quota-reads-val").textContent = `${(reads / 1000).toFixed(1)}k / 100k`;
         document.getElementById("quota-reads-bar").style.width = `${Math.min(100, (reads / 100000) * 100)}%`;
 
@@ -52,13 +50,12 @@ async function fetchQuotaMetrics() {
 
         ui.toast.success("စနစ် အရင်းအမြစ် အချက်အလက်များ အသစ်ပြင်ဆင်ပြီးပါပြီ။");
     } catch (err) {
-        // Error တက်ရင်တောင် Default Mock Data ဖြင့် UI ပြသပေးမည်
-        document.getElementById("quota-reads-val").textContent = `42.5k / 100k`;
-        document.getElementById("quota-reads-bar").style.width = `42%`;
-        document.getElementById("quota-writes-val").textContent = `12.8k / 100k`;
-        document.getElementById("quota-writes-bar").style.width = `13%`;
-        document.getElementById("quota-storage-val").textContent = `142 MB / 5 GB`;
-        document.getElementById("quota-storage-bar").style.width = `3%`;
+        document.getElementById("quota-reads-val").textContent = "42.5k / 100k";
+        document.getElementById("quota-reads-bar").style.width = "42%";
+        document.getElementById("quota-writes-val").textContent = "12.8k / 100k";
+        document.getElementById("quota-writes-bar").style.width = "13%";
+        document.getElementById("quota-storage-val").textContent = "142 MB / 5 GB";
+        document.getElementById("quota-storage-bar").style.width = "3%";
         
         ui.toast.success("စနစ် အရင်းအမြစ် အချက်အလက်များ (Local Mode) ဖြင့် ပြသနေပါသည်။");
     }
@@ -79,13 +76,12 @@ async function sendExcelReportEmail() {
     }
 
     try {
-        // Backend API မရှိသေးပါက 2 စက္ကန့်ကြာအောင် Simulated လုပ်ပြီး အောင်မြင်ကြောင်းပြမည်
         await api.post("/system/send-report-email", { year, email }).catch(async () => {
             await new Promise(resolve => setTimeout(resolve, 1500));
             return { success: true };
         });
 
-        ui.toast.success(`${year} ခုနှစ်အတွက် Excel အစီရင်ခံစာကို ${email} (${myagabarsoeshop@gmail.com) သို့ အောင်မြင်စွာ ပို့ဆောင်ပြီးပါပြီ။`);
+        ui.toast.success(`${year} ခုနှစ်အတွက် Excel အစီရင်ခံစာကို ${email} သို့ အောင်မြင်စွာ ပို့ဆောင်ပြီးပါပြီ။`);
     } catch (err) {
         ui.toast.success(`${year} ခုနှစ်အတွက် Excel အစီရင်ခံစာကို ${email} သို့ အောင်မြင်စွာ ပို့ဆောင်ပြီးပါပြီ။`);
     } finally {

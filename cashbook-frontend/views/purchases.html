@@ -57,7 +57,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Enterprise Purchase Order Workspace Modal (4-Section Design)          -->
+<!-- Enterprise Purchase Order Workspace Modal                             -->
 <!-- ===================================================================== -->
 <div id="purchase-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-3 md:p-6">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-6xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[94vh] overflow-hidden">
@@ -69,7 +69,7 @@
                     <i class="fa-solid fa-cart-flatbed"></i>
                 </div>
                 <div>
-                    <h3 class="text-base font-extrabold flex items-center gap-2">
+                    <h3 id="purchase-modal-title" class="text-base font-extrabold flex items-center gap-2">
                         <span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span>
                         <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-normal">Purchase Order</span>
                     </h3>
@@ -82,12 +82,12 @@
         </div>
 
         <!-- Scrollable Workspace Body -->
-        <div class="p-6 space-y-6 overflow-y-auto flex-1">
+        <div class="p-6 space-y-5 overflow-y-auto flex-1">
             <input type="hidden" id="pur-edit-id" value="">
 
-            <!-- SECTION 1: Purchase Information Header -->
+            <!-- SECTION 1: Purchase Information -->
             <div class="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <div class="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <div class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-circle-info text-emerald-500"></i>
                     <span>၁။ အဝယ်အချက်အလက် (Purchase Information)</span>
                 </div>
@@ -95,16 +95,16 @@
                     <div>
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပေးသွင်းသူ / ပွဲရုံ *</label>
                         <input type="text" id="pur-supplier" placeholder="ဥပမာ - ရွှေမန်းပွဲရုံ" required
-                            class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                            class="w-full h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အဝယ်ရက်စွဲ *</label>
                         <input type="date" id="pur-date" required
-                            class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 font-mono">
+                            class="w-full h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ငွေပေးချေမှုပုံစံ *</label>
-                        <select id="pur-payment-method" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                        <select id="pur-payment-method" class="w-full h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
                             <option value="cash">လက်ငင်း (Cash)</option>
                             <option value="bank">ဘဏ်လွှဲ (KPay / Bank)</option>
                             <option value="credit">အကြွေးဝယ်ယူမှု (Credit)</option>
@@ -113,15 +113,15 @@
                     <div id="pur-bank-container" class="hidden">
                         <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ဘဏ် / အကောင့်အမည် *</label>
                         <input type="text" id="pur-bank-name" placeholder="ဥပမာ - KBZ Pay"
-                            class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                            class="w-full h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
                 </div>
             </div>
 
-            <!-- SECTION 2: Dedicated Product Selection Bar (Outside Table - No Clipping!) -->
+            <!-- SECTION 2: Dedicated Product Selection Bar -->
             <div class="space-y-2">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
                         <i class="fa-solid fa-magnifying-glass text-blue-500"></i>
                         <span>၂။ ကုန်ပစ္စည်း ရွေးချယ်ရှာဖွေခြင်း (Product Selection)</span>
                     </div>
@@ -131,24 +131,22 @@
                     </button>
                 </div>
 
-                <div class="relative flex items-center gap-2 bg-slate-100 dark:bg-slate-950 p-2 rounded-2xl border border-slate-300 dark:border-slate-800">
-                    <!-- Category Filter -->
-                    <select id="pur-quick-cat-filter" class="w-44 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2.5 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 cursor-pointer shrink-0">
+                <div class="relative flex items-center gap-2 bg-slate-50 dark:bg-slate-950/60 p-2 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <select id="pur-quick-cat-filter" class="w-44 h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shrink-0">
                         <option value="">အမျိုးအစား အားလုံး</option>
                     </select>
 
-                    <!-- Main Search Input -->
                     <div class="relative flex-1">
                         <i class="fa-solid fa-barcode text-emerald-500 text-sm absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                         <input type="text" id="pur-quick-search-input" autocomplete="off"
                             placeholder="Barcode စကင်ဖတ်ပါ သို့မဟုတ် ပစ္စည်းကုတ် (SKU) / အထည်အမည် / အရောင် ရိုက်ရှာပါ..."
-                            class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl pl-9 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            class="w-full h-10 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl pl-9 pr-8 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         <button type="button" id="btn-clear-quick-search" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 text-xs">
                             <i class="fa-solid fa-circle-xmark"></i>
                         </button>
                     </div>
 
-                    <!-- Autocomplete Floating Dropdown Card (High z-index, Unclipped) -->
+                    <!-- Autocomplete Floating Dropdown Card -->
                     <div id="pur-quick-suggestions" class="hidden absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"></div>
                 </div>
             </div>
@@ -156,7 +154,7 @@
             <!-- SECTION 3: Editable Purchase Items Table -->
             <div class="space-y-2">
                 <div class="flex items-center justify-between">
-                    <div class="text-xs font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
                         <i class="fa-solid fa-list-check text-emerald-500"></i>
                         <span>၃။ ဝယ်ယူမည့် ပစ္စည်းများစာရင်း (Order Items)</span>
                     </div>
@@ -217,7 +215,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Dedicated Create Product Sub-Modal (Fixed Inline z-index: 70)       -->
+<!-- Dedicated Create Product Sub-Modal                                    -->
 <!-- ===================================================================== -->
 <div id="new-prod-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" style="z-index: 70;">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
@@ -232,22 +230,22 @@
             <div>
                 <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">အမျိုးအစား (Category) *</label>
                 <input type="text" id="sub-cat" required placeholder="ပုဆိုး / လုံချည် / အင်္ကျီ / ချည်" list="sub-cat-datalist"
-                    class="w-full font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                    class="w-full h-10 font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <datalist id="sub-cat-datalist"></datalist>
             </div>
             <div>
                 <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">ပစ္စည်းအမည် (Item Name) *</label>
                 <input type="text" id="sub-name" required placeholder="ဥပမာ - ကချင်ရိုးရာပိုးထည်"
-                    class="w-full font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500">
+                    class="w-full h-10 font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
             <div class="grid grid-cols-2 gap-2.5">
                 <div>
                     <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">အထည်ကုတ် (SKU)</label>
-                    <input type="text" id="sub-sku" placeholder="Auto Generate" class="w-full font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-emerald-500">
+                    <input type="text" id="sub-sku" placeholder="Auto Generate" class="w-full h-10 font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-emerald-500">
                 </div>
                 <div>
                     <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">ယူနစ် (Unit) *</label>
-                    <select id="sub-size" class="w-full font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                    <select id="sub-size" class="w-full h-10 font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-900 dark:text-white">
                         <option value="ထည်" selected>ထည်</option>
                         <option value="ပေါင်">ပေါင် (lb)</option>
                         <option value="လိပ်">လိပ်</option>
@@ -259,11 +257,11 @@
             <div class="grid grid-cols-2 gap-2.5">
                 <div>
                     <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">အဆင် / ဒီဇိုင်း</label>
-                    <input type="text" id="sub-pattern" placeholder="အကွက်စိပ်" class="w-full font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                    <input type="text" id="sub-pattern" placeholder="အကွက်စိပ်" class="w-full h-10 font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-900 dark:text-white">
                 </div>
                 <div>
                     <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">အရောင် (Color)</label>
-                    <input type="text" id="sub-color" placeholder="နက်ပြာ" class="w-full font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                    <input type="text" id="sub-color" placeholder="နက်ပြာ" class="w-full h-10 font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 text-slate-900 dark:text-white">
                 </div>
             </div>
             <div class="pt-2">

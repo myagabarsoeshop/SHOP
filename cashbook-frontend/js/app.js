@@ -1,5 +1,4 @@
 // cashbook-frontend/js/app.js
-
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
 import { ui } from "./core/ui.js"; // UI Utilities (Toast & Confirm) ကို Import လုပ်ခြင်း
@@ -16,6 +15,7 @@ import { initMasterProducts } from "./modules/master_products.js";
 import { initWaste } from "./modules/waste.js";
 import { initTransfers } from "./modules/transfers.js";
 import { initStockReport } from "./modules/stock_report.js";
+import { initSystemSetting } from "./modules/system_setting.js"; // 👈 ထည့်သွင်းပြီးပါပြီ
 
 const VIEW_TITLES = {
     dashboard: "Dashboard (လုပ်ငန်းအနှစ်ချုပ်)",
@@ -28,7 +28,8 @@ const VIEW_TITLES = {
     stock_report: "Stock Report (လစဉ်စတော့လှုပ်ရှားမှုနှင့် လက်ကျန်မက်ထရစ်)",
     master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
-    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)"
+    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)",
+    system_setting: "System Setting (စနစ် ဆက်တင်နှင့် အရင်းအမြစ်)" // 👈 comma မှန်ကန်စွာ ထည့်သွင်းပြီး
 };
 
 let currentActiveView = "dashboard";
@@ -50,7 +51,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function setupNavigation() {
     document.getElementById("btn-logout")?.addEventListener("click", async () => {
-        // Native confirm() အစား Professional ui.confirm() ကို အသုံးပြုခြင်း
         const confirmed = await ui.confirm("စနစ်မှ အမှန်တကယ် ထွက်ခွာလိုပါသလား?", "warning");
         if (confirmed) {
             state.logout();
@@ -65,7 +65,6 @@ function setupNavigation() {
     });
 }
 
-// Top Bar KPI Card ကို နှိပ်ပြီး ယနေ့အရောင်း အသေးစိတ်ဇယား ချက်ချင်းဖွင့်နိုင်ရန် ချိတ်ဆက်ခြင်း
 function setupTopKpiClickEvents() {
     const kpi3Card = document.getElementById("kpi-3-value")?.closest(".kpi-card") || document.getElementById("kpi-3-value")?.parentElement;
     if (kpi3Card) {
@@ -120,7 +119,6 @@ function showAppLayout() {
     if (roleEl) roleEl.textContent = user.role || "cashier";
     if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
 
-    // Admin Role ဖြစ်မှသာ Product Master Menu ကို ပြသမည်
     const masterMenu = document.getElementById("nav-master-products");
     if (masterMenu) {
         if (state.isAdmin()) {
@@ -179,7 +177,6 @@ export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     const globalKpiBar = document.getElementById("global-kpi-bar");
 
-    // Dashboard မျက်နှာပြင်တွင် ကိုယ်ပိုင် 4-Box Cards များ ပါရှိပြီးဖြစ်သောကြောင့် အပေါ်ဘားကို ဖျောက်ထားမည်
     if (view === "dashboard") {
         globalKpiBar?.classList.add("hidden");
         return;
@@ -187,7 +184,6 @@ export async function refreshGlobalKPIs(viewOverride) {
         globalKpiBar?.classList.remove("hidden");
     }
 
-    // KPI ကို ကိုယ်ပိုင်သီးသန့် တွက်ချက်သည့် မျက်နှာပြင်များ
     if (
         view === "inventory" || 
         view === "yarn" || 
@@ -196,7 +192,8 @@ export async function refreshGlobalKPIs(viewOverride) {
         view === "master_products" || 
         view === "waste" || 
         view === "transfers" ||
-        view === "stock_report"
+        view === "stock_report" ||
+        view === "system_setting"
     ) return;
 
     try {
@@ -290,6 +287,8 @@ export async function navigateTo(viewName) {
             await initTransfers();
         } else if (viewName === "stock_report") {
             await initStockReport();
+        } else if (viewName === "system_setting") {
+            await initSystemSetting();
         }
     } catch (err) {
         container.innerHTML = `

@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Phase 1: Secure Auth, JWT/HMAC & RBAC)
+// File: cashbook-api/worker.js (Phase 1 & 2 Completed: Secure Auth + D1 Fixed)
 // =============================================================================
 
 const corsHeaders = {
@@ -79,9 +79,6 @@ function timingSafeEqual(a, b) {
     return res === 0;
 }
 
-/**
- * PBKDF2 Password Hashing (100,000 rounds SHA-256)
- */
 async function hashPassword(password, saltHex = null) {
     const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
     const passKey = await crypto.subtle.importKey(
@@ -106,9 +103,6 @@ async function hashPassword(password, saltHex = null) {
     return `pbkdf2:${outSaltHex}:${hashHex}`;
 }
 
-/**
- * PBKDF2 Password Verification (with Legacy/Seed Fallback support)
- */
 async function verifyPassword(password, storedHash) {
     if (!storedHash) return false;
     if (storedHash.startsWith("pbkdf2:")) {
@@ -120,13 +114,9 @@ async function verifyPassword(password, storedHash) {
         const computedHash = computed.split(":")[2];
         return timingSafeEqual(expectedHash, computedHash);
     }
-    // Fallback for seed plain/mock hash during migration
     return storedHash === password || storedHash === `${password}_hash`;
 }
 
-/**
- * Sign HMAC-SHA256 Token (Valid for 12 hours)
- */
 async function signToken(payload, secret, expiresInSeconds = 43200) {
     const header = { alg: "HS256", typ: "JWT" };
     const now = Math.floor(Date.now() / 1000);
@@ -148,9 +138,6 @@ async function signToken(payload, secret, expiresInSeconds = 43200) {
     return `${dataToSign}.${base64UrlEncode(signature)}`;
 }
 
-/**
- * Verify HMAC-SHA256 Token
- */
 async function verifyToken(token, secret) {
     if (!token || typeof token !== "string") return null;
     const parts = token.split(".");
@@ -180,9 +167,6 @@ async function verifyToken(token, secret) {
     }
 }
 
-/**
- * Request Authentication Middleware
- */
 async function getAuthUser(request, env) {
     const authHeader = request.headers.get("Authorization") || "";
     if (!authHeader.startsWith("Bearer ")) return null;
@@ -205,29 +189,24 @@ export default {
         const path = url.pathname;
         const method = request.method;
 
-        // Frontend Static Files
         if (!path.startsWith("/api")) {
             if (env && env.ASSETS) {
                 return env.ASSETS.fetch(request);
             }
             return jsonResponse({
                 status: "online",
-                version: "2.8.1",
+                version: "2.8.2",
                 note: "Frontend assets not bound."
             });
         }
 
         try {
-            // =================================================================
-            // PUBLIC ROUTES (Authentication Not Required)
-            // =================================================================
-            
             // 1. Health Check
             if (path === "/api/health" && method === "GET") {
-                return jsonResponse({ status: "online", version: "2.8.1" });
+                return jsonResponse({ status: "online", version: "2.8.2" });
             }
 
-            // 2. Auth Login (Verified Password + Signed Token Generation)
+            // 2. Auth Login
             if (path === "/api/auth/login" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const { username, password } = body;
@@ -273,26 +252,22 @@ export default {
             }
 
             // =================================================================
-            // PROTECTED ROUTE AUTHENTICATION GATEWAY
+            // PROTECTED ROUTE GATEWAY
             // =================================================================
             const auth = await getAuthUser(request, env);
             if (!auth) {
                 return errorResponse("အကောင့်ဝင်ရောက်ထားခြင်း မရှိပါ သို့မဟုတ် Token သက်တမ်းကုန်ဆုံးသွားပါသည် (401 Unauthorized)", 401);
             }
 
-            // User info extracted from Token (Client input is ignored for security)
             const currentUserId = auth.uid;
             const currentUserRole = auth.role;
             const userBranchId = auth.branch_id;
 
-            // Delete Operations Require Admin / Manager / Finance Role
             if (method === "DELETE" && !["admin", "manager", "finance"].includes(currentUserRole)) {
                 return errorResponse("ဤမှတ်တမ်းအား ဖျက်ပစ်ခွင့် မရှိပါ (Admin / Manager Role လိုအပ်ပါသည်)", 403);
             }
 
-            // =================================================================
-            // 2.1. PASSWORD MANAGEMENT (Self Password Change)
-            // =================================================================
+            // 2.1. Password Change
             if (path === "/api/auth/change-password" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const { oldPassword, newPassword } = body;
@@ -310,9 +285,7 @@ export default {
                 return jsonResponse({ message: "စကားဝှက် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ" });
             }
 
-            // =================================================================
-            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Admin Only)
-            // =================================================================
+            // 1.1. System Setting & Email Backup (Admin Only)
             if (path === "/api/system/send-report-email" && method === "POST") {
                 if (currentUserRole !== "admin") {
                     return errorResponse("စနစ် အစီရင်ခံစာ ပို့ဆောင်ခွင့်ကို စနစ်ပိုင်ရှင် (Admin) သာ ခွင့်ပြုပါသည်", 403);
@@ -322,15 +295,9 @@ export default {
                 const targetYear = String(body.year || new Date().getFullYear());
                 const targetEmail = body.email;
 
-                if (!targetEmail) {
-                    return errorResponse("အီးမေးလ်လိပ်စာ ထည့်သွင်းပေးပါ", 400);
-                }
+                if (!targetEmail) return errorResponse("အီးမေးလ်လိပ်စာ ထည့်သွင်းပေးပါ", 400);
+                if (!env.RESEND_API_KEY) return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
 
-                if (!env.RESEND_API_KEY) {
-                    return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
-                }
-
-                // Database Tables Fetch
                 const { results: products } = await env.DB.prepare(`
                     SELECT p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color,
                            p.cost_price, p.retail_price, p.wholesale_price,
@@ -408,7 +375,6 @@ export default {
                     waste = [];
                 }
 
-                // Excel XML Builder
                 const cleanXml = (val) => String(val ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
                 const buildSheet = (sheetName, headers, rows) => {
                     let xml = `<Worksheet ss:Name="${cleanXml(sheetName)}"><Table>`;
@@ -493,9 +459,7 @@ export default {
                 return jsonResponse({ success: true, message: "Multi-sheet Excel report sent successfully", data: resendData });
             }
 
-            // =================================================================
-            // 3. BRANCHES
-            // =================================================================
+            // 3. Branches
             if (path === "/api/branches" && method === "GET") {
                 const { results } = await env.DB.prepare(
                     "SELECT id, code, name, type, phone, address FROM branches WHERE is_active = 1 ORDER BY id ASC"
@@ -503,9 +467,7 @@ export default {
                 return jsonResponse(results || []);
             }
 
-            // =================================================================
-            // 4. PRODUCTS & STOCK BALANCES
-            // =================================================================
+            // 4. Products & Stock
             if (path === "/api/products" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id");
                 const search = url.searchParams.get("search")?.trim() || "";
@@ -748,6 +710,76 @@ export default {
 
                 await env.DB.batch(batchStatements);
                 return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
+            }
+
+            // 5.1. PURCHASES UPDATE (အဝယ်စာရင်း ပြင်ဆင်ခြင်းနှင့် စတော့အလိုအလျောက် ပြန်ညှိခြင်း)
+            if (path.startsWith("/api/purchases/") && method === "PUT") {
+                const purId = Number(path.split("/").pop());
+                const body = await request.json().catch(() => ({}));
+                const supplierName = String(body.supplier_name || "").trim();
+                const paymentMethod = String(body.payment_method || "cash").toLowerCase();
+                const bankAccountName = body.bank_account_name || null;
+                const items = body.items || [];
+
+                if (!purId || items.length === 0) {
+                    return errorResponse("အဝယ်မှတ်တမ်း ID နှင့် ပစ္စည်းများ လိုအပ်ပါသည်", 400);
+                }
+
+                const oldPur = await env.DB.prepare("SELECT branch_id, purchase_no FROM purchases WHERE id = ?").bind(purId).first();
+                if (!oldPur) return errorResponse("အဝယ်မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+                const branchId = oldPur.branch_id;
+
+                const { results: oldItems } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
+                const batch = [];
+
+                (oldItems || []).forEach(it => {
+                    batch.push(
+                        env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
+                            .bind(parseFloat(it.quantity), Number(branchId), Number(it.product_id))
+                    );
+                });
+
+                batch.push(env.DB.prepare("DELETE FROM purchase_items WHERE purchase_id = ?").bind(purId));
+
+                let newTotalAmount = 0;
+                for (const it of items) {
+                    const q = parseFloat(it.quantity) || 0;
+                    const c = parseFloat(it.unit_cost) || 0;
+                    const sub = q * c;
+                    newTotalAmount += sub;
+
+                    batch.push(
+                        env.DB.prepare("INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)")
+                            .bind(purId, Number(it.product_id), q, c, sub)
+                    );
+
+                    batch.push(
+                        env.DB.prepare(`
+                            INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
+                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity
+                        `).bind(Number(branchId), Number(it.product_id), q)
+                    );
+                }
+
+                batch.push(
+                    env.DB.prepare("UPDATE purchases SET supplier_name = ?, total_amount = ?, payment_method = ?, bank_account_name = ? WHERE id = ?")
+                        .bind(supplierName, newTotalAmount, paymentMethod, bankAccountName, purId)
+                );
+
+                if (paymentMethod !== "credit") {
+                    batch.push(
+                        env.DB.prepare(`
+                            UPDATE cashbook_entries 
+                            SET amount = ?, payment_method = ?, bank_account_name = ?, description = ?
+                            WHERE purchase_id = ?
+                        `).bind(newTotalAmount, paymentMethod, bankAccountName, `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}`, purId)
+                    );
+                } else {
+                    batch.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
+                }
+
+                await env.DB.batch(batch);
+                return jsonResponse({ message: "အဝယ်စာရင်း ပြင်ဆင်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
             }
 
             if (path.startsWith("/api/purchases/") && method === "DELETE") {
@@ -1690,7 +1722,6 @@ export default {
 
                 const targetBranchId = (branchId && branchId !== "ALL") ? Number(branchId) : (currentUserRole === "cashier" ? userBranchId : 1);
 
-                // Staff Metrics
                 const todaySalesRow = await env.DB.prepare(`
                     SELECT 
                         COALESCE(SUM(cash_amount), 0) AS today_cash,
@@ -1746,7 +1777,6 @@ export default {
                     recent_sales: recentSales || []
                 };
 
-                // Admin Metrics
                 let salesFilter = ` strftime('%Y', created_at) = ? `;
                 let salesBindings = [year];
                 if (branchId && branchId !== "ALL") {

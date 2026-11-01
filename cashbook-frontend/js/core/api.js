@@ -4,8 +4,6 @@ const isLocalHost =
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1";
 
-// Wrangler dev (port 8787) သို့မဟုတ် Production Worker တွင် Same-Origin "/api" ကို သုံးပြီး၊
-// VS Code Live Server (ဥပမာ port 5500) ဖြင့် ဖွင့်စမ်းပါက localhost:8787 သို့ အလိုအလျောက် ချိတ်ပေးမည်
 export const API_BASE_URL =
     isLocalHost && window.location.port !== "8787"
         ? "http://localhost:8787/api"
@@ -34,9 +32,12 @@ export const api = {
         const url = `${API_BASE_URL}${cleanEndpoint}`;
 
         const token = localStorage.getItem("pos_token");
+        const branchId = localStorage.getItem("pos_branch_id") || "";
+
         const headers = {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(branchId ? { "X-Branch-Id": branchId } : {}),
             ...(options.headers || {})
         };
 
@@ -48,6 +49,14 @@ export const api = {
         try {
             const response = await fetch(url, config);
             const data = await response.json().catch(() => ({}));
+
+            // Token သက်တမ်းကုန်ဆုံးသွားပါက Login ပြန်ဝင်ခိုင်းခြင်း
+            if (response.status === 401 && !cleanEndpoint.includes("/auth/login")) {
+                localStorage.removeItem("pos_token");
+                localStorage.removeItem("pos_user");
+                window.location.reload();
+                throw new Error("အကောင့်ဝင်ရောက်ခွင့် သက်တမ်းကုန်ဆုံးသွားပါပြီ။ ကျေးဇူးပြု၍ ပြန်လည်ဝင်ရောက်ပါ။");
+            }
 
             if (!response.ok) {
                 throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
@@ -63,7 +72,6 @@ export const api = {
     },
 
     get(endpoint, params = {}) {
-        // null, undefined နှင့် အလွတ် ("") များကို Query String ထဲ မပါသွားအောင် စစ်ထုတ်ခြင်း
         const cleanParams = {};
         Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== "") {

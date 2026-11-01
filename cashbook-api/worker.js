@@ -917,12 +917,12 @@ export default {
             }
 
             // =================================================================
-            // 7. CASHBOOK CATEGORIES & ENTRIES (PRODUCTION STANDARD)
+            // 7. CASHBOOK CATEGORIES & ENTRIES (CLEAN DESCRIPTION WITH COLOR)
             // =================================================================
 
             // 7.1 CATEGORIES GET
             if (path === "/api/cashbook/categories" && method === "GET") {
-                // "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" Category မရှိသေးပါက အလိုအလျောက် ထည့်သွင်းပေးခြင်း (Foreign Key Error ကာကွယ်ရန်)
+                // "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" Category မရှိသေးပါက အလိုအလျောက် ထည့်သွင်းပေးခြင်း
                 await env.DB.prepare(`
                     INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
                     VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1)
@@ -940,7 +940,8 @@ export default {
                 const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
                 const endDate = url.searchParams.get("end_date") || startDate;
 
-                // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း (Sales/Purchases နှင့် Join တွဲ၍ Ref နှင့် Qty ရယူခြင်း)
+                // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
+                // (Description တွင် "Category - Item Name (Color)" သီးသန့် အလိုအလျောက် ပေါင်းစပ်ထုတ်ပေးခြင်း)
                 let sql = `
                     SELECT 
                         ce.id, 
@@ -951,7 +952,6 @@ export default {
                         ce.entry_type, 
                         ce.payment_method, 
                         ce.amount, 
-                        ce.description, 
                         ce.entry_date,
                         ce.sale_id, 
                         ce.customer_ledger_id, 
@@ -962,7 +962,45 @@ export default {
                             (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
                             (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id),
                             NULL
-                        ) AS total_quantity
+                        ) AS total_quantity,
+                        -- Description: Category - Item Name (Color) ဖော်ပြမှု
+                        COALESCE(
+                            (
+                                SELECT GROUP_CONCAT(
+                                    CASE 
+                                        WHEN (p.category IS NOT NULL AND p.category != '') AND (p.color IS NOT NULL AND p.color != '')
+                                        THEN p.category || ' - ' || p.name || ' (' || p.color || ')'
+                                        WHEN (p.category IS NOT NULL AND p.category != '')
+                                        THEN p.category || ' - ' || p.name
+                                        WHEN (p.color IS NOT NULL AND p.color != '')
+                                        THEN p.name || ' (' || p.color || ')'
+                                        ELSE p.name 
+                                    END, 
+                                    ', '
+                                )
+                                FROM sale_items si
+                                LEFT JOIN products p ON si.product_id = p.id
+                                WHERE si.sale_id = ce.sale_id
+                            ),
+                            (
+                                SELECT GROUP_CONCAT(
+                                    CASE 
+                                        WHEN (p.category IS NOT NULL AND p.category != '') AND (p.color IS NOT NULL AND p.color != '')
+                                        THEN p.category || ' - ' || p.name || ' (' || p.color || ')'
+                                        WHEN (p.category IS NOT NULL AND p.category != '')
+                                        THEN p.category || ' - ' || p.name
+                                        WHEN (p.color IS NOT NULL AND p.color != '')
+                                        THEN p.name || ' (' || p.color || ')'
+                                        ELSE p.name 
+                                    END, 
+                                    ', '
+                                )
+                                FROM purchase_items pi
+                                LEFT JOIN products p ON pi.product_id = p.id
+                                WHERE pi.purchase_id = ce.purchase_id
+                            ),
+                            ce.description
+                        ) AS description
                     FROM cashbook_entries ce
                     LEFT JOIN branches b ON ce.branch_id = b.id
                     LEFT JOIN cash_categories cc ON ce.category_id = cc.id
@@ -1041,7 +1079,6 @@ export default {
                     return errorResponse("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ထည့်သွင်းပါ", 400);
                 }
 
-                // Category 10 (ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ) မရှိသေးပါက အလိုအလျောက် သွင်းပေးခြင်း (Foreign Key Error ကာကွယ်ရန်)
                 if (Number(categoryId) === 10) {
                     await env.DB.prepare(`
                         INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
@@ -1072,7 +1109,6 @@ export default {
                 const body = await request.json().catch(() => ({}));
                 const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
 
-                // အကြောင်းအရာ (Description) မပါမဖြစ် လိုအပ်သည့် စစ်ဆေးမှု
                 const cleanDesc = String(description || "").trim();
                 if (!cleanDesc) {
                     return errorResponse("အသေးစိတ် အကြောင်းအရာ (Description) ထည့်သွင်းပေးပါ", 400);

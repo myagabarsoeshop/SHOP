@@ -74,7 +74,7 @@ function bindEvents() {
         }
     });
 
-    // Dedicated New Product Sub-Modal Events (Fixed Event Listener)
+    // Dedicated New Product Sub-Modal Events
     document.getElementById("btn-open-create-prod-modal")?.addEventListener("click", () => openNewProductModal());
     document.getElementById("btn-close-new-prod-modal")?.addEventListener("click", () => {
         document.getElementById("new-prod-modal")?.classList.add("hidden");
@@ -216,12 +216,24 @@ function renderPurchasesTable() {
                 </span>
             </td>
             <td class="p-4 text-center">
-                <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်ညှိမည်" class="btn-delete-pur w-8 h-8 inline-flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
-                    <i class="fa-solid fa-trash-can text-xs"></i>
-                </button>
+                <div class="flex items-center justify-center gap-1.5">
+                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" class="btn-edit-pur w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်ညှိမည်" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll(".btn-edit-pur").forEach(btn => {
+        btn.onclick = () => {
+            const pur = purchasesList.find(p => (p.purchase_id || p.id) == btn.dataset.id);
+            if (pur) openPurchaseModal(pur);
+        };
     });
 
     tbody.querySelectorAll(".btn-delete-pur").forEach(btn => {
@@ -247,19 +259,62 @@ function generateAutoSKU(categoryName = "") {
 // --- MODAL WORKSPACE LOGIC (4-SECTIONS) ----------------------------------
 // =========================================================================
 
-function openPurchaseModal() {
+function openPurchaseModal(pur = null) {
     const modal = document.getElementById("purchase-modal");
-    document.getElementById("pur-supplier").value = "";
-    document.getElementById("pur-payment-method").value = "cash";
-    document.getElementById("pur-bank-name").value = "";
-    document.getElementById("pur-bank-container")?.classList.add("hidden");
-    
-    // Set default order date to today
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    document.getElementById("pur-date").value = todayStr;
+    const editIdInput = document.getElementById("pur-edit-id");
+    const title = document.getElementById("purchase-modal-title");
 
-    selectedOrderItems = [];
+    if (pur) {
+        title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
+        editIdInput.value = pur.purchase_id || pur.id;
+        document.getElementById("pur-supplier").value = pur.supplier_name || "";
+        document.getElementById("pur-payment-method").value = pur.payment_method || "cash";
+        document.getElementById("pur-bank-name").value = pur.bank_account_name || "";
+        if (pur.payment_method === "bank") {
+            document.getElementById("pur-bank-container")?.classList.remove("hidden");
+        } else {
+            document.getElementById("pur-bank-container")?.classList.add("hidden");
+        }
+        if (pur.created_at) {
+            document.getElementById("pur-date").value = pur.created_at.split("T")[0];
+        }
+
+        // ရှိပြီးသား ပစ္စည်းများကို စာရင်းထဲ ထည့်သွင်းခြင်း
+        selectedOrderItems = purchasesList
+            .filter(p => (p.purchase_id || p.id) == (pur.purchase_id || pur.id))
+            .map(p => ({
+                is_new: false,
+                product_id: p.product_id,
+                item_name: p.item_name,
+                sku: p.sku,
+                category: p.category,
+                pattern: p.pattern || "",
+                color: p.color || "",
+                size: p.size || "ထည်",
+                quantity: Number(p.quantity || 1),
+                unit_cost: Number(p.unit_cost || 0),
+                retail_price: Number(p.retail_price || 0),
+                wholesale_price: Number(p.wholesale_price || 0),
+                retail_margin_pct: p.unit_cost > 0 && p.retail_price > p.unit_cost ? Math.round(((p.retail_price - p.unit_cost) / p.unit_cost) * 100) : 0,
+                wholesale_margin_pct: p.unit_cost > 0 && p.wholesale_price > p.unit_cost ? Math.round(((p.wholesale_price - p.unit_cost) / p.unit_cost) * 100) : 0,
+                subtotal: Number(p.subtotal || (p.quantity * p.unit_cost))
+            }));
+
+    } else {
+        title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
+        editIdInput.value = "";
+        document.getElementById("pur-supplier").value = "";
+        document.getElementById("pur-payment-method").value = "cash";
+        document.getElementById("pur-bank-name").value = "";
+        document.getElementById("pur-bank-container")?.classList.add("hidden");
+
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        document.getElementById("pur-date").value = todayStr;
+
+        selectedOrderItems = [];
+    }
+
     renderOrderItemsTable();
     modal?.classList.remove("hidden");
     document.getElementById("pur-supplier")?.focus();
@@ -368,6 +423,9 @@ function addOrderItem(prod, isNew = false) {
     renderOrderItemsTable();
 }
 
+/**
+ * Table DOM Rendering (Row အသစ်ထည့်ခြင်းနှင့် ဖျက်ခြင်းတို့တွင်သာ ခေါ်သည်)
+ */
 function renderOrderItemsTable() {
     const tbody = document.getElementById("pur-items-container");
     const rowCountEl = document.getElementById("pur-row-count");
@@ -392,7 +450,9 @@ function renderOrderItemsTable() {
 
     selectedOrderItems.forEach((item, index) => {
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition";
+        tr.className = "pur-row-item hover:bg-slate-50 dark:hover:bg-slate-900/60 transition";
+        tr.dataset.idx = index;
+
         tr.innerHTML = `
             <td class="p-3.5 text-center text-slate-400 font-mono">${index + 1}</td>
             <td class="p-3.5">
@@ -404,31 +464,31 @@ function renderOrderItemsTable() {
             </td>
             <td class="p-3.5 text-center">
                 <input type="number" min="0.1" step="any" value="${item.quantity}" data-idx="${index}"
-                    class="item-qty w-20 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-1.5 text-center text-slate-900 dark:text-white focus:ring-1 focus:ring-emerald-500">
+                    class="item-qty w-20 h-9 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
             </td>
             <td class="p-3.5 text-right">
                 <input type="number" min="0" step="any" value="${item.unit_cost}" data-idx="${index}"
-                    class="item-cost w-28 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-right text-slate-900 dark:text-white focus:ring-1 focus:ring-emerald-500">
+                    class="item-cost w-28 h-9 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
             </td>
             <td class="p-3.5 text-right space-y-1">
                 <input type="number" min="0" step="any" value="${item.retail_price}" data-idx="${index}"
-                    class="item-retail w-32 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-1 text-right text-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                    class="item-retail w-32 h-8 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                 <div class="flex items-center justify-end gap-1 text-[10px] text-slate-400">
                     <span>Margin %:</span>
                     <input type="number" value="${item.retail_margin_pct || ''}" placeholder="0" data-idx="${index}"
-                        class="item-retail-pct w-12 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1 py-0.5">
+                        class="item-retail-pct w-12 h-6 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1">
                 </div>
             </td>
             <td class="p-3.5 text-right space-y-1">
                 <input type="number" min="0" step="any" value="${item.wholesale_price}" data-idx="${index}"
-                    class="item-wholesale w-32 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 py-1 text-right text-blue-400 focus:ring-1 focus:ring-blue-500">
+                    class="item-wholesale w-32 h-8 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500">
                 <div class="flex items-center justify-end gap-1 text-[10px] text-slate-400">
                     <span>Margin %:</span>
                     <input type="number" value="${item.wholesale_margin_pct || ''}" placeholder="0" data-idx="${index}"
-                        class="item-wholesale-pct w-12 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1 py-0.5">
+                        class="item-wholesale-pct w-12 h-6 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1">
                 </div>
             </td>
-            <td class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+            <td class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm line-subtotal">
                 ${Number(item.subtotal || 0).toLocaleString()}
             </td>
             <td class="p-3.5 text-center">
@@ -440,89 +500,115 @@ function renderOrderItemsTable() {
         tbody.appendChild(tr);
     });
 
-    // Row input event bindings
+    attachRowEvents();
+    updateOrderSummary();
+}
+
+/**
+ * Individual Row Event Attachments (DOM ပြန်မဆွဲဘဲ Focus မပြတ်စေရန် Target Row တိုက်ရိုက် update လုပ်သည်)
+ */
+function attachRowEvents() {
+    const tbody = document.getElementById("pur-items-container");
+    if (!tbody) return;
+
     tbody.querySelectorAll(".item-qty").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            selectedOrderItems[idx].quantity = parseFloat(e.target.value) || 0;
-            selectedOrderItems[idx].subtotal = selectedOrderItems[idx].quantity * selectedOrderItems[idx].unit_cost;
-            renderOrderItemsTable();
+            const qty = parseFloat(e.target.value) || 0;
+            selectedOrderItems[idx].quantity = qty;
+            selectedOrderItems[idx].subtotal = qty * selectedOrderItems[idx].unit_cost;
+
+            tr.querySelector(".line-subtotal").textContent = Number(selectedOrderItems[idx].subtotal).toLocaleString();
+            updateOrderSummary();
         };
     });
 
     tbody.querySelectorAll(".item-cost").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
             const cost = parseFloat(e.target.value) || 0;
             selectedOrderItems[idx].unit_cost = cost;
 
             if (selectedOrderItems[idx].retail_margin_pct > 0) {
-                selectedOrderItems[idx].retail_price = Math.round(cost * (1 + selectedOrderItems[idx].retail_margin_pct / 100));
+                const newRetail = Math.round(cost * (1 + selectedOrderItems[idx].retail_margin_pct / 100));
+                selectedOrderItems[idx].retail_price = newRetail;
+                tr.querySelector(".item-retail").value = newRetail;
             }
             if (selectedOrderItems[idx].wholesale_margin_pct > 0) {
-                selectedOrderItems[idx].wholesale_price = Math.round(cost * (1 + selectedOrderItems[idx].wholesale_margin_pct / 100));
+                const newWholesale = Math.round(cost * (1 + selectedOrderItems[idx].wholesale_margin_pct / 100));
+                selectedOrderItems[idx].wholesale_price = newWholesale;
+                tr.querySelector(".item-wholesale").value = newWholesale;
             }
 
             selectedOrderItems[idx].subtotal = selectedOrderItems[idx].quantity * cost;
-            renderOrderItemsTable();
+            tr.querySelector(".line-subtotal").textContent = Number(selectedOrderItems[idx].subtotal).toLocaleString();
+            updateOrderSummary();
         };
     });
 
     tbody.querySelectorAll(".item-retail").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
             const retail = parseFloat(e.target.value) || 0;
             selectedOrderItems[idx].retail_price = retail;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && retail > cost) {
-                selectedOrderItems[idx].retail_margin_pct = Math.round(((retail - cost) / cost) * 100);
+                const pct = Math.round(((retail - cost) / cost) * 100);
+                selectedOrderItems[idx].retail_margin_pct = pct;
+                tr.querySelector(".item-retail-pct").value = pct;
             }
-            renderOrderItemsTable();
         };
     });
 
     tbody.querySelectorAll(".item-retail-pct").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
             const pct = parseFloat(e.target.value) || 0;
             selectedOrderItems[idx].retail_margin_pct = pct;
-            selectedOrderItems[idx].retail_price = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
-            renderOrderItemsTable();
+            const newRetail = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
+            selectedOrderItems[idx].retail_price = newRetail;
+            tr.querySelector(".item-retail").value = newRetail;
         };
     });
 
     tbody.querySelectorAll(".item-wholesale").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
             const wholesale = parseFloat(e.target.value) || 0;
             selectedOrderItems[idx].wholesale_price = wholesale;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && wholesale > cost) {
-                selectedOrderItems[idx].wholesale_margin_pct = Math.round(((wholesale - cost) / cost) * 100);
+                const pct = Math.round(((wholesale - cost) / cost) * 100);
+                selectedOrderItems[idx].wholesale_margin_pct = pct;
+                tr.querySelector(".item-wholesale-pct").value = pct;
             }
-            renderOrderItemsTable();
         };
     });
 
     tbody.querySelectorAll(".item-wholesale-pct").forEach(input => {
         input.oninput = (e) => {
+            const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
             const pct = parseFloat(e.target.value) || 0;
             selectedOrderItems[idx].wholesale_margin_pct = pct;
-            selectedOrderItems[idx].wholesale_price = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
-            renderOrderItemsTable();
+            const newWholesale = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
+            selectedOrderItems[idx].wholesale_price = newWholesale;
+            tr.querySelector(".item-wholesale").value = newWholesale;
         };
     });
 
     tbody.querySelectorAll(".btn-remove-item").forEach(btn => {
         btn.onclick = (e) => {
-            const idx = Number(btn.dataset.idx);
+            const idx = Number(e.currentTarget.dataset.idx);
             selectedOrderItems.splice(idx, 1);
             renderOrderItemsTable();
         };
     });
-
-    updateOrderSummary();
 }
 
 function updateOrderSummary() {
@@ -536,7 +622,7 @@ function updateOrderSummary() {
     if (totalEl) totalEl.textContent = `${grandTotal.toLocaleString()} Ks`;
 }
 
-// --- Dedicated Create Product Sub-Modal Logic (Correct Pointer Event handling) ---
+// --- Dedicated Create Product Sub-Modal Logic ---
 function openNewProductModal(prefillName = "", prefillCat = "") {
     const modal = document.getElementById("new-prod-modal");
     document.getElementById("new-prod-form")?.reset();
@@ -588,6 +674,7 @@ async function submitPurchase() {
     const supplier = document.getElementById("pur-supplier")?.value.trim();
     const paymentMethod = document.getElementById("pur-payment-method")?.value || "cash";
     const bankName = document.getElementById("pur-bank-name")?.value.trim();
+    const editId = document.getElementById("pur-edit-id")?.value;
 
     if (!supplier) {
         alert("ပေးသွင်းသူ (ပွဲရုံ) အမည် ထည့်သွင်းပေးပါ။");
@@ -660,8 +747,13 @@ async function submitPurchase() {
     }
 
     try {
-        const res = await api.post("/purchases", payload);
-        alert(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီး စတော့နှင့် ငွေစာရင်းများ ပေါင်းထည့်ပြီးပါပြီ။ (ဘောင်ချာနံပါတ်: ${res.data?.purchaseNo || 'OK'})`);
+        if (editId) {
+            await api.put(`/purchases/${editId}`, payload);
+            alert("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
+        } else {
+            const res = await api.post("/purchases", payload);
+            alert(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီး စတော့နှင့် ငွေစာရင်းများ ပေါင်းထည့်ပြီးပါပြီ။ (ဘောင်ချာနံပါတ်: ${res.data?.purchaseNo || 'OK'})`);
+        }
         closePurchaseModal();
         await loadMasterProducts();
         await loadPurchases();
@@ -679,7 +771,7 @@ async function deletePurchase(id) {
     if (!confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းမှလည်း အလိုအလျောက် ပြန်နုတ်ပေးပါမည်)")) return;
     try {
         await api.delete(`/purchases/${id}`);
-        alert("အဝယ်စာရင်း ဖျက်သိမ်းပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        alert("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadPurchases();
     } catch (err) {
         alert("ဖျက်၍မရပါ: " + err.message);

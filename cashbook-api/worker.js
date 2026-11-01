@@ -1029,7 +1029,7 @@ export default {
             }
 
             // =================================================================
-            // 8. POS CHECKOUT & SALES LOGS
+            // 8. POS CHECKOUT & SALES LOGS (ATOMIC TRANSACTION & STOCK INTEGRITY)
             // =================================================================
             if (path === "/api/pos/sales" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
@@ -1062,7 +1062,7 @@ export default {
                     LEFT JOIN customers c ON s.customer_id = c.id
                     JOIN sale_items si ON s.id = si.sale_id
                     JOIN products p ON si.product_id = p.id
-                    WHERE s.branch_id = ? AND date(s.created_at) = ?
+                    WHERE s.branch_id = ? AND date(s.created_at, '+390 minutes') = ?
                     ORDER BY s.id DESC, si.id ASC
                 `;
                 const { results } = await env.DB.prepare(sql).bind(Number(branchId), date).all();
@@ -1082,30 +1082,76 @@ export default {
                     return errorResponse("ဆိုင်ခွဲနှင့် ပစ္စည်းစာရင်း လိုအပ်ပါသည်", 400);
                 }
 
-                let totalAmount = 0;
+                // ၁။ စတော့နှင့် ပစ္စည်းအချက်အလက်များကို Database မှ ကြိုတင်တိုက်စစ်ခြင်း
+                const verifiedItems = [];
+                let calculatedTotal = 0;
+
                 for (const item of items) {
-                    totalAmount += (parseFloat(item.quantity) * parseFloat(item.unitPrice));
+                    const pid = Number(item.productId);
+                    const qty = parseFloat(item.quantity) || 0;
+                    if (!pid || qty <= 0) return errorResponse("ပစ္စည်းအရေအတွက် မှားယွင်းနေပါသည်", 400);
+
+                    const product = await env.DB.prepare(`
+                        SELECT p.id, p.item_name, p.cost_price, p.retail_price, p.wholesale_price,
+                               COALESCE(bi.quantity, 0) AS current_stock
+                        FROM products p
+                        LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
+                        WHERE p.id = ? AND p.is_active = 1
+                    `).bind(branchId, pid).first();
+
+                    if (!product) {
+                        return errorResponse(`ပစ္စည်း (ID: ${pid}) ရှာမတွေ့ပါ သို့မဟုတ် ရောင်းချခွင့်ပိတ်ထားပါသည်`, 404);
+                    }
+
+                    if (Number(product.current_stock) < qty) {
+                        return errorResponse(`"${product.item_name}" လက်ကျန်စတော့ (${product.current_stock}) မလုံလောက်ပါ`, 400);
+                    }
+
+                    // Client က ပို့သော ဈေးနှုန်း (သို့မဟုတ် မူလရောင်းဈေး)
+                    const unitPrice = parseFloat(item.unitPrice) || (saleType === "wholesale" ? Number(product.wholesale_price) : Number(product.retail_price));
+                    const costPrice = Number(product.cost_price || 0); // အမြတ်တိကျစေရန် Backend DB cost_price ကိုသာ အသုံးပြု
+                    const lineSubtotal = qty * unitPrice;
+                    calculatedTotal += lineSubtotal;
+
+                    verifiedItems.push({
+                        productId: pid,
+                        quantity: qty,
+                        unitPrice,
+                        costPrice,
+                        subtotal: lineSubtotal
+                    });
                 }
-                
+
                 const discount = Math.max(0, parseFloat(discountAmount) || 0);
-                const finalAmount = Math.max(0, totalAmount - discount);
+                const finalAmount = Math.max(0, calculatedTotal - discount);
                 const rawPaid = Math.max(0, parseFloat(paidAmount) || 0);
                 const effectivePaid = Math.min(rawPaid, finalAmount);
                 const debtAmount = Math.max(0, finalAmount - effectivePaid);
 
+                // ၂။ Customer Credit Limit စစ်ဆေးခြင်း
+                if (debtAmount > 0) {
+                    if (!customerId) return errorResponse("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ဖောက်သည် ရွေးချယ်ပေးပါ", 400);
+                    const cust = await env.DB.prepare("SELECT current_debt, credit_limit, name FROM customers WHERE id = ? AND is_active = 1").bind(Number(customerId)).first();
+                    if (!cust) return errorResponse("ဖောက်သည် ရှာမတွေ့ပါ", 404);
+
+                    const currentDebt = Number(cust.current_debt || 0);
+                    const limit = Number(cust.credit_limit || 0);
+                    if (limit > 0 && (currentDebt + debtAmount) > limit) {
+                        return errorResponse(`ဖောက်သည် "${cust.name}" ၏ ခွင့်ပြုအကြွေးကန့်သတ်ချက် (${limit.toLocaleString()} Ks) ထက် ကျော်လွန်နေပါသည် (လက်ရှိအကြွေး: ${currentDebt.toLocaleString()} Ks)`, 400);
+                    }
+                }
+
+                // ၃။ Collision-Free Invoice Number ထုတ်ယူခြင်း
                 const todayDate = getMyanmarTodayDate();
                 const dateStr = todayDate.replace(/-/g, "");
-                const countToday = await env.DB.prepare("SELECT COUNT(id) AS count FROM sales WHERE branch_id = ? AND date(created_at) = ?").bind(Number(branchId), todayDate).first();
-                const seq = String((countToday?.count || 0) + 1).padStart(4, "0");
-                const invoiceNo = `INV-B${branchId}-${dateStr}-${seq}`;
+                const randomCode = Math.floor(1000 + Math.random() * 9000);
+                const invoiceNo = `INV-B${branchId}-${dateStr}-${randomCode}`;
 
                 let pCash = 0;
                 let pBank = 0;
-                if (paymentMethod === "cash") {
-                    pCash = effectivePaid;
-                } else if (paymentMethod === "bank") {
-                    pBank = effectivePaid;
-                } else if (paymentMethod === "credit") {
+                if (paymentMethod === "cash") pCash = effectivePaid;
+                else if (paymentMethod === "bank") pBank = effectivePaid;
+                else if (paymentMethod === "credit") {
                     if (bankAccountName) pBank = effectivePaid;
                     else pCash = effectivePaid;
                 } else {
@@ -1113,6 +1159,7 @@ export default {
                     pBank = parseFloat(bankAmount) || 0;
                 }
 
+                // ၄။ Sale Header ထည့်သွင်းခြင်း
                 const saleInsert = await env.DB.prepare(`
                     INSERT INTO sales (
                         invoice_no, branch_id, customer_id, sale_type,
@@ -1121,68 +1168,68 @@ export default {
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `).bind(
                     invoiceNo, Number(branchId), customerId ? Number(customerId) : null, saleType,
-                    totalAmount, discount, finalAmount, effectivePaid, debtAmount,
+                    calculatedTotal, discount, finalAmount, effectivePaid, debtAmount,
                     paymentMethod, pCash, pBank, bankAccountName, currentUserId
                 ).run();
 
                 const saleId = saleInsert.meta.last_row_id;
-                const subQueries = [];
+                const batchStatements = [];
 
-                for (const item of items) {
-                    const qty = parseFloat(item.quantity);
-                    const unitPrice = parseFloat(item.unitPrice) || 0;
-                    const subtotal = qty * unitPrice;
+                try {
+                    // ၅။ Items ထည့်သွင်းခြင်းနှင့် Stock နုတ်ခြင်း
+                    for (const item of verifiedItems) {
+                        batchStatements.push(
+                            env.DB.prepare("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, cost_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)")
+                                .bind(saleId, item.productId, item.quantity, item.unitPrice, item.costPrice, item.subtotal)
+                        );
 
-                    subQueries.push(
-                        env.DB.prepare("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, cost_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)")
-                            .bind(saleId, Number(item.productId), qty, unitPrice, parseFloat(item.costPrice) || 0, subtotal)
-                    );
-
-                    subQueries.push(
-                        env.DB.prepare(`
-                            INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity - excluded.quantity
-                        `).bind(Number(branchId), Number(item.productId), qty)
-                    );
-                }
-
-                if (effectivePaid > 0) {
-                    if (pCash > 0) {
-                        subQueries.push(
-                            env.DB.prepare(`
-                                INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, amount, description, entry_date, created_by)
-                                VALUES (?, 1, ?, 'INCOME', 'cash', ?, ?, ?, ?)
-                            `).bind(Number(branchId), saleId, pCash, `အရောင်း ${invoiceNo} (ငွေသား)`, todayDate, currentUserId)
+                        // ပုံမှန် UPDATE ဖြင့် စတော့နုတ်ခြင်း (Negative oversell ကို CHECK constraint မှ ကာကွယ်ပေးမည်)
+                        batchStatements.push(
+                            env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                                .bind(item.quantity, Number(branchId), item.productId)
                         );
                     }
-                    if (pBank > 0) {
-                        subQueries.push(
+
+                    // ၆။ Cashbook စာရင်းသွင်းခြင်း
+                    if (effectivePaid > 0) {
+                        if (pCash > 0) {
+                            batchStatements.push(
+                                env.DB.prepare(`
+                                    INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, amount, description, entry_date, created_by)
+                                    VALUES (?, 1, ?, 'INCOME', 'cash', ?, ?, ?, ?)
+                                `).bind(Number(branchId), saleId, pCash, `အရောင်း ${invoiceNo} (ငွေသား)`, todayDate, currentUserId)
+                            );
+                        }
+                        if (pBank > 0) {
+                            batchStatements.push(
+                                env.DB.prepare(`
+                                    INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                                    VALUES (?, 1, ?, 'INCOME', 'bank', ?, ?, ?, ?, ?)
+                                `).bind(Number(branchId), saleId, bankAccountName || 'Bank', pBank, `အရောင်း ${invoiceNo} (${bankAccountName || 'Bank'})`, todayDate, currentUserId)
+                            );
+                        }
+                    }
+
+                    // ၇။ Customer အကြွေးစာရင်း အလိုအလျောက်တိုးခြင်း (SQL Atomic UPDATE)
+                    if (debtAmount > 0 && customerId) {
+                        batchStatements.push(
                             env.DB.prepare(`
-                                INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
-                                VALUES (?, 1, ?, 'INCOME', 'bank', ?, ?, ?, ?, ?)
-                            `).bind(Number(branchId), saleId, bankAccountName || 'Bank', pBank, `အရောင်း ${invoiceNo} (${bankAccountName || 'Bank'})`, todayDate, currentUserId)
+                                INSERT INTO customer_ledger (customer_id, branch_id, sale_id, type, amount, balance_after, reference_note, created_by)
+                                VALUES (?, ?, ?, 'DEBIT', ?, (SELECT current_debt + ? FROM customers WHERE id = ?), ?, ?)
+                            `).bind(Number(customerId), Number(branchId), saleId, debtAmount, debtAmount, Number(customerId), `ဘောင်ချာ ${invoiceNo} အကြွေးကျန်`, currentUserId)
+                        );
+
+                        batchStatements.push(
+                            env.DB.prepare("UPDATE customers SET current_debt = current_debt + ? WHERE id = ?")
+                                .bind(debtAmount, Number(customerId))
                         );
                     }
-                }
 
-                if (debtAmount > 0 && customerId) {
-                    const cust = await env.DB.prepare("SELECT current_debt FROM customers WHERE id = ?").bind(Number(customerId)).first();
-                    const newDebt = (Number(cust?.current_debt) || 0) + debtAmount;
-
-                    subQueries.push(
-                        env.DB.prepare(`
-                            INSERT INTO customer_ledger (customer_id, branch_id, sale_id, type, amount, balance_after, reference_note, created_by)
-                            VALUES (?, ?, ?, 'DEBIT', ?, ?, ?, ?)
-                        `).bind(Number(customerId), Number(branchId), saleId, debtAmount, newDebt, `ဘောင်ချာ ${invoiceNo} အကြွေးကျန်`, currentUserId)
-                    );
-
-                    subQueries.push(
-                        env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId))
-                    );
-                }
-
-                if (subQueries.length > 0) {
-                    await env.DB.batch(subQueries);
+                    await env.DB.batch(batchStatements);
+                } catch (batchErr) {
+                    // Batch ချို့ယွင်းပါက Orphaned Sale Header မကျန်စေရန် ချက်ချင်း Rollback လုပ်ခြင်း
+                    await env.DB.prepare("DELETE FROM sales WHERE id = ?").bind(saleId).run();
+                    throw new Error(`အရောင်းစာရင်း သိမ်းဆည်းမှု မအောင်မြင်ပါ (Rollback ပြုလုပ်ပြီးပါပြီ): ${batchErr.message}`);
                 }
 
                 return jsonResponse({ message: "အရောင်းဘောင်ချာ အောင်မြင်ပါသည်", invoiceNo, saleId, finalAmount }, 201);

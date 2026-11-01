@@ -177,7 +177,6 @@ export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     const globalKpiBar = document.getElementById("global-kpi-bar");
 
-    // Dashboard သို့မဟုတ် System Setting ဖြစ်ပါက ထိပ်ဆုံး KPI Bar ကို အလိုအလျောက် ဝှက်မည်
     if (view === "dashboard" || view === "system_setting") {
         globalKpiBar?.classList.add("hidden");
         return;
@@ -199,28 +198,29 @@ export async function refreshGlobalKPIs(viewOverride) {
     try {
         const branchId = state.currentBranch?.id || 1;
         const today = getLocalTodayDate();
-        const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
-        const summary = res.data?.summary || {
-            cash: { in: 0, out: 0, net: 0 },
-            bank: { in: 0, out: 0, net: 0 },
-            totalNet: 0
-        };
-
-        const cashIn = Number(summary.cash?.in || 0);
-        const bankIn = Number(summary.bank?.in || 0);
-        const totalIn = cashIn + bankIn;
-        const totalExpenses = Number(summary.cash?.out || 0) + Number(summary.bank?.out || 0);
 
         if (view === "cashbook") {
+            const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
+            const summary = res.data?.summary || {
+                cash: { in: 0, out: 0, net: 0 },
+                bank: { in: 0, out: 0, net: 0 },
+                totalNet: 0
+            };
+            const totalExpenses = Number(summary.cash?.out || 0) + Number(summary.bank?.out || 0);
+
             setKPI(1, "လက်ကျန် ငွေသား (Cash Net)", summary.cash?.net || 0, "fa-money-bill-wave", "emerald");
             setKPI(2, "လက်ကျန် ဘဏ်ငွေ (Bank Net)", summary.bank?.net || 0, "fa-building-columns", "blue");
             setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalExpenses, "fa-arrow-trend-down", "rose");
             setKPI(4, "စုစုပေါင်း အသားတင် (Total Net)", summary.totalNet || 0, "fa-vault", "amber");
         } else {
-            setKPI(1, "Today Sale (Cash)", cashIn, "fa-money-bill-wave", "emerald");
-            setKPI(2, "Today Sale (Bank)", bankIn, "fa-building-columns", "blue");
-            setKPI(3, "Total Today Sale", totalIn, "fa-cash-register", "emerald");
-            setKPI(4, "Total Sale Items", summary.totalSaleItems || 0, "fa-shirt", "slate");
+            // POS Sale Counter တွင် အခြားဝင်ငွေ/အကြွေးဆပ်ငွေများ မရောဘဲ စစ်မှန်သော အရောင်းနှင့် အထည်အရေအတွက်ကို တိုက်ရိုက်ယူခြင်း
+            const dashRes = await api.get("/dashboard/summary", { branch_id: branchId, year: today.split("-")[0] });
+            const staff = dashRes.data?.staff || {};
+
+            setKPI(1, "Today Sale (Cash)", staff.today_cash || 0, "fa-money-bill-wave", "emerald");
+            setKPI(2, "Today Sale (Bank)", staff.today_bank || 0, "fa-building-columns", "blue");
+            setKPI(3, "Total Today Sale", staff.today_total || 0, "fa-cash-register", "emerald");
+            setKPI(4, "Total Sale Items", staff.today_items_sold || 0, "fa-shirt", "slate");
         }
     } catch (err) {
         console.error("KPI update error:", err);

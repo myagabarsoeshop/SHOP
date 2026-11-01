@@ -1,0 +1,113 @@
+<!-- cashbook-frontend/views/system_setting.html -->
+<div class="h-full w-full flex flex-col gap-5 overflow-y-auto pr-1">
+    
+    <!-- Header Bar -->
+    <div class="p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div class="flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-2xl bg-blue-500/15 border border-blue-500/30 text-blue-500 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-sliders"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white uppercase tracking-wide">
+                    စနစ် ဆက်တင်နှင့် အရင်းအမြစ် စောင့်ကြည့်မှု (System Setting)
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5">Cloudflare D1 Quota သုံးစွဲမှုနှင့် အလိုအလျောက် အီးမေးလ်ပို့ခြင်း စနစ်</p>
+            </div>
+        </div>
+        <button type="button" id="btn-refresh-quota" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition flex items-center gap-2 cursor-pointer border border-slate-300 dark:border-slate-700 shadow-sm">
+            <i class="fa-solid fa-rotate text-blue-500"></i>
+            <span>ဒေတာ Refresh မည်</span>
+        </button>
+    </div>
+
+    <!-- Top 4 Quota Metric Cards (Cloudflare Style) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        <!-- Card 1: D1 Reads -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">D1 Read Operations</span>
+                <span class="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">Safe</span>
+            </div>
+            <div>
+                <div id="quota-reads-val" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0 / 100k</div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mt-2">
+                    <div id="quota-reads-bar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="text-[11px] text-slate-400 font-semibold mt-2">ယနေ့ ဖတ်ရှုမှုနှုန်း</div>
+            </div>
+        </div>
+
+        <!-- Card 2: D1 Writes -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">D1 Write Operations</span>
+                <span class="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold">Normal</span>
+            </div>
+            <div>
+                <div id="quota-writes-val" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0 / 100k</div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mt-2">
+                    <div id="quota-writes-bar" class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="text-[11px] text-slate-400 font-semibold mt-2">ယနေ့ ရေးသားမှုနှုန်း</div>
+            </div>
+        </div>
+
+        <!-- Card 3: Annual Storage -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Database Storage</span>
+                <span class="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold">Free Tier</span>
+            </div>
+            <div>
+                <div id="quota-storage-val" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0 MB / 5 GB</div>
+                <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mt-2">
+                    <div id="quota-storage-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+                <div class="text-[11px] text-slate-400 font-semibold mt-2">တစ်နှစ်ပတ်လုံး သုံးစွဲမှုပမာဏ</div>
+            </div>
+        </div>
+
+        <!-- Card 4: System Status -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Cloudflare D1 Plan</span>
+                <span class="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">Active</span>
+            </div>
+            <div>
+                <div class="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">Free Tier</div>
+                <div class="text-[11px] text-slate-400 font-semibold mt-2">လုံလောက်မှု အခြေအနေ: <span class="text-emerald-500 font-bold">ကောင်းမွန်</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Section: Automated Excel Export & Email Automation -->
+    <div class="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div class="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <i class="fa-solid fa-file-excel text-emerald-500 text-lg"></i>
+            <div>
+                <h4 class="text-sm font-extrabold text-slate-900 dark:text-white">နှစ်အလိုက် အစီရင်ခံစာများ အလိုအလျောက် အီးမေးလ်ပို့ခြင်း (Excel Auto-Email)</h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">သတ်မှတ်ထားသော နှစ်အလိုက် Financial & Stock Reports များကို Excel ဖိုင်ဖြင့် တိုက်ရိုက် အီးမေးလ်ပို့မည်</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အစီရင်ခံမည့် နှစ် (Year) *</label>
+                <select id="setting-report-year" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    <!-- Populated dynamically -->
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">လက်ခံမည့် အီးမေးလ် (Recipient Email) *</label>
+                <input type="email" id="setting-recipient-email" placeholder="admin@example.com" value="admin@myanmarsos.com"
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="flex items-end">
+                <button type="button" id="btn-send-auto-email" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Excel ဖြင့် အီးမေးလ်ပို့မည်</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

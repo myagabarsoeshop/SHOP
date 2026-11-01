@@ -1,6 +1,6 @@
 // =============================================================================
 // GARMENT POS & CASHBOOK ALL-IN-ONE BACKEND (Cloudflare Worker)
-// File: cashbook-api/worker.js (Full Production Ready Version with Dashboard)
+// File: cashbook-api/worker.js (Phase 1: Secure Auth, JWT/HMAC & RBAC)
 // =============================================================================
 
 const corsHeaders = {
@@ -40,6 +40,161 @@ function getMyanmarTodayDate() {
     return now.toISOString().split("T")[0];
 }
 
+// =============================================================================
+// SECURITY & CRYPTO HELPERS (PBKDF2 Password Hashing & HMAC-SHA256 Token)
+// =============================================================================
+
+function base64UrlEncode(bufferOrStr) {
+    let str = typeof bufferOrStr === "string" ? bufferOrStr : String.fromCharCode(...new Uint8Array(bufferOrStr));
+    return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(str) {
+    str = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (str.length % 4) str += "=";
+    const binary = atob(str);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+function bytesToHex(bytes) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytes(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return bytes;
+}
+
+function timingSafeEqual(a, b) {
+    if (a.length !== b.length) return false;
+    let res = 0;
+    for (let i = 0; i < a.length; i++) {
+        res |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return res === 0;
+}
+
+/**
+ * PBKDF2 Password Hashing (100,000 rounds SHA-256)
+ */
+async function hashPassword(password, saltHex = null) {
+    const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+    const passKey = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        passKey,
+        256
+    );
+    const hashHex = bytesToHex(new Uint8Array(derivedBits));
+    const outSaltHex = bytesToHex(salt);
+    return `pbkdf2:${outSaltHex}:${hashHex}`;
+}
+
+/**
+ * PBKDF2 Password Verification (with Legacy/Seed Fallback support)
+ */
+async function verifyPassword(password, storedHash) {
+    if (!storedHash) return false;
+    if (storedHash.startsWith("pbkdf2:")) {
+        const parts = storedHash.split(":");
+        if (parts.length !== 3) return false;
+        const saltHex = parts[1];
+        const expectedHash = parts[2];
+        const computed = await hashPassword(password, saltHex);
+        const computedHash = computed.split(":")[2];
+        return timingSafeEqual(expectedHash, computedHash);
+    }
+    // Fallback for seed plain/mock hash during migration
+    return storedHash === password || storedHash === `${password}_hash`;
+}
+
+/**
+ * Sign HMAC-SHA256 Token (Valid for 12 hours)
+ */
+async function signToken(payload, secret, expiresInSeconds = 43200) {
+    const header = { alg: "HS256", typ: "JWT" };
+    const now = Math.floor(Date.now() / 1000);
+    const fullPayload = { ...payload, iat: now, exp: now + expiresInSeconds };
+
+    const encHeader = base64UrlEncode(JSON.stringify(header));
+    const encPayload = base64UrlEncode(JSON.stringify(fullPayload));
+    const dataToSign = `${encHeader}.${encPayload}`;
+
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+    );
+
+    const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(dataToSign));
+    return `${dataToSign}.${base64UrlEncode(signature)}`;
+}
+
+/**
+ * Verify HMAC-SHA256 Token
+ */
+async function verifyToken(token, secret) {
+    if (!token || typeof token !== "string") return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const [encHeader, encPayload, encSig] = parts;
+    const dataToSign = `${encHeader}.${encPayload}`;
+
+    try {
+        const key = await crypto.subtle.importKey(
+            "raw",
+            new TextEncoder().encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["verify"]
+        );
+        const sigBytes = base64UrlDecode(encSig);
+        const isValid = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(dataToSign));
+        if (!isValid) return null;
+
+        const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(encPayload)));
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < now) return null;
+        return payload;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Request Authentication Middleware
+ */
+async function getAuthUser(request, env) {
+    const authHeader = request.headers.get("Authorization") || "";
+    if (!authHeader.startsWith("Bearer ")) return null;
+    const token = authHeader.slice(7).trim();
+    const secret = env.JWT_SECRET || "mya-gabar-soe-garment-erp-secret-2026-key";
+    return await verifyToken(token, secret);
+}
+
+// =============================================================================
+// MAIN WORKER HANDLER
+// =============================================================================
+
 export default {
     async fetch(request, env, ctx) {
         if (request.method === "OPTIONS") {
@@ -50,30 +205,119 @@ export default {
         const path = url.pathname;
         const method = request.method;
 
-        // Frontend Static Files (index.html, views/*, js/*) ကို ပြသပေးခြင်း
+        // Frontend Static Files
         if (!path.startsWith("/api")) {
             if (env && env.ASSETS) {
                 return env.ASSETS.fetch(request);
             }
             return jsonResponse({
                 status: "online",
-                version: "2.8.0",
+                version: "2.8.1",
                 note: "Frontend assets not bound."
             });
         }
 
         try {
             // =================================================================
-            // 1. HEALTH CHECK
+            // PUBLIC ROUTES (Authentication Not Required)
             // =================================================================
+            
+            // 1. Health Check
             if (path === "/api/health" && method === "GET") {
-                return jsonResponse({ status: "online", version: "2.8.0" });
+                return jsonResponse({ status: "online", version: "2.8.1" });
+            }
+
+            // 2. Auth Login (Verified Password + Signed Token Generation)
+            if (path === "/api/auth/login" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const { username, password } = body;
+                if (!username || !password) {
+                    return errorResponse("အသုံးပြုသူအမည်နှင့် စကားဝှက် ထည့်သွင်းပေးပါ", 400);
+                }
+
+                const query = `
+                    SELECT u.id, u.branch_id, u.username, u.full_name, u.role, u.password_hash,
+                           b.code AS branch_code, b.name AS branch_name
+                    FROM users u
+                    LEFT JOIN branches b ON u.branch_id = b.id
+                    WHERE LOWER(u.username) = LOWER(?) AND u.is_active = 1
+                `;
+                const user = await env.DB.prepare(query).bind(String(username).trim()).first();
+
+                if (!user || !(await verifyPassword(String(password), user.password_hash))) {
+                    return errorResponse("အသုံးပြုသူအမည် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်", 401);
+                }
+
+                const secret = env.JWT_SECRET || "mya-gabar-soe-garment-erp-secret-2026-key";
+                const token = await signToken({
+                    uid: user.id,
+                    username: user.username,
+                    role: String(user.role || "cashier").toLowerCase(),
+                    branch_id: user.branch_id || 1,
+                    branch_code: user.branch_code || "MAIN"
+                }, secret);
+
+                return jsonResponse({
+                    token,
+                    user: {
+                        id: user.id,
+                        username: user.username,
+                        fullName: user.full_name || user.username,
+                        role: String(user.role || "cashier").toLowerCase(),
+                        branchId: user.branch_id || 1,
+                        branchCode: user.branch_code || "MAIN",
+                        branchName: user.branch_name || "Main Home Shop"
+                    },
+                    message: "Login အောင်မြင်ပါသည်"
+                });
             }
 
             // =================================================================
-            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Multi-Sheet Excel Workbook)
+            // PROTECTED ROUTE AUTHENTICATION GATEWAY
+            // =================================================================
+            const auth = await getAuthUser(request, env);
+            if (!auth) {
+                return errorResponse("အကောင့်ဝင်ရောက်ထားခြင်း မရှိပါ သို့မဟုတ် Token သက်တမ်းကုန်ဆုံးသွားပါသည် (401 Unauthorized)", 401);
+            }
+
+            // User info extracted from Token (Client input is ignored for security)
+            const currentUserId = auth.uid;
+            const currentUserRole = auth.role;
+            const userBranchId = auth.branch_id;
+
+            // Delete Operations Require Admin / Manager / Finance Role
+            if (method === "DELETE" && !["admin", "manager", "finance"].includes(currentUserRole)) {
+                return errorResponse("ဤမှတ်တမ်းအား ဖျက်ပစ်ခွင့် မရှိပါ (Admin / Manager Role လိုအပ်ပါသည်)", 403);
+            }
+
+            // =================================================================
+            // 2.1. PASSWORD MANAGEMENT (Self Password Change)
+            // =================================================================
+            if (path === "/api/auth/change-password" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const { oldPassword, newPassword } = body;
+                if (!oldPassword || !newPassword || String(newPassword).length < 6) {
+                    return errorResponse("စကားဝှက်အသစ်သည် အနည်းဆုံး ၆ လုံး ရှိရပါမည်", 400);
+                }
+
+                const currentUser = await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(currentUserId).first();
+                if (!currentUser || !(await verifyPassword(oldPassword, currentUser.password_hash))) {
+                    return errorResponse("မူလ စကားဝှက် မှားယွင်းနေပါသည်", 400);
+                }
+
+                const secureHash = await hashPassword(newPassword);
+                await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(secureHash, currentUserId).run();
+                return jsonResponse({ message: "စကားဝှက် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ" });
+            }
+
+            // =================================================================
+            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Admin Only)
             // =================================================================
             if (path === "/api/system/send-report-email" && method === "POST") {
+                if (currentUserRole !== "admin") {
+                    return errorResponse("စနစ် အစီရင်ခံစာ ပို့ဆောင်ခွင့်ကို စနစ်ပိုင်ရှင် (Admin) သာ ခွင့်ပြုပါသည်", 403);
+                }
+
                 const body = await request.json().catch(() => ({}));
                 const targetYear = String(body.year || new Date().getFullYear());
                 const targetEmail = body.email;
@@ -86,11 +330,7 @@ export default {
                     return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
                 }
 
-                // -------------------------------------------------------------
-                // ၁။ D1 Database Tables များမှ အချက်အလက်များ ဆွဲယူခြင်း
-                // -------------------------------------------------------------
-                
-                // (A) Products & Stock Valuation
+                // Database Tables Fetch
                 const { results: products } = await env.DB.prepare(`
                     SELECT p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color,
                            p.cost_price, p.retail_price, p.wholesale_price,
@@ -103,7 +343,6 @@ export default {
                     ORDER BY p.category ASC, p.item_name ASC
                 `).all();
 
-                // (B) Sales (အရောင်းဘောင်ချာများ)
                 const { results: sales } = await env.DB.prepare(`
                     SELECT s.invoice_no, b.name AS branch_name, COALESCE(c.name, 'Walk-in') AS customer_name,
                            s.sale_type, s.payment_method, s.total_amount, s.discount_amount,
@@ -115,7 +354,6 @@ export default {
                     ORDER BY s.id DESC LIMIT 2000
                 `).bind(targetYear).all();
 
-                // (C) Cashbook (ငွေဝင်/ငွေထွက် နေ့စဉ်စာရင်း)
                 const { results: cashbook } = await env.DB.prepare(`
                     SELECT ce.entry_date, b.name AS branch_name, cc.name AS category_name,
                            ce.entry_type, ce.payment_method, ce.bank_account_name,
@@ -127,7 +365,6 @@ export default {
                     ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 3000
                 `).bind(targetYear).all();
 
-                // (D) Customers & Debt (ဖောက်သည်နှင့် အကြွေးကျန်)
                 const { results: customers } = await env.DB.prepare(`
                     SELECT name, phone, shop_name, customer_type, credit_limit, current_debt, address
                     FROM customers
@@ -135,7 +372,6 @@ export default {
                     ORDER BY current_debt DESC, name ASC
                 `).all();
 
-                // (E) Purchases (အဝယ်စာရင်း)
                 const { results: purchases } = await env.DB.prepare(`
                     SELECT p.purchase_no, b.name AS branch_name, p.supplier_name,
                            p.payment_method, p.total_amount, p.status, p.created_at
@@ -145,7 +381,6 @@ export default {
                     ORDER BY p.id DESC LIMIT 1000
                 `).bind(targetYear).all();
 
-                // (F) Yarn Stock & Issues (ချည်စတိုနှင့် ရက်ကန်းထုတ်ပေးမှု)
                 const { results: yarns } = await env.DB.prepare(`
                     SELECT p.sku, p.item_name, p.color, p.size AS unit, p.cost_price,
                            COALESCE(SUM(bi.quantity), 0) AS current_stock
@@ -156,7 +391,6 @@ export default {
                     ORDER BY p.id DESC
                 `).all();
 
-                // (G) Waste & Damage (ပျက်စီးအလေအလွင့်)
                 let waste = [];
                 try {
                     const resW = await env.DB.prepare(`
@@ -170,24 +404,17 @@ export default {
                         ORDER BY w.id DESC
                     `).bind(targetYear).all();
                     waste = resW.results || [];
-                } catch (e) {
+                } catch {
                     waste = [];
                 }
 
-                // -------------------------------------------------------------
-                // ၂။ Excel Multi-Sheet XML (SpreadsheetML) တည်ဆောက်ခြင်း
-                // -------------------------------------------------------------
+                // Excel XML Builder
                 const cleanXml = (val) => String(val ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-                
                 const buildSheet = (sheetName, headers, rows) => {
                     let xml = `<Worksheet ss:Name="${cleanXml(sheetName)}"><Table>`;
-                    // Header Row
                     xml += `<Row ss:StyleID="Header">`;
-                    headers.forEach(h => {
-                        xml += `<Cell><Data ss:Type="String">${cleanXml(h)}</Data></Cell>`;
-                    });
+                    headers.forEach(h => { xml += `<Cell><Data ss:Type="String">${cleanXml(h)}</Data></Cell>`; });
                     xml += `</Row>`;
-                    // Data Rows
                     rows.forEach(r => {
                         xml += `<Row>`;
                         r.forEach(c => {
@@ -215,54 +442,15 @@ export default {
   </Style>
  </Styles>
 `;
-
-                // Sheet 1: Products & Stock
-                workbookXml += buildSheet("Products (အထည်နှင့်စတော့)", 
-                    ["ID", "SKU", "အမျိုးအစား", "ပစ္စည်းအမည်", "ဒီဇိုင်း/အဆင်", "ဆိုဒ်", "အရောင်", "အရင်းဈေး", "လက်လီဈေး", "လက်ကားဈေး", "လက်ကျန်အရေအတွက်", "စုစုပေါင်းတန်ဖိုး (Ks)"],
-                    (products || []).map(p => [p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color, p.cost_price, p.retail_price, p.wholesale_price, p.total_stock, p.total_value])
-                );
-
-                // Sheet 2: Sales Invoices
-                workbookXml += buildSheet("Sales (အရောင်းစာရင်း)", 
-                    ["ဘောင်ချာအမှတ်", "ဆိုင်ခွဲ", "ဖောက်သည်", "အရောင်းအမျိုးအစား", "ငွေပေးချေမှု", "စုစုပေါင်း", "လျှော့ဈေး", "ကျသင့်ငွေ", "ပေးချေငွေ", "အကြွေးကျန်", "ရက်စွဲ"],
-                    (sales || []).map(s => [s.invoice_no, s.branch_name, s.customer_name, s.sale_type, s.payment_method, s.total_amount, s.discount_amount, s.final_amount, s.paid_amount, s.debt_amount, s.created_at])
-                );
-
-                // Sheet 3: Cashbook Entries
-                workbookXml += buildSheet("Cashbook (ငွေစာရင်း)", 
-                    ["ရက်စွဲ", "ဆိုင်ခွဲ", "ခေါင်းစဉ်", "အမျိုးအစား (IN/OUT)", "ငွေပေးချေမှု", "ဘဏ်အကောင့်", "ပမာဏ (Ks)", "အကြောင်းအရာ"],
-                    (cashbook || []).map(c => [c.entry_date, c.branch_name, c.category_name, c.entry_type, c.payment_method, c.bank_account_name, c.amount, c.description])
-                );
-
-                // Sheet 4: Customers & Debt
-                workbookXml += buildSheet("Customers (ဖောက်သည်နှင့်အကြွေး)", 
-                    ["အမည်", "ဖုန်းနံပါတ်", "ဆိုင်အမည်", "အမျိုးအစား", "အကြွေးကန့်သတ်ချက်", "လက်ရှိပေးရန်ကျန်ငွေ (Ks)", "လိပ်စာ"],
-                    (customers || []).map(c => [c.name, c.phone, c.shop_name, c.customer_type, c.credit_limit, c.current_debt, c.address])
-                );
-
-                // Sheet 5: Purchases
-                workbookXml += buildSheet("Purchases (အဝယ်စာရင်း)", 
-                    ["အဝယ်အမှတ်", "ဆိုင်ခွဲ", "ကုန်သည်/ဆိုင်အမည်", "ငွေပေးချေမှု", "စုစုပေါင်းကျသင့်ငွေ (Ks)", "အခြေအနေ", "ရက်စွဲ"],
-                    (purchases || []).map(p => [p.purchase_no, p.branch_name, p.supplier_name, p.payment_method, p.total_amount, p.status, p.created_at])
-                );
-
-                // Sheet 6: Yarn Production
-                workbookXml += buildSheet("Yarn (ချည်စတို)", 
-                    ["ကုတ်", "ချည်အမည်", "အရောင်", "ယူနစ်", "အရင်းဈေး", "လက်ကျန်စတော့"],
-                    (yarns || []).map(y => [y.sku, y.item_name, y.color, y.unit, y.cost_price, y.current_stock])
-                );
-
-                // Sheet 7: Waste & Loss
-                workbookXml += buildSheet("Waste (ပျက်စီးဆုံးရှုံးမှု)", 
-                    ["မှတ်တမ်းအမှတ်", "ဆိုင်ခွဲ", "ပစ္စည်းအမည်", "SKU", "ပျက်စီးအရေအတွက်", "တစ်ခုအရင်း", "ဆုံးရှုံးမှုတန်ဖိုး (Ks)", "အကြောင်းရင်း", "ရက်စွဲ"],
-                    (waste || []).map(w => [w.reference_no, w.branch_name, w.item_name, w.sku, w.quantity, w.unit_cost, w.total_loss, w.reason, w.created_at])
-                );
-
+                workbookXml += buildSheet("Products", ["ID", "SKU", "အမျိုးအစား", "ပစ္စည်းအမည်", "ဒီဇိုင်း/အဆင်", "ဆိုဒ်", "အရောင်", "အရင်းဈေး", "လက်လီဈေး", "လက်ကားဈေး", "လက်ကျန်အရေအတွက်", "စုစုပေါင်းတန်ဖိုး (Ks)"], (products || []).map(p => [p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color, p.cost_price, p.retail_price, p.wholesale_price, p.total_stock, p.total_value]));
+                workbookXml += buildSheet("Sales", ["ဘောင်ချာအမှတ်", "ဆိုင်ခွဲ", "ဖောက်သည်", "အရောင်းအမျိုးအစား", "ငွေပေးချေမှု", "စုစုပေါင်း", "လျှော့ဈေး", "ကျသင့်ငွေ", "ပေးချေငွေ", "အကြွေးကျန်", "ရက်စွဲ"], (sales || []).map(s => [s.invoice_no, s.branch_name, s.customer_name, s.sale_type, s.payment_method, s.total_amount, s.discount_amount, s.final_amount, s.paid_amount, s.debt_amount, s.created_at]));
+                workbookXml += buildSheet("Cashbook", ["ရက်စွဲ", "ဆိုင်ခွဲ", "ခေါင်းစဉ်", "အမျိုးအစား (IN/OUT)", "ငွေပေးချေမှု", "ဘဏ်အကောင့်", "ပမာဏ (Ks)", "အကြောင်းအရာ"], (cashbook || []).map(c => [c.entry_date, c.branch_name, c.category_name, c.entry_type, c.payment_method, c.bank_account_name, c.amount, c.description]));
+                workbookXml += buildSheet("Customers", ["အမည်", "ဖုန်းနံပါတ်", "ဆိုင်အမည်", "အမျိုးအစား", "အကြွေးကန့်သတ်ချက်", "လက်ရှိပေးရန်ကျန်ငွေ (Ks)", "လိပ်စာ"], (customers || []).map(c => [c.name, c.phone, c.shop_name, c.customer_type, c.credit_limit, c.current_debt, c.address]));
+                workbookXml += buildSheet("Purchases", ["အဝယ်အမှတ်", "ဆိုင်ခွဲ", "ကုန်သည်/ဆိုင်အမည်", "ငွေပေးချေမှု", "စုစုပေါင်းကျသင့်ငွေ (Ks)", "အခြေအနေ", "ရက်စွဲ"], (purchases || []).map(p => [p.purchase_no, p.branch_name, p.supplier_name, p.payment_method, p.total_amount, p.status, p.created_at]));
+                workbookXml += buildSheet("Yarn", ["ကုတ်", "ချည်အမည်", "အရောင်", "ယူနစ်", "အရင်းဈေး", "လက်ကျန်စတော့"], (yarns || []).map(y => [y.sku, y.item_name, y.color, y.unit, y.cost_price, y.current_stock]));
+                workbookXml += buildSheet("Waste", ["မှတ်တမ်းအမှတ်", "ဆိုင်ခွဲ", "ပစ္စည်းအမည်", "SKU", "ပျက်စီးအရေအတွက်", "တစ်ခုအရင်း", "ဆုံးရှုံးမှုတန်ဖိုး (Ks)", "အကြောင်းရင်း", "ရက်စွဲ"], (waste || []).map(w => [w.reference_no, w.branch_name, w.item_name, w.sku, w.quantity, w.unit_cost, w.total_loss, w.reason, w.created_at]));
                 workbookXml += `</Workbook>`;
 
-                // -------------------------------------------------------------
-                // ၃။ Base64 Encoding & Email Dispatching
-                // -------------------------------------------------------------
                 const utf8Bytes = new TextEncoder().encode(workbookXml);
                 let binaryStr = "";
                 const chunkSize = 8192;
@@ -283,33 +471,10 @@ export default {
                         subject: `မြကမ္ဘာစိုး ပိုးထည်တိုက် - All-in-One Database Backup Report (${targetYear})`,
                         html: `
                             <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; background-color: #f8fafc; border-radius: 12px; max-width: 650px; margin: auto;">
-                                <div style="border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px;">
-                                    <h2 style="color: #064e3b; margin: 0; font-size: 22px;">မြကမ္ဘာစိုး ပိုးထည်တိုက် (GARMENT ERP)</h2>
-                                    <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Comprehensive Cloudflare D1 Multi-Sheet Backup</p>
-                                </div>
-                                <p style="font-size: 14px; line-height: 1.6;">မင်္ဂလာပါရှင်၊</p>
-                                <p style="font-size: 14px; line-height: 1.6;">
-                                    <b>${targetYear} ခုနှစ်</b> အတွက် Cloudflare D1 Database စနစ်တစ်ခုလုံး၏ ဇယားများကို သက်ဆိုင်ရာ Sheet အသီးသီးဖြင့် ပူးတွဲတင်ပြအပ်ပါသည်။
-                                </p>
-                                <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-                                    <h4 style="margin: 0 0 10px 0; color: #064e3b; font-size: 14px;">ပါဝင်သော Excel Sheet (Tabs) များ -</h4>
-                                    <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.8;">
-                                        <li><b>Products:</b> ကုန်ပစ္စည်းနှင့် ဆိုင်ခွဲလက်ကျန် စတော့တန်ဖိုးများ</li>
-                                        <li><b>Sales:</b> အရောင်းဘောင်ချာများနှင့် ရောင်းရငွေစာရင်းများ</li>
-                                        <li><b>Cashbook:</b> နေ့စဉ် ဝင်ငွေ/ထွက်ငွေ နှင့် ဘဏ်/ငွေသားစာရင်းများ</li>
-                                        <li><b>Customers:</b> ဖောက်သည်များနှင့် လက်ရှိရရန်ကျန် အကြွေးစာရင်းများ</li>
-                                        <li><b>Purchases:</b> ပြင်ပမှ အထည်နှင့် ကုန်ကြမ်း ဝယ်ယူမှုမှတ်တမ်းများ</li>
-                                        <li><b>Yarn:</b> ချည်စတို လက်ကျန်စာရင်းများ</li>
-                                        <li><b>Waste:</b> ချည်နှင့် အထည် ပျက်စီးဆုံးရှုံးမှု မှတ်တမ်းများ</li>
-                                    </ul>
-                                </div>
-                                <p style="font-size: 13px; color: #334155;">
-                                    📎 ပူးတွဲပါ <b>Garment_ERP_Full_Backup_${targetYear}.xls</b> ဖိုင်ကို Microsoft Excel သို့မဟုတ် Google Sheets ဖြင့် တိုက်ရိုက် ဖွင့်လှစ်ကြည့်ရှုနိုင်ပါသည်။
-                                </p>
-                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0 16px 0;" />
-                                <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
-                                    ဤအီးမေးလ်သည် Cloudflare Workers & D1 Engine မှ အလိုအလျောက် ပေးပို့သော စနစ်သုံး အစီရင်ခံစာ ဖြစ်ပါသည်။
-                                </p>
+                                <h2 style="color: #064e3b; margin: 0 0 10px 0;">မြကမ္ဘာစိုး ပိုးထည်တိုက် (GARMENT ERP)</h2>
+                                <p style="font-size: 14px;"><b>${targetYear} ခုနှစ်</b> အတွက် Cloudflare D1 Database စနစ်တစ်ခုလုံး၏ ဇယားများကို ပူးတွဲတင်ပြအပ်ပါသည်။</p>
+                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                                <p style="font-size: 11px; color: #94a3b8;">Admin အသုံးပြုသူ ${auth.username} မှ တောင်းဆိုထားသော စနစ်အစီရင်ခံစာ ဖြစ်ပါသည်။</p>
                             </div>
                         `,
                         attachments: [
@@ -322,47 +487,10 @@ export default {
                 });
 
                 const resendData = await resendResponse.json();
-
                 if (!resendResponse.ok) {
                     return errorResponse(resendData.message || "Failed to send email via Resend", 500);
                 }
-
                 return jsonResponse({ success: true, message: "Multi-sheet Excel report sent successfully", data: resendData });
-            }
-            // =================================================================
-            // 2. AUTH LOGIN
-            // =================================================================
-            if (path === "/api/auth/login" && method === "POST") {
-                const body = await request.json().catch(() => ({}));
-                const { username, password } = body;
-                if (!username || !password) {
-                    return errorResponse("အသုံးပြုသူအမည်နှင့် စကားဝှက် ထည့်သွင်းပေးပါ", 400);
-                }
-
-                const query = `
-                    SELECT u.id, u.branch_id, u.username, u.full_name, u.role,
-                           b.code AS branch_code, b.name AS branch_name
-                    FROM users u
-                    LEFT JOIN branches b ON u.branch_id = b.id
-                    WHERE LOWER(u.username) = LOWER(?) AND u.password_hash = ? AND u.is_active = 1
-                `;
-                const user = await env.DB.prepare(query).bind(String(username).trim(), String(password)).first();
-                if (!user) {
-                    return errorResponse("အသုံးပြုသူအမည် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်", 401);
-                }
-
-                return jsonResponse({
-                    user: {
-                        id: user.id,
-                        username: user.username,
-                        fullName: user.full_name || user.username,
-                        role: String(user.role || "cashier").toLowerCase(),
-                        branchId: user.branch_id || 1,
-                        branchCode: user.branch_code || "MAIN",
-                        branchName: user.branch_name || "Main Home Shop"
-                    },
-                    message: "Login အောင်မြင်ပါသည်"
-                });
             }
 
             // =================================================================
@@ -410,7 +538,7 @@ export default {
 
             if (path === "/api/products/scan" && method === "GET") {
                 const code = url.searchParams.get("code")?.trim();
-                const branchId = url.searchParams.get("branch_id");
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
                 if (!code) return errorResponse("Barcode ထည့်သွင်းပေးပါ", 400);
 
                 const sql = `
@@ -420,7 +548,7 @@ export default {
                     LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
                     WHERE (p.barcode = ? OR p.sku = ?) AND p.is_active = 1 LIMIT 1
                 `;
-                const product = await env.DB.prepare(sql).bind(branchId ? Number(branchId) : 1, code, code).first();
+                const product = await env.DB.prepare(sql).bind(Number(branchId), code, code).first();
                 if (!product) return errorResponse("ပစ္စည်း ရှာမတွေ့ပါ", 404);
                 return jsonResponse(product);
             }
@@ -438,7 +566,7 @@ export default {
                 const retailPrice = parseFloat(body.retailPrice ?? body.retail_price) || 0;
                 const wholesalePrice = parseFloat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice) || 0;
                 const initialStock = parseFloat(body.initialStock ?? body.quantity ?? 0) || 0;
-                const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? 1, 10) || 1;
+                const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? userBranchId, 10) || 1;
 
                 const res = await env.DB.prepare(`
                     INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
@@ -489,11 +617,11 @@ export default {
                     productId
                 ).run();
 
-                if (body.quantity !== undefined && body.branchId) {
+                if (body.quantity !== undefined && (body.branchId || userBranchId)) {
                     await env.DB.prepare(`
                         INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
                         ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity
-                    `).bind(Number(body.branchId), productId, parseFloat(body.quantity) || 0).run();
+                    `).bind(Number(body.branchId || userBranchId), productId, parseFloat(body.quantity) || 0).run();
                 }
 
                 return jsonResponse({ message: "ပစ္စည်းအချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
@@ -511,7 +639,7 @@ export default {
             // 5. PURCHASES & STOCK IN
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
-                const branchId = url.searchParams.get("branch_id") || 1;
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
 
                 const sql = `
                     SELECT 
@@ -549,24 +677,24 @@ export default {
 
             if (path === "/api/purchases" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const userId = 1;
+                const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
 
                 const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-                const purchaseNo = `PO-${body.branch_id}-${dateStr}`;
+                const purchaseNo = `PO-${targetBranch}-${dateStr}`;
 
                 const purRes = await env.DB.prepare(`
                     INSERT INTO purchases (purchase_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    purchaseNo, Number(body.branch_id), String(body.supplier_name), 
+                    purchaseNo, targetBranch, String(body.supplier_name), 
                     parseFloat(body.total_amount), String(body.payment_method), 
-                    body.bank_account_name || null, userId
+                    body.bank_account_name || null, currentUserId
                 ).run();
 
                 const newPurId = purRes.meta.last_row_id;
                 const batchStatements = [];
 
-                for (const item of body.items) {
+                for (const item of (body.items || [])) {
                     let targetProductId = item.product_id;
 
                     if (item.is_new && item.new_product) {
@@ -600,7 +728,7 @@ export default {
                             VALUES (?, ?, ?)
                             ON CONFLICT(branch_id, product_id) DO UPDATE SET 
                             quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                        `).bind(Number(body.branch_id), Number(targetProductId), parseFloat(item.quantity))
+                        `).bind(targetBranch, Number(targetProductId), parseFloat(item.quantity))
                     );
                 }
 
@@ -609,11 +737,11 @@ export default {
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, created_by)
-                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?)
+                            VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?)
                         `).bind(
-                            Number(body.branch_id), newPurId, String(body.payment_method), 
+                            targetBranch, newPurId, String(body.payment_method), 
                             body.bank_account_name || null, parseFloat(body.total_amount), 
-                            desc, userId
+                            desc, currentUserId
                         )
                     );
                 }
@@ -627,10 +755,9 @@ export default {
 
                 const { results: items } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const pur = await env.DB.prepare("SELECT branch_id FROM purchases WHERE id = ?").bind(purId).first();
-                const branchId = pur?.branch_id || 1;
+                const branchId = pur?.branch_id || userBranchId;
 
                 const batchRollback = [];
-
                 (items || []).forEach(it => {
                     batchRollback.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
@@ -650,7 +777,7 @@ export default {
             // 6. DAMAGE & WASTE LOGS
             // =================================================================
             if (path === "/api/waste" && method === "GET") {
-                const branchId = url.searchParams.get("branch_id") || 1;
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
                 const sql = `
                     SELECT 
                         w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
@@ -668,12 +795,11 @@ export default {
 
             if (path === "/api/waste" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const branchId = Number(body.branch_id || body.branchId || 1);
+                const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
                 const productId = Number(body.product_id || body.productId);
                 const quantity = parseFloat(body.quantity);
                 const unitCost = parseFloat(body.unit_cost ?? body.unitCost) || 0;
                 const reason = String(body.reason || "").trim();
-                const userId = Number(body.recorded_by || body.userId || 1);
 
                 if (!branchId || !productId || isNaN(quantity) || quantity <= 0) {
                     return errorResponse("ဆိုင်ခွဲ၊ ပစ္စည်းနှင့် ပျက်စီးပမာဏ မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
@@ -695,7 +821,7 @@ export default {
                     env.DB.prepare(`
                         INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, recorded_by)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ချည်/အထည် ပျက်စီးအလေအလွင့်", userId),
+                    `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ချည်/အထည် ပျက်စီးအလေအလွင့်", currentUserId),
 
                     env.DB.prepare(`
                         UPDATE branch_inventory 
@@ -723,7 +849,6 @@ export default {
                 if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
 
                 const diff = Math.round((Number(oldLog.quantity) - newQty) * 1000) / 1000;
-
                 if (diff < 0) {
                     const inv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
                         .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first();
@@ -820,16 +945,17 @@ export default {
 
             if (path === "/api/cashbook/entries" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const { branchId, categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate, createdBy = 1 } = body;
-                if (!branchId || !categoryId || !amount) return errorResponse("အချက်အလက် မစုံလင်ပါ", 400);
+                const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
+                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
+                if (!categoryId || !amount) return errorResponse("အချက်အလက် မစုံလင်ပါ", 400);
 
                 const res = await env.DB.prepare(`
                     INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, description, entry_date, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    Number(branchId), Number(categoryId), String(entryType || "EXPENSE").toUpperCase(),
+                    targetBranch, Number(categoryId), String(entryType || "EXPENSE").toUpperCase(),
                     String(paymentMethod).toLowerCase(), parseFloat(amount), String(description).trim(),
-                    entryDate || getMyanmarTodayDate(), Number(createdBy)
+                    entryDate || getMyanmarTodayDate(), currentUserId
                 ).run();
 
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
@@ -874,7 +1000,7 @@ export default {
             // 8. POS CHECKOUT & SALES LOGS
             // =================================================================
             if (path === "/api/pos/sales" && method === "GET") {
-                const branchId = url.searchParams.get("branch_id") || 1;
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
                 const date = url.searchParams.get("date") || getMyanmarTodayDate();
 
                 const sql = `
@@ -913,10 +1039,11 @@ export default {
 
             if (path === "/api/pos/sales" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
+                const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
                 const {
-                    branchId, customerId = null, saleType = "retail", items = [],
+                    customerId = null, saleType = "retail", items = [],
                     discountAmount = 0, paidAmount = 0, paymentMethod = "cash",
-                    cashAmount = 0, bankAmount = 0, bankAccountName = null, createdBy = 1
+                    cashAmount = 0, bankAmount = 0, bankAccountName = null
                 } = body;
 
                 if (!branchId || items.length === 0) {
@@ -940,23 +1067,16 @@ export default {
                 const seq = String((countToday?.count || 0) + 1).padStart(4, "0");
                 const invoiceNo = `INV-B${branchId}-${dateStr}-${seq}`;
 
-                // --- Accounting Integrity: Ensure proper cash/bank routing for deposits during credit sales ---
                 let pCash = 0;
                 let pBank = 0;
-
                 if (paymentMethod === "cash") {
                     pCash = effectivePaid;
                 } else if (paymentMethod === "bank") {
                     pBank = effectivePaid;
                 } else if (paymentMethod === "credit") {
-                    // Route partial paid amounts (deposits) correctly even on credit invoices
-                    if (bankAccountName) {
-                        pBank = effectivePaid;
-                    } else {
-                        pCash = effectivePaid;
-                    }
+                    if (bankAccountName) pBank = effectivePaid;
+                    else pCash = effectivePaid;
                 } else {
-                    // Fallback to explicit payload values for mixed payments if specified
                     pCash = parseFloat(cashAmount) || 0;
                     pBank = parseFloat(bankAmount) || 0;
                 }
@@ -970,7 +1090,7 @@ export default {
                 `).bind(
                     invoiceNo, Number(branchId), customerId ? Number(customerId) : null, saleType,
                     totalAmount, discount, finalAmount, effectivePaid, debtAmount,
-                    paymentMethod, pCash, pBank, bankAccountName, Number(createdBy)
+                    paymentMethod, pCash, pBank, bankAccountName, currentUserId
                 ).run();
 
                 const saleId = saleInsert.meta.last_row_id;
@@ -1000,7 +1120,7 @@ export default {
                             env.DB.prepare(`
                                 INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, amount, description, entry_date, created_by)
                                 VALUES (?, 1, ?, 'INCOME', 'cash', ?, ?, ?, ?)
-                            `).bind(Number(branchId), saleId, pCash, `အရောင်း ${invoiceNo} (ငွေသား)`, todayDate, Number(createdBy))
+                            `).bind(Number(branchId), saleId, pCash, `အရောင်း ${invoiceNo} (ငွေသား)`, todayDate, currentUserId)
                         );
                     }
                     if (pBank > 0) {
@@ -1008,7 +1128,7 @@ export default {
                             env.DB.prepare(`
                                 INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
                                 VALUES (?, 1, ?, 'INCOME', 'bank', ?, ?, ?, ?, ?)
-                            `).bind(Number(branchId), saleId, bankAccountName || 'Bank', pBank, `အရောင်း ${invoiceNo} (${bankAccountName || 'Bank'})`, todayDate, Number(createdBy))
+                            `).bind(Number(branchId), saleId, bankAccountName || 'Bank', pBank, `အရောင်း ${invoiceNo} (${bankAccountName || 'Bank'})`, todayDate, currentUserId)
                         );
                     }
                 }
@@ -1021,7 +1141,7 @@ export default {
                         env.DB.prepare(`
                             INSERT INTO customer_ledger (customer_id, branch_id, sale_id, type, amount, balance_after, reference_note, created_by)
                             VALUES (?, ?, ?, 'DEBIT', ?, ?, ?, ?)
-                        `).bind(Number(customerId), Number(branchId), saleId, debtAmount, newDebt, `ဘောင်ချာ ${invoiceNo} အကြွေးကျန်`, Number(createdBy))
+                        `).bind(Number(customerId), Number(branchId), saleId, debtAmount, newDebt, `ဘောင်ချာ ${invoiceNo} အကြွေးကျန်`, currentUserId)
                     );
 
                     subQueries.push(
@@ -1040,7 +1160,7 @@ export default {
             // 9. YARN BALANCES & PRODUCTION ISSUE
             // =================================================================
             if (path === "/api/yarns" && method === "GET") {
-                const branchId = url.searchParams.get("branch_id") || 1;
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
                 const search = url.searchParams.get("search")?.trim() || "";
 
                 let sql = `
@@ -1071,7 +1191,7 @@ export default {
 
             if (path === "/api/yarns" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const branchId = Number(body.branch_id || body.branchId || 1);
+                const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
                 const code = body.code || body.sku;
                 const name = body.name || body.itemName || body.item_name;
 
@@ -1094,7 +1214,6 @@ export default {
                 ).run();
 
                 const newProductId = res.meta.last_row_id;
-
                 if (initialStock > 0) {
                     await env.DB.prepare(`
                         INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
@@ -1107,12 +1226,11 @@ export default {
 
             if (path === "/api/yarns/issue" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const branchId = Number(body.branchId || body.branch_id || 1);
+                const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
                 const yarnId = Number(body.yarnId || body.product_id);
                 const weaverName = String(body.weaverName || body.weaver_name || "").trim();
                 const qty = parseFloat(body.quantity) || 0;
                 const notes = String(body.notes || "").trim();
-                const createdBy = Number(body.createdBy || body.userId || 1);
 
                 if (!yarnId || !weaverName || qty <= 0) {
                     return errorResponse("ချည်အမျိုးအစား၊ ရက်ကန်းသမားအမည်နှင့် ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
@@ -1131,7 +1249,7 @@ export default {
                     env.DB.prepare(`
                         INSERT INTO yarn_issues (yarn_id, weaver_name, quantity, issue_date, notes, created_by) 
                         VALUES (?, ?, ?, ?, ?, ?)
-                    `).bind(yarnId, weaverName, qty, getMyanmarTodayDate(), notes, createdBy),
+                    `).bind(yarnId, weaverName, qty, getMyanmarTodayDate(), notes, currentUserId),
 
                     env.DB.prepare(`
                         UPDATE branch_inventory 
@@ -1159,7 +1277,7 @@ export default {
             }
 
             // =================================================================
-            // 10. CUSTOMERS & DEBT LIABILITIES (ဖောက်သည်စာရင်း၊ အကြွေးနှင့် ကြွေးမြီမှတ်တမ်း)
+            // 10. CUSTOMERS & DEBT LIABILITIES
             // =================================================================
             if (path === "/api/customers" && method === "GET") {
                 const { results } = await env.DB.prepare(
@@ -1187,12 +1305,11 @@ export default {
                 ).run();
 
                 const newCustId = res.meta.last_row_id;
-
                 if (initialDebt > 0) {
                     await env.DB.prepare(`
                         INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
-                        VALUES (?, 1, 'DEBIT', ?, ?, 'အကြွေး', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', 1)
-                    `).bind(newCustId, initialDebt, initialDebt).run();
+                        VALUES (?, ?, 'DEBIT', ?, ?, 'cash', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', ?)
+                    `).bind(newCustId, userBranchId, initialDebt, initialDebt, currentUserId).run();
                 }
 
                 return jsonResponse({ id: newCustId, message: "ဖောက်သည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
@@ -1200,16 +1317,8 @@ export default {
 
             if (path === "/api/customers/repay" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const {
-                    customerId,
-                    branchId = 1,
-                    amount,
-                    paymentMethod = "cash",
-                    bankAccountName = null,
-                    note = "",
-                    entryDate,
-                    createdBy = 1
-                } = body;
+                const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
+                const { customerId, amount, paymentMethod = "cash", bankAccountName = null, note = "", entryDate } = body;
 
                 const repayAmt = parseFloat(amount) || 0;
                 if (!customerId || repayAmt <= 0) return errorResponse("ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
@@ -1225,13 +1334,10 @@ export default {
                         INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
                         VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?)
                     `).bind(
-                        Number(customerId),
-                        Number(branchId),
-                        repayAmt,
-                        newDebt,
+                        Number(customerId), targetBranch, repayAmt, newDebt,
                         String(paymentMethod).toLowerCase(),
                         note || `အကြွေးဆပ် (${paymentMethod === 'bank' ? (bankAccountName || 'Bank') : 'ငွေသား'})`,
-                        Number(createdBy)
+                        currentUserId
                     ),
 
                     env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId)),
@@ -1240,13 +1346,9 @@ export default {
                         INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
                         VALUES (?, 2, 'INCOME', ?, ?, ?, ?, ?, ?)
                     `).bind(
-                        Number(branchId),
-                        String(paymentMethod).toLowerCase(),
-                        bankAccountName || null,
-                        repayAmt,
-                        `${cust.name} အကြွေးဆပ် (${note || (paymentMethod === 'bank' ? bankAccountName : 'ငွေသား')})`,
-                        today,
-                        Number(createdBy)
+                        targetBranch, String(paymentMethod).toLowerCase(), bankAccountName || null,
+                        repayAmt, `${cust.name} အကြွေးဆပ် (${note || (paymentMethod === 'bank' ? bankAccountName : 'ငွေသား')})`,
+                        today, currentUserId
                     )
                 ]);
 
@@ -1256,7 +1358,6 @@ export default {
             if (path.startsWith("/api/customers/") && path.endsWith("/ledger") && method === "GET") {
                 const parts = path.split("/");
                 const customerId = Number(parts[3]);
-
                 if (!customerId) return errorResponse("Customer ID မမှန်ကန်ပါ", 400);
 
                 const sql = `
@@ -1277,7 +1378,7 @@ export default {
             }
 
             // =================================================================
-            // 11. INTER-BRANCH STOCK TRANSFERS (ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းပေးပို့ခြင်း)
+            // 11. INTER-BRANCH STOCK TRANSFERS
             // =================================================================
             if (path === "/api/transfers" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id");
@@ -1313,7 +1414,6 @@ export default {
                 const productId = Number(body.productId || body.product_id);
                 const quantity = parseFloat(body.quantity);
                 const notes = String(body.notes || "").trim();
-                const createdBy = Number(body.createdBy || body.userId || 1);
 
                 if (!fromBranchId || !toBranchId || !productId || isNaN(quantity) || quantity <= 0) {
                     return errorResponse("လွှဲပြောင်းပေးပို့မည့် ဆိုင်ခွဲများ၊ ပစ္စည်းနှင့် အရေအတွက် အပြည့်အစုံ ထည့်သွင်းပေးပါ", 400);
@@ -1339,7 +1439,7 @@ export default {
                     env.DB.prepare(`
                         INSERT INTO stock_transfers (transfer_no, from_branch_id, to_branch_id, product_id, quantity, status, notes, created_by)
                         VALUES (?, ?, ?, ?, ?, 'COMPLETED', ?, ?)
-                    `).bind(transferNo, fromBranchId, toBranchId, productId, quantity, notes || "ဆိုင်အချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု", createdBy),
+                    `).bind(transferNo, fromBranchId, toBranchId, productId, quantity, notes || "ဆိုင်အချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု", currentUserId),
 
                     env.DB.prepare(`
                         UPDATE branch_inventory 
@@ -1391,25 +1491,17 @@ export default {
                 }
 
                 const batchStatements = [
-                    env.DB.prepare("UPDATE stock_transfers SET quantity = ?, notes = ? WHERE id = ?")
-                        .bind(newQty, notes, id)
+                    env.DB.prepare("UPDATE stock_transfers SET quantity = ?, notes = ? WHERE id = ?").bind(newQty, notes, id)
                 ];
 
                 if (diff !== 0) {
                     batchStatements.push(
-                        env.DB.prepare(`
-                            UPDATE branch_inventory 
-                            SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
-                            WHERE branch_id = ? AND product_id = ?
-                        `).bind(diff, Number(trf.from_branch_id), Number(trf.product_id))
+                        env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                            .bind(diff, Number(trf.from_branch_id), Number(trf.product_id))
                     );
-
                     batchStatements.push(
-                        env.DB.prepare(`
-                            UPDATE branch_inventory 
-                            SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP 
-                            WHERE branch_id = ? AND product_id = ?
-                        `).bind(diff, Number(trf.to_branch_id), Number(trf.product_id))
+                        env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                            .bind(diff, Number(trf.to_branch_id), Number(trf.product_id))
                     );
                 }
 
@@ -1442,25 +1534,11 @@ export default {
             }
 
             // =================================================================
-            // 12. INVENTORY & STOCK REPORTS (လစဉ် စတော့လှုပ်ရှားမှုနှင့် လက်ကျန် အစီရင်ခံစာ)
+            // 12. INVENTORY & STOCK REPORTS
             // =================================================================
             if (path === "/api/reports/monthly-stock" && method === "GET") {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
                 const branchId = url.searchParams.get("branch_id");
-
-                await env.DB.prepare(`
-                    CREATE TABLE IF NOT EXISTS waste_logs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        reference_no TEXT UNIQUE,
-                        branch_id INTEGER NOT NULL DEFAULT 1,
-                        product_id INTEGER NOT NULL,
-                        quantity REAL NOT NULL,
-                        unit_cost REAL DEFAULT 0,
-                        reason TEXT,
-                        recorded_by INTEGER DEFAULT 1,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                `).run();
 
                 let prodSql = `
                     SELECT 
@@ -1480,10 +1558,7 @@ export default {
                 let purchases = [];
                 try {
                     let purchSql = `
-                        SELECT 
-                            pi.product_id,
-                            CAST(strftime('%m', p.created_at) AS INTEGER) AS m,
-                            SUM(pi.quantity) AS qty
+                        SELECT pi.product_id, CAST(strftime('%m', p.created_at) AS INTEGER) AS m, SUM(pi.quantity) AS qty
                         FROM purchase_items pi
                         JOIN purchases p ON pi.purchase_id = p.id
                         WHERE strftime('%Y', p.created_at) = ?
@@ -1496,17 +1571,14 @@ export default {
                     purchSql += ` GROUP BY pi.product_id, m `;
                     const res = await env.DB.prepare(purchSql).bind(...purchBindings).all();
                     purchases = res.results || [];
-                } catch (e) {
+                } catch {
                     purchases = [];
                 }
 
                 let sales = [];
                 try {
                     let saleSql = `
-                        SELECT 
-                            si.product_id,
-                            CAST(strftime('%m', s.created_at) AS INTEGER) AS m,
-                            SUM(si.quantity) AS qty
+                        SELECT si.product_id, CAST(strftime('%m', s.created_at) AS INTEGER) AS m, SUM(si.quantity) AS qty
                         FROM sale_items si
                         JOIN sales s ON si.sale_id = s.id
                         WHERE strftime('%Y', s.created_at) = ?
@@ -1519,17 +1591,14 @@ export default {
                     saleSql += ` GROUP BY si.product_id, m `;
                     const res = await env.DB.prepare(saleSql).bind(...saleBindings).all();
                     sales = res.results || [];
-                } catch (e) {
+                } catch {
                     sales = [];
                 }
 
                 let waste = [];
                 try {
                     let wasteSql = `
-                        SELECT 
-                            product_id,
-                            CAST(strftime('%m', created_at) AS INTEGER) AS m,
-                            SUM(quantity) AS qty
+                        SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
                         FROM waste_logs
                         WHERE strftime('%Y', created_at) = ?
                     `;
@@ -1541,7 +1610,7 @@ export default {
                     wasteSql += ` GROUP BY product_id, m `;
                     const res = await env.DB.prepare(wasteSql).bind(...wasteBindings).all();
                     waste = res.results || [];
-                } catch (e) {
+                } catch {
                     waste = [];
                 }
 
@@ -1564,7 +1633,7 @@ export default {
                             GROUP BY product_id, m
                         `).bind(Number(branchId), year).all();
                         trfOut = trfOutRes.results || [];
-                    } catch (e) {
+                    } catch {
                         trfIn = [];
                         trfOut = [];
                     }
@@ -1575,43 +1644,24 @@ export default {
                     const inMap = {};
                     const outMap = {};
 
-                    purchases.filter(r => r.product_id === pid).forEach(r => {
-                        inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
-                    });
-
-                    trfIn.filter(r => r.product_id === pid).forEach(r => {
-                        inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
-                    });
-
-                    sales.filter(r => r.product_id === pid).forEach(r => {
-                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
-                    });
-
-                    waste.filter(r => r.product_id === pid).forEach(r => {
-                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
-                    });
-
-                    trfOut.filter(r => r.product_id === pid).forEach(r => {
-                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
-                    });
+                    purchases.filter(r => r.product_id === pid).forEach(r => { inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0); });
+                    trfIn.filter(r => r.product_id === pid).forEach(r => { inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0); });
+                    sales.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
+                    waste.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
+                    trfOut.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
 
                     let totalIn = 0;
                     let totalOut = 0;
-                    const monthlyBalances = {};
-
                     for (let m = 1; m <= 12; m++) {
-                        const mIn = inMap[m] || 0;
-                        const mOut = outMap[m] || 0;
-                        totalIn += mIn;
-                        totalOut += mOut;
+                        totalIn += (inMap[m] || 0);
+                        totalOut += (outMap[m] || 0);
                     }
 
+                    const monthlyBalances = {};
                     let running = Number(prod.current_balance || 0);
                     for (let m = 12; m >= 1; m--) {
                         monthlyBalances[m] = Math.max(0, running);
-                        const mIn = inMap[m] || 0;
-                        const mOut = outMap[m] || 0;
-                        running = running - mIn + mOut;
+                        running = running - (inMap[m] || 0) + (outMap[m] || 0);
                     }
 
                     return {
@@ -1631,19 +1681,16 @@ export default {
             }
 
             // =================================================================
-            // 13. DUAL-MODE DASHBOARD SUMMARY (Executive Admin & Staff Views)
+            // 13. DUAL-MODE DASHBOARD SUMMARY
             // =================================================================
             if (path === "/api/dashboard/summary" && method === "GET") {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
-                const branchId = url.searchParams.get("branch_id"); // null, "ALL" or ID
+                const branchId = url.searchParams.get("branch_id");
                 const today = getMyanmarTodayDate();
 
-                // -------------------------------------------------------------
-                // (A) Staff / Cashier Metrics (Today Only & Branch-Specific)
-                // -------------------------------------------------------------
-                const targetBranchId = (branchId && branchId !== "ALL") ? Number(branchId) : 1;
+                const targetBranchId = (branchId && branchId !== "ALL") ? Number(branchId) : (currentUserRole === "cashier" ? userBranchId : 1);
 
-                // ၁။ ယနေ့ အရောင်းငွေသား/ဘဏ် နှင့် အရေအတွက်
+                // Staff Metrics
                 const todaySalesRow = await env.DB.prepare(`
                     SELECT 
                         COALESCE(SUM(cash_amount), 0) AS today_cash,
@@ -1653,7 +1700,6 @@ export default {
                     WHERE branch_id = ? AND date(created_at) = ?
                 `).bind(targetBranchId, today).first();
 
-                // ယနေ့ ရောင်းရသော အထည်အရေအတွက် စုစုပေါင်း
                 const todayItemsRow = await env.DB.prepare(`
                     SELECT COALESCE(SUM(si.quantity), 0) AS items_sold
                     FROM sale_items si
@@ -1661,7 +1707,6 @@ export default {
                     WHERE s.branch_id = ? AND date(s.created_at) = ?
                 `).bind(targetBranchId, today).first();
 
-                // ဆိုင်လက်ကျန်ငွေ (Cash Drawer & Bank Balance from Cashbook)
                 const drawerRow = await env.DB.prepare(`
                     SELECT 
                         COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -1672,7 +1717,6 @@ export default {
                     WHERE branch_id = ? AND date(entry_date) <= ?
                 `).bind(targetBranchId, today).first();
 
-                // ယနေ့ ရောင်းရသော ပစ္စည်းအမျိုးအစား (Category Breakdown)
                 const { results: catSales } = await env.DB.prepare(`
                     SELECT p.category, SUM(si.quantity) AS quantity, SUM(si.subtotal) AS total_amount
                     FROM sale_items si
@@ -1683,7 +1727,6 @@ export default {
                     ORDER BY total_amount DESC
                 `).bind(targetBranchId, today).all();
 
-                // ယနေ့ နောက်ဆုံးရောင်းချမှု (၅) စောင်
                 const { results: recentSales } = await env.DB.prepare(`
                     SELECT s.invoice_no, s.final_amount, s.payment_method, c.name AS customer_name
                     FROM sales s
@@ -1703,9 +1746,7 @@ export default {
                     recent_sales: recentSales || []
                 };
 
-                // -------------------------------------------------------------
-                // (B) Admin Metrics (Full Financials, Profit, Expenses & Branches)
-                // -------------------------------------------------------------
+                // Admin Metrics
                 let salesFilter = ` strftime('%Y', created_at) = ? `;
                 let salesBindings = [year];
                 if (branchId && branchId !== "ALL") {
@@ -1713,14 +1754,12 @@ export default {
                     salesBindings.push(Number(branchId));
                 }
 
-                // ၁။ တစ်နှစ်တာ စုစုပေါင်း ဝင်ငွေ (Revenue)
                 const revRow = await env.DB.prepare(`
                     SELECT COALESCE(SUM(final_amount), 0) AS total_revenue
                     FROM sales
                     WHERE ${salesFilter}
                 `).bind(...salesBindings).first();
 
-                // ၂။ တစ်နှစ်တာ ကုန်ကျစရိတ် စုစုပေါင်း (Expenses from Cashbook)
                 let expFilter = ` strftime('%Y', entry_date) = ? AND entry_type = 'EXPENSE' `;
                 let expBindings = [year];
                 if (branchId && branchId !== "ALL") {
@@ -1734,7 +1773,6 @@ export default {
                     WHERE ${expFilter}
                 `).bind(...expBindings).first();
 
-                // အသုံးစရိတ် ခေါင်းစဉ်အလိုက် စာရင်း (Expense Breakdown by Category)
                 let expCatFilter = ` strftime('%Y', ce.entry_date) = ? AND ce.entry_type = 'EXPENSE' `;
                 let expCatBindings = [year];
                 if (branchId && branchId !== "ALL") {
@@ -1751,7 +1789,6 @@ export default {
                     ORDER BY amount DESC
                 `).bind(...expCatBindings).all();
 
-                // ၃။ ကုန်ကျစရိတ်နှင့် အဝယ်တန်ဖိုးများ နုတ်ပြီး တစ်နှစ်တာ အသားတင်အမြတ် (Gross Profit & Net Profit)
                 let cogsFilter = ` strftime('%Y', s.created_at) = ? `;
                 let cogsBindings = [year];
                 if (branchId && branchId !== "ALL") {
@@ -1772,14 +1809,12 @@ export default {
                 const grossProfit = totalRev - cogs;
                 const netProfit = grossProfit - totalExp;
 
-                // ၄။ ရရန်ကျန် စုစုပေါင်း အကြွေး (Outstanding Debt)
                 const debtRow = await env.DB.prepare(`
                     SELECT COALESCE(SUM(current_debt), 0) AS total_debt
                     FROM customers
                     WHERE is_active = 1
                 `).first();
 
-                // ၅။ စတော့ စုစုပေါင်း တန်ဖိုး (Total Stock Value)
                 let stockValFilter = ` p.is_active = 1 `;
                 let stockValBindings = [];
                 if (branchId && branchId !== "ALL") {
@@ -1794,7 +1829,6 @@ export default {
                     WHERE ${stockValFilter}
                 `).bind(...stockValBindings).first();
 
-                // ၆။ ရောင်းအားအကောင်းဆုံး ပစ္စည်းများ (Top Selling Items)
                 let topFilter = ` strftime('%Y', s.created_at) = ? `;
                 let topBindings = [year];
                 if (branchId && branchId !== "ALL") {
@@ -1812,12 +1846,10 @@ export default {
                     ORDER BY quantity DESC LIMIT 6
                 `).bind(...topBindings).all();
 
-                // ၇။ ဆိုင်ခွဲတစ်ခုချင်းစီအလိုက် စတော့တန်ဖိုးနှင့် ငွေကြေးအခြေအနေ (Branch Valuation Breakdown)
                 const { results: branches } = await env.DB.prepare("SELECT id, name FROM branches WHERE is_active = 1 ORDER BY id ASC").all();
                 const branchMetrics = [];
 
                 for (const b of (branches || [])) {
-                    // Cash Net & Bank Net
                     const bCashRow = await env.DB.prepare(`
                         SELECT 
                             COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -1828,7 +1860,6 @@ export default {
                         WHERE branch_id = ?
                     `).bind(b.id).first();
 
-                    // Branch Stock Valuation
                     const bStockRow = await env.DB.prepare(`
                         SELECT COALESCE(SUM(bi.quantity * p.cost_price), 0) AS stock_value
                         FROM branch_inventory bi
@@ -1842,7 +1873,7 @@ export default {
                         cash_net: Number(bCashRow?.cash_net || 0),
                         bank_net: Number(bCashRow?.bank_net || 0),
                         stock_value: Number(bStockRow?.stock_value || 0),
-                        outstanding_debt: Number(debtRow?.total_debt || 0) // Customers are centralized
+                        outstanding_debt: Number(debtRow?.total_debt || 0)
                     });
                 }
 

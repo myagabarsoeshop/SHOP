@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/purchases.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
 import { PaginationController } from "../core/pagination.js";
 
 let purchasesList = [];
@@ -279,7 +280,6 @@ function openPurchaseModal(pur = null) {
             document.getElementById("pur-date").value = pur.created_at.split("T")[0];
         }
 
-        // ရှိပြီးသား ပစ္စည်းများကို စာရင်းထဲ ထည့်သွင်းခြင်း
         selectedOrderItems = purchasesList
             .filter(p => (p.purchase_id || p.id) == (pur.purchase_id || pur.id))
             .map(p => ({
@@ -504,9 +504,6 @@ function renderOrderItemsTable() {
     updateOrderSummary();
 }
 
-/**
- * Individual Row Event Attachments (DOM ပြန်မဆွဲဘဲ Focus မပြတ်စေရန် Target Row တိုက်ရိုက် update လုပ်သည်)
- */
 function attachRowEvents() {
     const tbody = document.getElementById("pur-items-container");
     if (!tbody) return;
@@ -651,7 +648,9 @@ function submitNewProductSubModal(e) {
     const pattern = document.getElementById("sub-pattern")?.value.trim() || "";
     const color = document.getElementById("sub-color")?.value.trim() || "";
 
-    if (!cat || !name) return alert("အမျိုးအစားနှင့် အထည်အမည် ပြည့်စုံစွာ ဖြည့်သွင်းပါ");
+    if (!cat || !name) {
+        return ui.toast.warning("အမျိုးအစားနှင့် အထည်အမည် ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
+    }
 
     const newProdObj = {
         category: cat,
@@ -677,19 +676,19 @@ async function submitPurchase() {
     const editId = document.getElementById("pur-edit-id")?.value;
 
     if (!supplier) {
-        alert("ပေးသွင်းသူ (ပွဲရုံ) အမည် ထည့်သွင်းပေးပါ။");
+        ui.toast.warning("ပေးသွင်းသူ (ပွဲရုံ) အမည် ထည့်သွင်းပေးပါ။");
         document.getElementById("pur-supplier")?.focus();
         return;
     }
 
     if (paymentMethod === "bank" && !bankName) {
-        alert("ဘဏ်လွှဲဖြစ်ပါက ဘဏ်အမည် သို့မဟုတ် အကောင့်အမည် ထည့်သွင်းပေးပါ။");
+        ui.toast.warning("ဘဏ်လွှဲဖြစ်ပါက ဘဏ်အမည် သို့မဟုတ် အကောင့်အမည် ထည့်သွင်းပေးပါ။");
         document.getElementById("pur-bank-name")?.focus();
         return;
     }
 
     if (selectedOrderItems.length === 0) {
-        alert("ကျေးဇူးပြု၍ ဝယ်ယူမည့် ပစ္စည်း အနည်းဆုံး (၁) မျိုး ရွေးချယ်ပေးပါ။");
+        ui.toast.warning("ကျေးဇူးပြု၍ ဝယ်ယူမည့် ပစ္စည်း အနည်းဆုံး (၁) မျိုး ရွေးချယ်ပေးပါ။");
         document.getElementById("pur-quick-search-input")?.focus();
         return;
     }
@@ -749,16 +748,16 @@ async function submitPurchase() {
     try {
         if (editId) {
             await api.put(`/purchases/${editId}`, payload);
-            alert("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
+            ui.toast.success("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
         } else {
             const res = await api.post("/purchases", payload);
-            alert(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီး စတော့နှင့် ငွေစာရင်းများ ပေါင်းထည့်ပြီးပါပြီ။ (ဘောင်ချာနံပါတ်: ${res.data?.purchaseNo || 'OK'})`);
+            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (INV: ${res.data?.purchaseNo || 'OK'})`);
         }
         closePurchaseModal();
         await loadMasterProducts();
         await loadPurchases();
     } catch (err) {
-        alert("သိမ်းဆည်း၍မရပါ: " + err.message);
+        ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -768,12 +767,14 @@ async function submitPurchase() {
 }
 
 async function deletePurchase(id) {
-    if (!confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းမှလည်း အလိုအလျောက် ပြန်နုတ်ပေးပါမည်)")) return;
+    const confirmed = await ui.confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းမှလည်း ပြန်နုတ်ပေးပါမည်)", "error");
+    if (!confirmed) return;
+
     try {
         await api.delete(`/purchases/${id}`);
-        alert("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadPurchases();
     } catch (err) {
-        alert("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }

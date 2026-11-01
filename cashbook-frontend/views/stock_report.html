@@ -1,112 +1,94 @@
-function renderTable(list) {
-    const tbody = document.getElementById("sr-table-body");
-    if (!tbody) return;
-    tbody.innerHTML = "";
+<!-- cashbook-frontend/views/stock_report.html -->
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+    
+    <!-- Top Filter Bar -->
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+        <div class="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            <!-- Search Input -->
+            <div class="relative flex-1 max-w-xs min-w-[200px]">
+                <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                <input type="text" id="sr-search" placeholder="ပစ္စည်းအမည် / SKU ရှာရန်..."
+                    class="w-full pl-9 pr-4 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
+            </div>
 
-    // ID နှစ်မျိုးလုံးကို ရှာဖွေနိုင်အောင် ထားရှိပေးထားသည်
-    const tfoot = document.getElementById("sr-table-foot") || document.getElementById("sr-table-footer");
+            <!-- Branch Selector -->
+            <div class="relative w-48 shrink-0">
+                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="sr-branch-select" class="w-full pl-8 pr-7 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none shadow-sm">
+                    <!-- Populated dynamically -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
 
-    if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center text-slate-400 font-bold text-sm">စတော့မှတ်တမ်း မတွေ့ရှိပါ</td></tr>`;
-        if (tfoot) tfoot.innerHTML = "";
-        return;
-    }
+            <!-- Category Selector -->
+            <div class="relative w-44 shrink-0">
+                <i class="fa-solid fa-layer-group text-blue-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="sr-category-select" class="w-full pl-8 pr-7 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none shadow-sm">
+                    <option value="">အမျိုးအစား အားလုံး</option>
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
 
-    const monthlyTotals = Array(13).fill(0);
-    let sumIn = 0;
-    let sumOut = 0;
-    let sumBal = 0;
-    let sumVal = 0;
+            <!-- Year Selector -->
+            <div class="relative w-36 shrink-0">
+                <i class="fa-regular fa-calendar text-purple-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="sr-year-select" class="w-full pl-8 pr-7 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none shadow-sm">
+                    <!-- e.g. 2025, 2026, 2027 -->
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+        </div>
 
-    list.forEach((item, index) => {
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition border-b border-slate-100 dark:border-slate-800/60";
+        <!-- Export CSV Button -->
+        <button type="button" id="btn-export-sr-csv" title="စတော့အစီရင်ခံစာကို Excel/CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm">
+            <i class="fa-solid fa-file-export text-emerald-500"></i>
+            <span class="hidden sm:inline">Export CSV</span>
+        </button>
+    </div>
 
-        const currentBal = Number(item.current_balance || 0);
-        const costPrice = Number(item.cost_price || 0);
-        const valuation = currentBal * costPrice;
-        const totalIn = Number(item.total_in || 0);
-        const totalOut = Number(item.total_out || 0);
+    <!-- Matrix Report Table -->
+    <div class="flex-1 overflow-x-auto overflow-y-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap min-w-[1700px] border-collapse">
+            <thead class="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold text-xs sticky top-0 z-20 border-b border-slate-200 dark:border-slate-800">
+                <tr id="sr-table-header">
+                    <th class="p-3.5 w-14 text-center">NO</th>
+                    <th class="p-3.5 w-32">Category</th>
+                    <th class="p-3.5 w-56">Item Name</th>
+                    <!-- 12 Months Columns -->
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Jan</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Feb</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Mar</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Apr</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">May</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Jun</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Jul</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Aug</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Sep</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Oct</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Nov</th>
+                    <th class="p-3.5 text-center bg-slate-200/50 dark:bg-slate-800/80">Dec</th>
+                    <!-- Totals and Valuation -->
+                    <th class="p-3.5 text-right bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">စုစုပေါင်းအဝင်</th>
+                    <th class="p-3.5 text-right bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400">စုစုပေါင်းအထွက်</th>
+                    <th class="p-3.5 text-right bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">လက်ရှိလက်ကျန်</th>
+                    <th class="p-3.5 text-right bg-amber-50/80 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">စတော့တန်ဖိုး</th>
+                </tr>
+            </thead>
+            <tbody id="sr-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                <tr>
+                    <td colspan="19" class="p-12 text-center text-slate-400 text-sm">
+                        <i class="fa-solid fa-chart-column text-3xl mb-3 opacity-40"></i>
+                        <div>အစီရင်ခံစာ အချက်အလက်များ ဆွဲယူနေပါသည်...</div>
+                    </td>
+                </tr>
+            </tbody>
+            <!-- Sticky Dynamic Footer Row (ID matches JS) -->
+            <tfoot id="sr-table-foot" class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white font-extrabold sticky bottom-0 z-20 border-t-2 border-slate-300 dark:border-slate-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+                <!-- Populated dynamically by JavaScript -->
+            </tfoot>
+        </table>
+    </div>
 
-        sumIn += totalIn;
-        sumOut += totalOut;
-        sumBal += currentBal;
-        sumVal += valuation;
-
-        let rowHtml = `
-            <td class="p-3 text-center text-slate-400 font-mono">${index + 1}</td>
-            <td class="p-3">
-                <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                    ${escapeHtml(item.category || "-")}
-                </span>
-            </td>
-            <td class="p-3">
-                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(item.item_name)}</div>
-                <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(item.sku || "-")}</div>
-            </td>
-        `;
-
-        for (let m = 1; m <= 12; m++) {
-            const mQty = Number(item.monthly_balances?.[m] ?? item[`m${m}`] ?? 0);
-            monthlyTotals[m] += mQty;
-            rowHtml += `
-                <td class="p-3 text-center font-mono ${mQty === 0 ? 'text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-200 font-bold'}">
-                    ${mQty.toLocaleString()}
-                </td>
-            `;
-        }
-
-        rowHtml += `
-            <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10">
-                +${totalIn.toLocaleString()}
-            </td>
-            <td class="p-3 text-right font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50/30 dark:bg-rose-950/10">
-                -${totalOut.toLocaleString()}
-            </td>
-            <td class="p-3 text-right font-mono font-black text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/10 text-sm">
-                ${currentBal.toLocaleString()}
-            </td>
-            <td class="p-3 text-right font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/10">
-                ${valuation.toLocaleString()} Ks
-            </td>
-        `;
-
-        tr.innerHTML = rowHtml;
-        tbody.appendChild(tr);
-    });
-
-    // အောက်ဆုံး Total Footer ကို လအလိုက် တန်ဖိုးများနှင့်တကွ တိုက်ရိုက် ထည့်သွင်းခြင်း
-    if (tfoot) {
-        let footHtml = `
-            <tr>
-                <td colspan="3" class="p-3.5 text-center tracking-wide font-black uppercase text-xs text-slate-500 dark:text-slate-400">
-                    Total Summary
-                </td>
-        `;
-
-        for (let m = 1; m <= 12; m++) {
-            footHtml += `
-                <td class="p-3 text-center font-mono text-slate-800 dark:text-slate-200">
-                    ${monthlyTotals[m].toLocaleString()}
-                </td>
-            `;
-        }
-
-        footHtml += `
-                <td class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
-                    +${sumIn.toLocaleString()}
-                </td>
-                <td class="p-3.5 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
-                    -${sumOut.toLocaleString()}
-                </td>
-                <td class="p-3.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
-                    ${sumBal.toLocaleString()}
-                </td>
-                <td class="p-3.5 text-right font-mono font-black text-amber-600 dark:text-amber-400 text-sm">
-                    ${sumVal.toLocaleString()} Ks
-                </td>
-            </tr>
-        `;
-        tfoot.innerHTML = footHtml;
-    }
-}
+    <!-- 15-Rows Pagination Footer Container -->
+    <div id="stock-report-pagination" class="shrink-0 border-t border-slate-200 dark:border-slate-800"></div>
+</div>

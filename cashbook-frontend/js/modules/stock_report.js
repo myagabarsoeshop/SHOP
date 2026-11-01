@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/stock_report.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast)
 import { setKPI } from "../app.js";
 
 let rawReportData = [];
@@ -15,6 +16,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initStockReport() {
@@ -234,7 +242,7 @@ function renderTable(list) {
 
 function exportStockReportToCSV() {
     if (!rawReportData || rawReportData.length === 0) {
-        return alert("ထုတ်ယူရန် အချက်အလက် မရှိသေးပါ");
+        return ui.toast.warning("ထုတ်ယူရန် အချက်အလက် မရှိသေးပါ။");
     }
 
     const shortYear = String(selectedYear).slice(-2);
@@ -249,9 +257,9 @@ function exportStockReportToCSV() {
 
         let row = [
             idx + 1,
-            `"${(item.category || '').replace(/"/g, '""')}"`,
-            `"${(item.item_name || '').replace(/"/g, '""')}"`,
-            `"${(item.sku || '').replace(/"/g, '""')}"`
+            escapeCsv(item.category),
+            escapeCsv(item.item_name),
+            escapeCsv(item.sku)
         ];
 
         for (let m = 1; m <= 12; m++) {

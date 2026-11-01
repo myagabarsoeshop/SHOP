@@ -184,18 +184,35 @@ function renderTable(list) {
     if (!tbody) return;
     tbody.innerHTML = "";
 
+    const tfoot = document.getElementById("sr-table-foot");
+
     if (list.length === 0) {
         tbody.innerHTML = `<tr><td colspan="19" class="p-12 text-center text-slate-400 font-bold text-sm">စတော့မှတ်တမ်း မတွေ့ရှိပါ</td></tr>`;
+        if (tfoot) tfoot.innerHTML = "";
         return;
     }
 
+    // Totals Initialization
+    const monthlyTotals = Array(13).fill(0); // 1-12
+    let sumIn = 0;
+    let sumOut = 0;
+    let sumBal = 0;
+    let sumVal = 0;
+
     list.forEach((item, index) => {
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition border-b border-slate-100 dark:border-slate-800/60";
 
         const currentBal = Number(item.current_balance || 0);
         const costPrice = Number(item.cost_price || 0);
         const valuation = currentBal * costPrice;
+        const totalIn = Number(item.total_in || 0);
+        const totalOut = Number(item.total_out || 0);
+
+        sumIn += totalIn;
+        sumOut += totalOut;
+        sumBal += currentBal;
+        sumVal += valuation;
 
         let rowHtml = `
             <td class="p-3 text-center text-slate-400 font-mono">${index + 1}</td>
@@ -213,6 +230,7 @@ function renderTable(list) {
         // 12 Months Closing Balances (m1 to m12)
         for (let m = 1; m <= 12; m++) {
             const mQty = Number(item.monthly_balances?.[m] ?? item[`m${m}`] ?? 0);
+            monthlyTotals[m] += mQty;
             rowHtml += `
                 <td class="p-3 text-center font-mono ${mQty === 0 ? 'text-slate-300 dark:text-slate-600' : 'text-slate-700 dark:text-slate-200 font-bold'}">
                     ${mQty.toLocaleString()}
@@ -222,10 +240,10 @@ function renderTable(list) {
 
         rowHtml += `
             <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10">
-                +${Number(item.total_in || 0).toLocaleString()}
+                +${totalIn.toLocaleString()}
             </td>
             <td class="p-3 text-right font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50/30 dark:bg-rose-950/10">
-                -${Number(item.total_out || 0).toLocaleString()}
+                -${totalOut.toLocaleString()}
             </td>
             <td class="p-3 text-right font-mono font-black text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/10 text-sm">
                 ${currentBal.toLocaleString()}
@@ -238,6 +256,41 @@ function renderTable(list) {
         tr.innerHTML = rowHtml;
         tbody.appendChild(tr);
     });
+
+    // Render Table Footer Summary (Total Row)
+    if (tfoot) {
+        let footHtml = `
+            <tr class="bg-slate-100/90 dark:bg-slate-950/80 font-black border-t-2 border-slate-300 dark:border-slate-700">
+                <td colspan="3" class="p-3 text-right uppercase text-xs tracking-wider text-slate-600 dark:text-slate-300">
+                    စုစုပေါင်း (Total)
+                </td>
+        `;
+
+        for (let m = 1; m <= 12; m++) {
+            footHtml += `
+                <td class="p-3 text-center font-mono text-slate-800 dark:text-slate-200">
+                    ${monthlyTotals[m].toLocaleString()}
+                </td>
+            `;
+        }
+
+        footHtml += `
+                <td class="p-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                    +${sumIn.toLocaleString()}
+                </td>
+                <td class="p-3 text-right font-mono text-rose-600 dark:text-rose-400">
+                    -${sumOut.toLocaleString()}
+                </td>
+                <td class="p-3 text-right font-mono text-blue-600 dark:text-blue-400 text-sm">
+                    ${sumBal.toLocaleString()}
+                </td>
+                <td class="p-3 text-right font-mono text-amber-600 dark:text-amber-400">
+                    ${sumVal.toLocaleString()} Ks
+                </td>
+            </tr>
+        `;
+        tfoot.innerHTML = footHtml;
+    }
 }
 
 function exportStockReportToCSV() {

@@ -917,88 +917,177 @@ export default {
             }
 
             // =================================================================
-            // 7. CASHBOOK CATEGORIES & ENTRIES
+            // 7. CASHBOOK CATEGORIES & ENTRIES (PRODUCTION STANDARD)
             // =================================================================
+
+            // 7.1 CATEGORIES GET
             if (path === "/api/cashbook/categories" && method === "GET") {
+                // "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" Category မရှိသေးပါက အလိုအလျောက် ထည့်သွင်းပေးခြင်း (Foreign Key Error ကာကွယ်ရန်)
+                await env.DB.prepare(`
+                    INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
+                    VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1)
+                `).run().catch(() => {});
+
                 const { results } = await env.DB.prepare(
                     "SELECT id, name, type, is_system FROM cash_categories WHERE is_active = 1 ORDER BY is_system DESC, id ASC"
                 ).all();
                 return jsonResponse(results || []);
             }
 
+            // 7.2 CASHBOOK ENTRIES & SUMMARY GET
             if (path === "/api/cashbook/entries" && method === "GET") {
-                const branchId = url.searchParams.get("branch_id");
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
                 const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
                 const endDate = url.searchParams.get("end_date") || startDate;
 
+                // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း (Sales/Purchases နှင့် Join တွဲ၍ Ref နှင့် Qty ရယူခြင်း)
                 let sql = `
-                    SELECT ce.id, ce.branch_id, COALESCE(b.name, 'Main Shop') AS branch_name,
-                           ce.category_id, COALESCE(cc.name, 'အထွေထွေ') AS category_name,
-                           ce.entry_type, ce.payment_method, ce.amount, ce.description, ce.entry_date,
-                           ce.sale_id, ce.customer_ledger_id, ce.purchase_id,
-                           COALESCE(u.full_name, 'System') AS created_by_name
+                    SELECT 
+                        ce.id, 
+                        ce.branch_id, 
+                        COALESCE(b.name, 'Main Shop') AS branch_name,
+                        ce.category_id, 
+                        COALESCE(cc.name, 'အထွေထွေ') AS category_name,
+                        ce.entry_type, 
+                        ce.payment_method, 
+                        ce.amount, 
+                        ce.description, 
+                        ce.entry_date,
+                        ce.sale_id, 
+                        ce.customer_ledger_id, 
+                        ce.purchase_id,
+                        COALESCE(u.full_name, 'System') AS created_by_name,
+                        COALESCE(s.invoice_no, p.purchase_no, 'VR-CB-' || printf('%05d', ce.id)) AS reference_no,
+                        COALESCE(
+                            (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
+                            (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id),
+                            NULL
+                        ) AS total_quantity
                     FROM cashbook_entries ce
                     LEFT JOIN branches b ON ce.branch_id = b.id
                     LEFT JOIN cash_categories cc ON ce.category_id = cc.id
+                    LEFT JOIN sales s ON ce.sale_id = s.id
+                    LEFT JOIN purchases p ON ce.purchase_id = p.id
                     LEFT JOIN users u ON ce.created_by = u.id
-                    WHERE ce.entry_date BETWEEN ? AND ?
+                    WHERE date(ce.entry_date) BETWEEN ? AND ?
                 `;
                 const bindings = [startDate, endDate];
                 if (branchId) {
                     sql += " AND ce.branch_id = ?";
-                    bindings.push(String(branchId));
+                    bindings.push(Number(branchId));
                 }
                 sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
                 const { results } = await env.DB.prepare(sql).bind(...bindings).all();
 
-                let totalCashIn = 0, totalCashOut = 0, totalBankIn = 0, totalBankOut = 0;
-                (results || []).forEach(r => {
-                    const amt = parseFloat(r.amount) || 0;
-                    const method2 = String(r.payment_method || "cash").toLowerCase();
-                    const type = String(r.entry_type || "EXPENSE").toUpperCase();
-                    if (method2 === "cash") {
-                        if (type === "INCOME") totalCashIn += amt;
-                        else totalCashOut += amt;
-                    } else {
-                        if (type === "INCOME") totalBankIn += amt;
-                        else totalBankOut += amt;
-                    }
-                });
+                // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance up to endDate)
+                let balanceSql = `
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
+                                          WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_balance,
+                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
+                                          WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
+                    FROM cashbook_entries
+                    WHERE date(entry_date) <= ?
+                `;
+                const balanceBindings = [endDate];
+                if (branchId) {
+                    balanceSql += " AND branch_id = ?";
+                    balanceBindings.push(Number(branchId));
+                }
+                const balanceRow = await env.DB.prepare(balanceSql).bind(...balanceBindings).first();
+
+                // ၃။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
+                let summarySql = `
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN ce.entry_type = 'EXPENSE' AND (cc.name LIKE '%ပိုင်ရှင်%' OR cc.name LIKE '%အပ်ငွေ%' OR cc.name LIKE '%လွှဲ%' OR ce.category_id = 10) THEN ce.amount ELSE 0 END), 0) AS today_remittance,
+                        COALESCE(SUM(CASE WHEN ce.entry_type = 'EXPENSE' AND NOT (cc.name LIKE '%ပိုင်ရှင်%' OR cc.name LIKE '%အပ်ငွေ%' OR cc.name LIKE '%လွှဲ%' OR ce.category_id = 10) THEN ce.amount ELSE 0 END), 0) AS today_expense,
+                        COALESCE(SUM(CASE WHEN ce.entry_type = 'INCOME' THEN ce.amount ELSE 0 END), 0) AS today_income
+                    FROM cashbook_entries ce
+                    LEFT JOIN cash_categories cc ON ce.category_id = cc.id
+                    WHERE date(ce.entry_date) BETWEEN ? AND ?
+                `;
+                const summaryBindings = [startDate, endDate];
+                if (branchId) {
+                    summarySql += " AND ce.branch_id = ?";
+                    summaryBindings.push(Number(branchId));
+                }
+                const todaySummaryRow = await env.DB.prepare(summarySql).bind(...summaryBindings).first();
 
                 return jsonResponse({
                     summary: {
-                        cash: { in: totalCashIn, out: totalCashOut, net: totalCashIn - totalCashOut },
-                        bank: { in: totalBankIn, out: totalBankOut, net: totalBankIn - totalBankOut },
-                        totalNet: (totalCashIn - totalCashOut) + (totalBankIn - totalBankOut)
+                        cash_balance: Number(balanceRow?.cash_balance || 0),
+                        bank_balance: Number(balanceRow?.bank_balance || 0),
+                        today_expense: Number(todaySummaryRow?.today_expense || 0),
+                        today_remittance: Number(todaySummaryRow?.today_remittance || 0),
+                        today_income: Number(todaySummaryRow?.today_income || 0)
                     },
                     entries: results || []
                 });
             }
 
+            // 7.3 CASHBOOK ENTRY POST (စာရင်းအသစ်ထည့်သွင်းခြင်း)
             if (path === "/api/cashbook/entries" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
                 const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
-                if (!categoryId || !amount) return errorResponse("အချက်အလက် မစုံလင်ပါ", 400);
+
+                // အကြောင်းအရာ (Description) မပါမဖြစ် လိုအပ်သည့် စစ်ဆေးမှု
+                const cleanDesc = String(description || "").trim();
+                if (!cleanDesc) {
+                    return errorResponse("အသေးစိတ် အကြောင်းအရာ (Description) ထည့်သွင်းပေးပါ", 400);
+                }
+
+                if (!categoryId || !amount || parseFloat(amount) <= 0) {
+                    return errorResponse("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ထည့်သွင်းပါ", 400);
+                }
+
+                // Category 10 (ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ) မရှိသေးပါက အလိုအလျောက် သွင်းပေးခြင်း (Foreign Key Error ကာကွယ်ရန်)
+                if (Number(categoryId) === 10) {
+                    await env.DB.prepare(`
+                        INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
+                        VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1)
+                    `).run().catch(() => {});
+                }
 
                 const res = await env.DB.prepare(`
                     INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, description, entry_date, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    targetBranch, Number(categoryId), String(entryType || "EXPENSE").toUpperCase(),
-                    String(paymentMethod).toLowerCase(), parseFloat(amount), String(description).trim(),
-                    entryDate || getMyanmarTodayDate(), currentUserId
+                    targetBranch, 
+                    Number(categoryId), 
+                    String(entryType || "EXPENSE").toUpperCase(),
+                    String(paymentMethod).toLowerCase(), 
+                    parseFloat(amount), 
+                    cleanDesc,
+                    entryDate || getMyanmarTodayDate(), 
+                    currentUserId
                 ).run();
 
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
             }
 
+            // 7.4 CASHBOOK ENTRY PUT (စာရင်းပြင်ဆင်ခြင်း)
             if (path.startsWith("/api/cashbook/entries/") && method === "PUT") {
                 const id = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
                 const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
 
-                if (!categoryId || !amount) return errorResponse("အချက်အလက် မစုံလင်ပါ", 400);
+                // အကြောင်းအရာ (Description) မပါမဖြစ် လိုအပ်သည့် စစ်ဆေးမှု
+                const cleanDesc = String(description || "").trim();
+                if (!cleanDesc) {
+                    return errorResponse("အသေးစိတ် အကြောင်းအရာ (Description) ထည့်သွင်းပေးပါ", 400);
+                }
+
+                if (!categoryId || !amount || parseFloat(amount) <= 0) {
+                    return errorResponse("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ထည့်သွင်းပါ", 400);
+                }
+
+                if (Number(categoryId) === 10) {
+                    await env.DB.prepare(`
+                        INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
+                        VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1)
+                    `).run().catch(() => {});
+                }
 
                 await env.DB.prepare(`
                     UPDATE cashbook_entries SET
@@ -1014,7 +1103,7 @@ export default {
                     String(entryType || "EXPENSE").toUpperCase(),
                     String(paymentMethod).toLowerCase(),
                     parseFloat(amount),
-                    String(description).trim(),
+                    cleanDesc,
                     entryDate || null,
                     id
                 ).run();
@@ -1022,6 +1111,7 @@ export default {
                 return jsonResponse({ message: "ငွေစာရင်း ပြင်ဆင်ပြီးပါပြီ" });
             }
 
+            // 7.5 CASHBOOK ENTRY DELETE (စာရင်းပယ်ဖျက်ခြင်း)
             if (path.startsWith("/api/cashbook/entries/") && method === "DELETE") {
                 const id = Number(path.split("/").pop());
                 await env.DB.prepare("DELETE FROM cashbook_entries WHERE id = ?").bind(id).run();

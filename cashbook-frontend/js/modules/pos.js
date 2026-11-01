@@ -544,18 +544,30 @@ async function updatePOSKPIs() {
     try {
         const branchId = state.currentBranch?.id || 1;
         const today = getLocalBusinessDate();
+
+        // ၁။ ငွေစာရင်း (Cashbook) မှ Cash & Bank အရောင်းငွေများ ဆွဲယူခြင်း
         const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
         const s = res.data?.summary || { cash: { in: 0 }, bank: { in: 0 } };
 
         const cashSale = s.cash?.in || 0;
         const bankSale = s.bank?.in || 0;
         const totalSale = cashSale + bankSale;
-        const totalItemsQty = cart.reduce((acc, i) => acc + i.quantity, 0);
 
+        // ၂။ ယနေ့ ရောင်းချခဲ့ရသော အထည်/ပစ္စည်း စုစုပေါင်း အရေအတွက်ကို /pos/sales မှ အမှန်တကယ် တွက်ချက်ခြင်း
+        let todaySoldQty = 0;
+        try {
+            const salesRes = await api.get("/pos/sales", { branch_id: branchId, date: today });
+            const salesItems = salesRes.data || [];
+            todaySoldQty = salesItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        } catch (e) {
+            console.warn("Failed to fetch today sold items count:", e);
+        }
+
+        // ၃။ KPI Bar သို့ အမှန်တကယ် ရောင်းရသည့် အရေအတွက် ပေးပို့ပြသခြင်း
         setKPI(1, "Today Sale (Cash)", cashSale, "fa-money-bill-wave");
         setKPI(2, "Today Sale (Bank)", bankSale, "fa-building-columns");
         setKPI(3, "Total Today Sale", totalSale, "fa-cash-register");
-        setKPI(4, "Total Sale Items", totalItemsQty, "fa-shirt");
+        setKPI(4, "Total Sale Items", todaySoldQty, "fa-shirt");
     } catch (err) {
         console.error("POS KPI update error:", err);
     }

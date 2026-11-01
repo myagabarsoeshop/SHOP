@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/master_products.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast)
 import { PaginationController } from "../core/pagination.js";
 
 let masterProducts = [];
@@ -21,7 +22,7 @@ function escapeHtml(str) {
 
 export async function initMasterProducts() {
     if (!state.isAdmin()) {
-        alert("ဤစာမျက်နှာကို Admin သာလျှင် အသုံးပြုခွင့်ရှိပါသည်။");
+        ui.toast.error("ဤစာမျက်နှာကို Admin သာလျှင် အသုံးပြုခွင့်ရှိပါသည်။");
         return;
     }
     bindEvents();
@@ -40,7 +41,7 @@ function bindEvents() {
 async function loadMasterProducts() {
     const tbody = document.getElementById("master-table-body");
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
     }
 
     try {
@@ -95,7 +96,7 @@ function renderMasterTable() {
     updateFooterTotals(currentFilteredMaster);
 
     if (currentFilteredMaster.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-slate-400 font-bold text-base">ဗဟိုကုန်ပစ္စည်းစာရင်း မတွေ့ရှိပါ</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-slate-400 font-bold text-sm"><i class="fa-solid fa-boxes-packing text-3xl mb-2 opacity-50"></i><br>ဗဟိုကုန်ပစ္စည်းစာရင်း မတွေ့ရှိပါ</td></tr>`;
         pagination.renderControls("master-products-pagination");
         return;
     }
@@ -111,7 +112,7 @@ function renderMasterTable() {
                 <div>${escapeHtml(item.barcode || "")}</div>
             </td>
             <td class="p-4">
-                <span class="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-sm font-bold">
+                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
                     ${escapeHtml(item.category)}
                 </span>
             </td>
@@ -121,13 +122,13 @@ function renderMasterTable() {
             </td>
             <td class="p-4 text-sm">
                 <div>${escapeHtml(item.color || "-")}</div>
-                <div class="text-slate-400">${escapeHtml(item.size || "Free Size")}</div>
+                <div class="text-slate-400 font-medium">${escapeHtml(item.size || "ထည်")}</div>
             </td>
             <td class="p-4 text-right font-mono text-base text-slate-500">${Number(item.cost_price || 0).toLocaleString()}</td>
             <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(item.retail_price || 0).toLocaleString()}</td>
             <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(item.wholesale_price || 0).toLocaleString()}</td>
             <td class="p-4 text-center">
-                <button type="button" data-id="${item.id}" title="ဈေးနှုန်းနှင့် အချက်အလက် ပြင်မည်" class="btn-edit-master w-9 h-9 inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded-xl text-slate-600 dark:text-slate-300 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${item.id}" title="ဈေးနှုန်းနှင့် အချက်အလက် ပြင်မည်" class="btn-edit-master w-9 h-9 inline-flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
                     <i class="fa-solid fa-pen-to-square"></i>
                 </button>
             </td>
@@ -164,17 +165,18 @@ function openMasterModal(prod = null) {
         safeSetValue("master-prod-name", prod.item_name || "");
         safeSetValue("master-prod-pattern", prod.pattern || "");
         safeSetValue("master-prod-color", prod.color || "");
-        safeSetValue("master-prod-size", prod.size || "Free Size");
+        safeSetValue("master-prod-size", prod.size || "ထည်");
         safeSetValue("master-prod-cost", prod.cost_price || 0);
         safeSetValue("master-prod-retail", prod.retail_price || 0);
         safeSetValue("master-prod-wholesale", prod.wholesale_price || 0);
     } else {
         if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်းအမည်သစ် မှတ်ပုံတင်မည်";
         safeSetValue("master-prod-id", "");
-        safeSetValue("master-prod-size", "Free Size");
+        safeSetValue("master-prod-size", "ထည်");
     }
 
     modal?.classList.remove("hidden");
+    document.getElementById("master-prod-sku")?.focus();
 }
 
 async function submitMasterProduct(e) {
@@ -191,7 +193,7 @@ async function submitMasterProduct(e) {
         itemName: document.getElementById("master-prod-name")?.value.trim(),
         pattern: document.getElementById("master-prod-pattern")?.value.trim() || null,
         color: document.getElementById("master-prod-color")?.value.trim() || null,
-        size: document.getElementById("master-prod-size")?.value.trim() || "Free Size",
+        size: document.getElementById("master-prod-size")?.value.trim() || "ထည်",
         costPrice: parseFloat(document.getElementById("master-prod-cost")?.value) || 0,
         retailPrice: parseFloat(document.getElementById("master-prod-retail")?.value) || 0,
         wholesalePrice: parseFloat(document.getElementById("master-prod-wholesale")?.value) || 0
@@ -200,18 +202,19 @@ async function submitMasterProduct(e) {
     try {
         if (prodId) {
             await api.put(`/products/${prodId}`, payload);
+            ui.toast.success("အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။ ဆိုင်ခွဲအားလုံးတွင် သက်ရောက်မည်ဖြစ်ပါသည်။");
         } else {
             payload.initialStock = 0; 
             payload.quantity = 0;
             payload.targetBranchId = 1;
             payload.branchId = 1;
             await api.post("/products", payload);
+            ui.toast.success("ဗဟိုအထည်အသစ် မှတ်ပုံတင်ပြီးပါပြီ။");
         }
         document.getElementById("master-product-modal")?.classList.add("hidden");
         await loadMasterProducts();
-        alert("ဗဟိုကုန်ပစ္စည်းစာရင်းနှင့် ဈေးနှုန်းများ အောင်မြင်စွာ Update ဖြစ်သွားပါပြီ။ ဆိုင်ခွဲအားလုံးတွင် သက်ရောက်မည်ဖြစ်ပါသည်။");
     } catch (err) {
-        alert("သိမ်းဆည်း၍မရပါ: " + err.message);
+        ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }

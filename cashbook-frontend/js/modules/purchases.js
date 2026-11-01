@@ -6,7 +6,7 @@ import { PaginationController } from "../core/pagination.js";
 let purchasesList = [];
 let currentFilteredPurchases = [];
 let masterProducts = [];
-let selectedOrderItems = []; // Purchase Modal ထဲတွင် လက်ရှိရွေးချယ်ထားသော ပစ္စည်းများ
+let selectedOrderItems = [];
 
 const pagination = new PaginationController({
     pageSize: 15,
@@ -74,8 +74,8 @@ function bindEvents() {
         }
     });
 
-    // Dedicated New Product Sub-Modal Events
-    document.getElementById("btn-open-create-prod-modal")?.addEventListener("click", openNewProductModal);
+    // Dedicated New Product Sub-Modal Events (Fixed Event Listener)
+    document.getElementById("btn-open-create-prod-modal")?.addEventListener("click", () => openNewProductModal());
     document.getElementById("btn-close-new-prod-modal")?.addEventListener("click", () => {
         document.getElementById("new-prod-modal")?.classList.add("hidden");
     });
@@ -440,7 +440,7 @@ function renderOrderItemsTable() {
         tbody.appendChild(tr);
     });
 
-    // Attach row events
+    // Row input event bindings
     tbody.querySelectorAll(".item-qty").forEach(input => {
         input.oninput = (e) => {
             const idx = Number(e.target.dataset.idx);
@@ -536,7 +536,7 @@ function updateOrderSummary() {
     if (totalEl) totalEl.textContent = `${grandTotal.toLocaleString()} Ks`;
 }
 
-// --- Dedicated Create Product Sub-Modal Logic ---
+// --- Dedicated Create Product Sub-Modal Logic (Correct Pointer Event handling) ---
 function openNewProductModal(prefillName = "", prefillCat = "") {
     const modal = document.getElementById("new-prod-modal");
     document.getElementById("new-prod-form")?.reset();
@@ -545,13 +545,15 @@ function openNewProductModal(prefillName = "", prefillCat = "") {
     const nameInput = document.getElementById("sub-name");
     const skuInput = document.getElementById("sub-sku");
 
-    if (prefillCat) catInput.value = prefillCat;
-    if (prefillName) nameInput.value = prefillName;
+    const catVal = typeof prefillCat === "string" ? prefillCat : "";
+    const nameVal = typeof prefillName === "string" ? prefillName : "";
 
-    skuInput.value = generateAutoSKU(prefillCat || "အထည်");
+    if (catInput) catInput.value = catVal;
+    if (nameInput) nameInput.value = nameVal;
+    if (skuInput) skuInput.value = generateAutoSKU(catVal || "အထည်");
 
     modal?.classList.remove("hidden");
-    nameInput?.focus();
+    setTimeout(() => nameInput?.focus(), 50);
 }
 
 function submitNewProductSubModal(e) {
@@ -677,7 +679,7 @@ async function deletePurchase(id) {
     if (!confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းမှလည်း အလိုအလျောက် ပြန်နုတ်ပေးပါမည်)")) return;
     try {
         await api.delete(`/purchases/${id}`);
-        alert("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        alert("အဝယ်စာရင်း ဖျက်သိမ်းပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadPurchases();
     } catch (err) {
         alert("ဖျက်၍မရပါ: " + err.message);

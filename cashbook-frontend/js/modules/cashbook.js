@@ -37,15 +37,15 @@ export async function initCashbook() {
 }
 
 function bindEvents() {
-    // 1. Consolidated Add New Button (ပေါင်းစည်းခလုတ် နှိပ်ပါက Modal ဖွင့်ခြင်း)
+    // 1. Consolidated Add New Button
     document.getElementById("btn-open-add-modal")?.addEventListener("click", () => openModal("EXPENSE"));
 
-    // Modal ပိတ်သည့် ခလုတ်
+    // Modal Close
     document.getElementById("btn-close-entry-modal")?.addEventListener("click", () => {
         document.getElementById("entry-modal")?.classList.add("hidden");
     });
 
-    // 2. Modal Switcher Tabs (အသုံးစရိတ် vs အခြားဝင်ငွေ ခလုတ်များ)
+    // 2. Modal Switcher Tabs
     document.getElementById("tab-btn-expense")?.addEventListener("click", () => switchModalTab("EXPENSE"));
     document.getElementById("tab-btn-income")?.addEventListener("click", () => switchModalTab("INCOME"));
 
@@ -58,7 +58,7 @@ function bindEvents() {
         loadEntries();
     });
 
-    // 5. Search Filter (ခေါင်းစဉ်၊ ဘောင်ချာနံပါတ် သို့မဟုတ် အကြောင်းအရာ ရှာဖွေခြင်း)
+    // 5. Search Filter
     document.getElementById("cb-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
         currentFilteredEntries = entries.filter(r => {
@@ -168,7 +168,7 @@ function renderTable() {
         const sign = isIncome ? "+" : "-";
         const amountColorClass = isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
 
-        // ၁။ Category Format (စာလုံးဆိုက် ရှင်းလင်းသော text-sm font-bold)
+        // ၁။ Category Format (Text 16px - text-base font-bold)
         const catName = item.category_name || item.category || "General";
         let catColor = "text-slate-700 dark:text-slate-300";
         if (catName.includes("ရောင်း") || isIncome) catColor = "text-emerald-600 dark:text-emerald-400 font-bold";
@@ -189,7 +189,6 @@ function renderTable() {
                 refNo = matchPo[0];
                 desc = desc.replace(matchPo[0], "").trim();
             } else {
-                // Direct Cashbook သွင်းသော စရိတ်/ဝင်ငွေများအတွက် Auto Voucher Number သတ်မှတ်ခြင်း
                 refNo = `VR-CB-${String(item.id).padStart(5, "0")}`;
             }
         }
@@ -220,15 +219,17 @@ function renderTable() {
         row.innerHTML = `
             <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
             <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
-            <td class="py-3 px-4 text-sm ${catColor} truncate max-w-[160px]">${ui.escapeHtml(catName)}</td>
-            <td class="py-3 px-4 text-sm font-semibold text-slate-900 dark:text-slate-100 min-w-[240px] max-w-md truncate leading-relaxed" title="${ui.escapeHtml(desc)}">
+            <!-- မြန်မာစာ Category: text-base (16px) -->
+            <td class="py-3 px-4 text-base ${catColor} truncate max-w-[170px]">${ui.escapeHtml(catName)}</td>
+            <!-- မြန်မာစာ Description: text-base (16px) နှင့် လိုင်းအကွာအဝေး လျှော့ချထားသော leading-snug -->
+            <td class="py-3 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[260px] max-w-md truncate leading-snug" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc || "-")}
             </td>
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
-            <td class="py-3 px-4 text-right font-black font-mono text-sm ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <!-- REF Column: နောက်ခံအရောင် (Badge) လုံးဝမပါဘဲ Plain Font သီးသန့် တစ်ကြောင်းတည်း ဖော်ပြခြင်း -->
-            <td class="py-3 px-4 text-center font-mono text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <td class="py-3 px-4 text-right font-black font-mono text-base ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
+            <!-- REF: ဘယ်ဘက်ကပ် text-left ဖြစ်ပြီး Badge နောက်ခံလုံးဝမပါသော Plain Font သီးသန့် -->
+            <td class="py-3 px-4 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                 ${ui.escapeHtml(refNo)}
             </td>
             <!-- Sticky Right Action Cell -->

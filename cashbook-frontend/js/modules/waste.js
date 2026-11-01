@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/waste.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
 import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -19,6 +20,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initWaste() {
@@ -97,7 +105,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredWaste);
 
     pageItems.forEach(w => {
@@ -137,11 +144,11 @@ function renderTable() {
             </td>
             <td class="p-4 text-sm">
                 <div>${escapeHtml(w.color || "-")}</div>
-                <div class="text-slate-400">${escapeHtml(w.size || "Free Size")}</div>
+                <div class="text-slate-400">${escapeHtml(w.size || "ထည်")}</div>
             </td>
             <td class="p-4 text-center">
                 <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                    -${Number(w.quantity || 0).toLocaleString()}
+                    -${Number(w.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(w.size || "ထည်")}</span>
                 </span>
             </td>
             <td class="p-4 text-right font-mono text-base text-slate-500">
@@ -176,7 +183,6 @@ function renderTable() {
         });
     }
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("waste-pagination");
 }
 
@@ -197,39 +203,41 @@ async function submitEditWaste(e) {
     const qty = parseInt(document.getElementById("edit-waste-qty")?.value, 10);
     const reason = document.getElementById("edit-waste-reason")?.value.trim();
 
-    if (!qty || qty <= 0) return alert("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပါ");
+    if (!qty || qty <= 0) {
+        return ui.toast.warning("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ။");
+    }
 
     if (btn) btn.disabled = true;
 
     try {
         await api.put(`/waste/${id}`, { quantity: qty, reason });
         document.getElementById("waste-edit-modal")?.classList.add("hidden");
-        alert("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadWasteLogs();
     } catch (err) {
-        alert("ပြင်ဆင်၍မရပါ: " + err.message);
+        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function deleteWasteLog(id) {
-    if (!confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)")) return;
+    const confirmed = await ui.confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)", "error");
+    if (!confirmed) return;
 
     try {
         await api.delete(`/waste/${id}`);
-        alert("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
+        ui.toast.success("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
         await loadWasteLogs();
     } catch (err) {
-        alert("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }
 
 function exportWasteToCSV() {
     const dataToExport = currentFilteredWaste.length > 0 ? currentFilteredWaste : wasteLogs;
     if (dataToExport.length === 0) {
-        alert("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
-        return;
+        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
     }
     const currentYear = new Date().getFullYear();
     let csvContent = "Reference No,Date,SKU,Barcode,Category,Item Name,Color,Size,Quantity,Unit Cost,Total Loss,Reason,Recorded By\n";
@@ -239,24 +247,24 @@ function exportWasteToCSV() {
         const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
 
         const row = [
-            `"${escapeHtml(w.reference_no || '')}"`,
-            `"${dateStr}"`,
-            `"${escapeHtml(w.sku || '')}"`,
-            `"${escapeHtml(w.barcode || '')}"`,
-            `"${escapeHtml(w.category || '')}"`,
-            `"${escapeHtml(w.item_name || '')}"`,
-            `"${escapeHtml(w.color || '')}"`,
-            `"${escapeHtml(w.size || 'Free Size')}"`,
+            escapeCsv(w.reference_no),
+            escapeCsv(dateStr),
+            escapeCsv(w.sku),
+            escapeCsv(w.barcode),
+            escapeCsv(w.category),
+            escapeCsv(w.item_name),
+            escapeCsv(w.color),
+            escapeCsv(w.size || 'ထည်'),
             w.quantity || 0,
             w.unit_cost || 0,
             subtotal,
-            `"${escapeHtml(w.reason || '')}"`,
-            `"${escapeHtml(w.recorded_by_name || 'Admin')}"`
+            escapeCsv(w.reason),
+            escapeCsv(w.recorded_by_name || 'Admin')
         ];
         csvContent += row.join(",") + "\n";
     });
 
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);

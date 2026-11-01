@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/customers.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI components
 import { setKPI, refreshGlobalKPIs } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -21,6 +22,12 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    if (/^[=+@-]/.test(str)) str = "'" + str; // Prevent Excel Formula Injection
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initCustomers() {
@@ -127,7 +134,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredCustomers);
 
     pageItems.forEach(c => {
@@ -185,11 +191,9 @@ function renderTable() {
         };
     });
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("customers-pagination");
 }
 
-// --- Customer Ledger / Statement Modal Logic ---
 async function openCustomerLedgerModal(cust) {
     currentCustomer = cust;
     const modal = document.getElementById("customer-ledger-modal");
@@ -264,7 +268,6 @@ function renderCustomerLedger(ledgerList) {
     });
 }
 
-// --- Repayment Modal Logic ---
 function openRepayModal(cust) {
     document.getElementById("repay-form")?.reset();
     document.getElementById("repay-cust-id").value = cust.id;
@@ -303,10 +306,10 @@ async function submitNewCustomer(e) {
     try {
         await api.post("/customers", payload);
         document.getElementById("customer-modal")?.classList.add("hidden");
+        ui.toast.success("ဖောက်သည်အသစ် အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။");
         await loadCustomers();
-        alert("ဖောက်သည်အသစ် အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။");
     } catch (err) {
-        alert("ဖောက်သည်သစ် သိမ်းဆည်း၍မရပါ: " + err.message);
+        ui.toast.error("ဖောက်သည်သစ် သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -323,11 +326,11 @@ async function submitRepayment(e) {
     const repayDate = document.getElementById("repay-date")?.value || new Date().toISOString().split("T")[0];
 
     if (amount <= 0) {
-        return alert("ကျေးဇူးပြု၍ မှန်ကန်သော ဆပ်ငွေပမာဏ ထည့်သွင်းပေးပါ");
+        return ui.toast.warning("ကျေးဇူးပြု၍ မှန်ကန်သော ဆပ်ငွေပမာဏ ထည့်သွင်းပေးပါ။");
     }
 
     if (paymentMethod === "bank" && !bankName) {
-        return alert("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ရွေးချယ်/ထည့်သွင်းပေးပါ");
+        return ui.toast.warning("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ရွေးချယ်/ထည့်သွင်းပေးပါ။");
     }
 
     if (btn) btn.disabled = true;
@@ -345,20 +348,20 @@ async function submitRepayment(e) {
         });
 
         document.getElementById("repay-modal")?.classList.add("hidden");
-        alert("အကြွေးဆပ်ငွေ အောင်မြင်စွာ လက်ခံမှတ်တမ်းတင်ပြီးပါပြီ။ ငွေစာရင်း (Cashbook) ထဲသို့လည်း အလိုအလျောက် ဝင်ရောက်သွားပါပြီ။");
+        ui.toast.success("အကြွေးဆပ်ငွေ အောင်မြင်စွာ လက်ခံမှတ်တမ်းတင်ပြီးပါပြီ။");
         await loadCustomers();
         await refreshGlobalKPIs("customers");
     } catch (err) {
-        alert("အကြွေးဆပ်မှု မအောင်မြင်ပါ: " + err.message);
+        ui.toast.error("အကြွေးဆပ်မှု မအောင်မြင်ပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
-// --- CSV Export Functions ---
+// --- Safe CSV Export Functions ---
 function exportAllCustomersToCSV() {
     if (!customers || customers.length === 0) {
-        return alert("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
+        return ui.toast.warning("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
     }
 
     let csvContent = "Customer Name,Phone,Shop Name,Customer Type,Address,Outstanding Debt (MMK),Status\n";
@@ -367,13 +370,13 @@ function exportAllCustomersToCSV() {
         const debt = Number(c.current_debt || 0);
         const status = debt > 0 ? "အကြွေးကျန်ရှိ" : "ကင်းရှင်း";
         const row = [
-            `"${(c.name || '').replace(/"/g, '""')}"`,
-            `"${(c.phone || '').replace(/"/g, '""')}"`,
-            `"${(c.shop_name || '').replace(/"/g, '""')}"`,
-            `"${(c.customer_type || 'retail').toUpperCase()}"`,
-            `"${(c.address || '').replace(/"/g, '""')}"`,
+            escapeCsv(c.name),
+            escapeCsv(c.phone || "-"),
+            escapeCsv(c.shop_name || "-"),
+            escapeCsv(c.customer_type || "retail"),
+            escapeCsv(c.address || "-"),
             debt,
-            `"${status}"`
+            escapeCsv(status)
         ];
         csvContent += row.join(",") + "\n";
     });
@@ -383,7 +386,7 @@ function exportAllCustomersToCSV() {
 
 function exportCustomerLedgerToCSV() {
     if (!activeCustomerLedger || activeCustomerLedger.length === 0) {
-        return alert("ထုတ်ယူရန် အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း မရှိပါ။");
+        return ui.toast.warning("ထုတ်ယူရန် အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း မရှိပါ။");
     }
 
     const custName = currentCustomer ? currentCustomer.name : "Customer";
@@ -395,13 +398,13 @@ function exportCustomerLedgerToCSV() {
         const sign = item.type === "DEBIT" ? "+" : "-";
 
         const row = [
-            `"${dateStr}"`,
-            `"${typeStr}"`,
-            `"${(item.reference_note || '').replace(/"/g, '""')}"`,
-            `"${(item.payment_method || '').replace(/"/g, '""')}"`,
+            escapeCsv(dateStr),
+            escapeCsv(typeStr),
+            escapeCsv(item.reference_note || ""),
+            escapeCsv(item.payment_method || ""),
             `"${sign}${Number(item.amount || 0)}"`,
             Number(item.balance_after || 0),
-            `"${(item.created_by_name || 'Admin').replace(/"/g, '""')}"`
+            escapeCsv(item.created_by_name || "Admin")
         ];
         csvContent += row.join(",") + "\n";
     });

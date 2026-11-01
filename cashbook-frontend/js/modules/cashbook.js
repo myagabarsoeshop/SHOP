@@ -215,6 +215,7 @@ function renderTable() {
             </div>
         `;
 
+        // row.innerHTML အတွင်းရှိ REF ကော်လံ နေရာတွင် အောက်ပါအတိုင်း ပြင်ဆင်ထားပါသည်:
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
         row.innerHTML = `
@@ -227,8 +228,9 @@ function renderTable() {
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
             <td class="py-3 px-4 text-right font-black font-mono text-sm ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <td class="py-3 px-4 text-center">
-                <span class="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20" title="${ui.escapeHtml(refNo)}">
+            <!-- REF Column: whitespace-nowrap ဖြင့် စာကြောင်း ၂ ကြောင်း လုံးဝမဆင်းအောင် ထိန်းထားပါသည် -->
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+                <span class="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-md border border-blue-500/20 inline-block tracking-tight" title="${ui.escapeHtml(refNo)}">
                     ${ui.escapeHtml(refNo)}
                 </span>
             </td>

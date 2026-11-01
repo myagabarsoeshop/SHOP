@@ -28,6 +28,20 @@ const pagination = new PaginationController({
     onPageChange: () => renderTable()
 });
 
+/**
+ * မြန်မာဂဏန်း (၀၁၂၃၄၅၆၇၈၉) မှ အင်္ဂလိပ်ဂဏန်း (0123456789) သို့ အလိုအလျောက် ပြောင်းလဲပေးသည့် Helper
+ */
+function parseAnyNumber(val) {
+    if (!val) return 0;
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let cleanStr = String(val).replace(/,/g, "").trim();
+    myanmarDigits.forEach((d, idx) => {
+        cleanStr = cleanStr.replaceAll(d, String(idx));
+    });
+    const num = parseFloat(cleanStr);
+    return isNaN(num) ? 0 : num;
+}
+
 export async function initCashbook() {
     const dateInput = document.getElementById("cb-date-filter");
     if (dateInput) dateInput.value = getLocalTodayDate();
@@ -50,16 +64,30 @@ function bindEvents() {
     document.getElementById("tab-btn-expense")?.addEventListener("click", () => switchModalTab("EXPENSE"));
     document.getElementById("tab-btn-income")?.addEventListener("click", () => switchModalTab("INCOME"));
 
-    // 3. Form Submit
+    // 3. Category Change ဖြစ်သည့်အခါ Description တွင် သက်ဆိုင်ရာ Auto Template ဖြည့်ပေးခြင်း
+    document.getElementById("entry-category")?.addEventListener("change", (e) => {
+        const descInput = document.getElementById("entry-desc");
+        const selectedOpt = e.target.selectedOptions?.[0];
+        const catName = selectedOpt ? selectedOpt.textContent : "";
+        
+        // ပိုင်ရှင်ထံလွှဲ/အပ်ငွေ ရွေးပါက အကြောင်းအရာ ရေးသားရလွယ်စေရန် ရှေ့ပြေးစာသား ထည့်ပေးခြင်း
+        if (catName.includes("ပိုင်ရှင်") || catName.includes("အပ်ငွေ") || catName.includes("လွှဲ") || e.target.value == 10) {
+            if (!descInput.value.trim() || descInput.value.startsWith("ဆိုင်ပိုင်ရှင်ထံ")) {
+                descInput.value = "ဆိုင်ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ (လက်ခံသူ - )";
+            }
+        }
+    });
+
+    // 4. Form Submit
     document.getElementById("entry-form")?.addEventListener("submit", submitEntry);
 
-    // 4. Date Filter Change
+    // 5. Date Filter Change
     document.getElementById("cb-date-filter")?.addEventListener("change", () => {
         pagination.reset();
         loadEntries();
     });
 
-    // 5. Search Filter
+    // 6. Search Filter
     document.getElementById("cb-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
         currentFilteredEntries = entries.filter(r => {
@@ -73,7 +101,7 @@ function bindEvents() {
         renderTable();
     });
 
-    // 6. Refresh Button
+    // 7. Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-cashbook");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -85,7 +113,7 @@ function bindEvents() {
         });
     }
 
-    // 7. Export CSV
+    // 8. Export CSV
     document.getElementById("btn-export-csv")?.addEventListener("click", exportCSV);
 }
 
@@ -378,23 +406,30 @@ function openEditModal(item) {
     amountInput?.focus();
 }
 
+/**
+ * စာရင်းသွင်းမှု စိစစ်အတည်ပြုခြင်း: Description မပါမဖြစ် လိုအပ်ပြီး မြန်မာဂဏန်းများကိုပါ အလိုအလျောက် ပေါင်းစပ်ပေးခြင်း
+ */
 async function submitEntry(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-entry");
 
     const editId = document.getElementById("entry-edit-id")?.value;
-    const categoryId = parseInt(document.getElementById("entry-category")?.value, 10);
-    const amount = parseFloat(document.getElementById("entry-amount")?.value);
+    const categorySelect = document.getElementById("entry-category");
+    const categoryId = parseInt(categorySelect?.value, 10);
+    const amount = parseAnyNumber(document.getElementById("entry-amount")?.value);
     const description = document.getElementById("entry-desc")?.value.trim();
 
+    // ၁။ အကြောင်းအရာ (Description) မပါမဖြစ် စစ်ဆေးခြင်း
     if (!description) {
-        ui.toast.warning("အသေးစိတ် အကြောင်းအရာ ထည့်သွင်းပေးပါ။");
+        ui.toast.warning("အသေးစိတ် အကြောင်းအရာ (Description) မဖြစ်မနေ ထည့်သွင်းပေးပါ။");
         document.getElementById("entry-desc")?.focus();
         return;
     }
 
+    // ၂။ ခေါင်းစဉ်နှင့် ငွေပမာဏ စစ်ဆေးခြင်း
     if (!categoryId || isNaN(amount) || amount <= 0) {
         ui.toast.warning("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ။");
+        document.getElementById("entry-amount")?.focus();
         return;
     }
 
@@ -449,10 +484,6 @@ async function deleteEntry(id) {
     }
 }
 
-/**
- * UI Table တွင် ပြသထားသည့်အတိုင်း ၁၀၀% ထပ်တူကျသော CSV Export စနစ်
- * Columns: NO, DATE, CATEGORY, DESCRIPTION, QTY, METHOD, AMOUNT, REF
- */
 function exportCSV() {
     const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
 
@@ -460,7 +491,6 @@ function exportCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
     
-    // UI Table Header အတိုင်း တိကျစွာ သတ်မှတ်ခြင်း
     let csv = "NO,DATE,CATEGORY,DESCRIPTION,QTY,METHOD,AMOUNT,REF\n";
 
     listToExport.forEach((item, idx) => {
@@ -470,10 +500,8 @@ function exportCSV() {
         const isIncome = entryType === "INCOME";
         const sign = isIncome ? "+" : "-";
 
-        // ၁။ Category
         const catName = item.category_name || item.category || "General";
 
-        // ၂။ Description နှင့် Reference (VR No)
         let desc = String(item.description || "-");
         let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
 
@@ -491,14 +519,10 @@ function exportCSV() {
             }
         }
 
-        // ၃။ Qty
         const qtyVal = item.total_quantity || item.quantity;
         const qtyStr = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0 ? Number(qtyVal) : "-";
 
-        // ၄။ Method
         const method = String(item.payment_method || "cash").toUpperCase();
-
-        // ၅။ Amount (Sign ပါဝင်သော ဂဏန်း)
         const amountStr = `${sign}${Number(item.amount || 0)}`;
 
         csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(method)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)}\n`;

@@ -15,7 +15,7 @@ import { initMasterProducts } from "./modules/master_products.js";
 import { initWaste } from "./modules/waste.js";
 import { initTransfers } from "./modules/transfers.js";
 import { initStockReport } from "./modules/stock_report.js";
-import { initSystemSetting } from "./modules/system_setting.js"; // 👈 ထည့်သွင်းပြီးပါပြီ
+import { initSystemSetting } from "./modules/system_setting.js";
 
 const VIEW_TITLES = {
     dashboard: "Dashboard (လုပ်ငန်းအနှစ်ချုပ်)",
@@ -29,7 +29,7 @@ const VIEW_TITLES = {
     master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
     customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)",
-    system_setting: "System Setting (စနစ် ဆက်တင်နှင့် အရင်းအမြစ်)" // 👈 comma မှန်ကန်စွာ ထည့်သွင်းပြီး
+    system_setting: "System Setting (စနစ် ဆက်တင်နှင့် အရင်းအမြစ်)"
 };
 
 let currentActiveView = "dashboard";
@@ -177,7 +177,8 @@ export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     const globalKpiBar = document.getElementById("global-kpi-bar");
 
-    if (view === "dashboard") {
+    // Dashboard သို့မဟုတ် System Setting ဖြစ်ပါက ထိပ်ဆုံး KPI Bar ကို အလိုအလျောက် ဝှက်မည်
+    if (view === "dashboard" || view === "system_setting") {
         globalKpiBar?.classList.add("hidden");
         return;
     } else {
@@ -192,8 +193,7 @@ export async function refreshGlobalKPIs(viewOverride) {
         view === "master_products" || 
         view === "waste" || 
         view === "transfers" ||
-        view === "stock_report" ||
-        view === "system_setting"
+        view === "stock_report"
     ) return;
 
     try {

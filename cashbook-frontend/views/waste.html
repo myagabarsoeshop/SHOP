@@ -2,89 +2,104 @@
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
     <!-- Top Action Toolbar -->
-    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         <div class="flex items-center gap-3">
-            <h2 class="text-lg font-bold text-slate-800 dark:text-white">ပျက်စီး / အလေအလွင့် မှတ်တမ်း</h2>
-            <div class="px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-lg border border-amber-500/20">
-                Damage & Waste Logs
+            <h2 class="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wide flex items-center gap-2">
+                <i class="fa-solid fa-box-open text-amber-500"></i> Damage & Waste
+            </h2>
+            <div class="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-500/20">
+                ပျက်စီး / အလေအလွင့် မှတ်တမ်း
             </div>
         </div>
 
         <div class="flex items-center gap-2.5">
             <div class="relative">
-                <i class="fa-solid fa-magnifying-glass text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"></i>
+                <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="waste-search" placeholder="ကုတ် / အမည် / အကြောင်းပြချက် ရှာရန်..." 
-                    class="pl-9 pr-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-64 transition">
+                    class="pl-9 pr-3.5 py-2.5 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 w-64 transition shadow-sm">
             </div>
 
-            <button type="button" id="btn-export-waste-csv" class="px-4 py-2 bg-slate-100 dark:bg-slate-950 hover:bg-emerald-600 hover:text-white text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer shadow-sm border border-slate-200 dark:border-slate-800">
-                <i class="fa-solid fa-file-csv text-emerald-500"></i>
-                <span>Export CSV</span>
+            <button type="button" id="btn-export-waste-csv" title="အလေအလွင့်စာရင်းများကို CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm">
+                <i class="fa-solid fa-file-export text-amber-500"></i>
+                <span class="hidden sm:inline">Export CSV</span>
             </button>
         </div>
     </div>
 
     <!-- Table -->
     <div class="flex-1 overflow-x-auto overflow-y-auto">
-        <table class="w-full text-left text-sm whitespace-nowrap min-w-[1100px]">
-            <thead class="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 font-bold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+        <table class="w-full text-left text-sm whitespace-nowrap min-w-[1200px]">
+            <thead class="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold text-xs sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                    <th class="p-4">ရက်စွဲ / Ref No</th>
-                    <th class="p-4">ကုတ် / Barcode</th>
-                    <th class="p-4">အမျိုးအစား</th>
-                    <th class="p-4">အထည်အမည် / အဆင်</th>
-                    <th class="p-4">အရောင် / ဆိုဒ်</th>
-                    <th class="p-4 text-center">ပျက်စီးအရေအတွက်</th>
-                    <th class="p-4 text-right">အရင်းဈေး</th>
-                    <th class="p-4 text-right">ဆုံးရှုံးမှုတန်ဖိုး</th>
-                    <th class="p-4">အကြောင်းပြချက်</th>
-                    <th class="p-4 text-center">မှတ်တမ်းတင်သူ</th>
-                    <th class="p-4 text-center">လုပ်ဆောင်ချက်</th>
+                    <th class="p-3.5 w-36">ရက်စွဲ / Ref No</th>
+                    <th class="p-3.5 w-32">ကုတ် / Barcode</th>
+                    <th class="p-3.5 w-32">အမျိုးအစား</th>
+                    <th class="p-3.5 min-w-[200px]">အထည်အမည် / အဆင်</th>
+                    <th class="p-3.5 w-32">အရောင် / ဆိုဒ်</th>
+                    <th class="p-3.5 w-32 text-center">ပျက်စီးအရေအတွက်</th>
+                    <th class="p-3.5 w-28 text-right">အရင်းဈေး</th>
+                    <th class="p-3.5 w-32 text-right">ဆုံးရှုံးမှုတန်ဖိုး</th>
+                    <th class="p-3.5 min-w-[200px]">အကြောင်းပြချက်</th>
+                    <th class="p-3.5 w-28 text-center">မှတ်တမ်းတင်သူ</th>
+                    <th class="p-3.5 w-28 text-center">လုပ်ဆောင်ချက်</th>
                 </tr>
             </thead>
-            <tbody id="waste-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200">
+            <tbody id="waste-table-body" class="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-800 dark:text-slate-200 text-sm">
                 <tr>
-                    <td colspan="11" class="p-12 text-center text-slate-400 text-base">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</td>
+                    <td colspan="11" class="p-12 text-center text-slate-400 text-sm">
+                        <i class="fa-solid fa-box-open text-3xl mb-3 opacity-40"></i>
+                        <div>မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div>
+                    </td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <!-- 15-Rows Pagination Footer Container (Window/Table အောက်စွန်းနှင့် တစ်သားတည်း ကွက်တိကျစေရန်) -->
-    <div id="waste-pagination" class="shrink-0"></div>
+    <!-- 15-Rows Pagination Footer Container -->
+    <div id="waste-pagination" class="shrink-0 border-t border-slate-200 dark:border-slate-800"></div>
 </div>
 
-<!-- Edit Waste Modal (Admin Only) -->
-<div id="waste-edit-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+<!-- ===================================================================== -->
+<!-- Edit Waste Modal (Pro Form Standard - Admin Only)                     -->
+<!-- ===================================================================== -->
+<div id="waste-edit-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
-        <div class="p-5 bg-amber-600 text-white flex items-center justify-between shrink-0">
-            <div class="text-base font-bold flex items-center gap-2">
-                <i class="fa-solid fa-pen-to-square"></i>
+        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-sm font-extrabold flex items-center gap-2.5">
+                <i class="fa-solid fa-pen-to-square text-amber-400 opacity-90"></i>
                 <span>ပျက်စီးစာရင်း ပြင်ဆင်မည်</span>
             </div>
-            <button type="button" id="btn-close-waste-edit-modal" class="text-white/80 hover:text-white text-lg cursor-pointer">
+            <button type="button" id="btn-close-waste-edit-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
+
         <form id="waste-edit-form" class="p-6 space-y-4">
             <input type="hidden" id="edit-waste-id">
+
             <div>
-                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ပစ္စည်းအမည်</label>
-                <input type="text" id="edit-waste-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-400 cursor-not-allowed">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပစ္စည်းအမည်</label>
+                <input type="text" id="edit-waste-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
             </div>
+
             <div>
-                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">ပျက်စီး အရေအတွက် *</label>
-                <input type="number" id="edit-waste-qty" min="1" required class="w-full text-sm font-bold font-mono bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပျက်စီး အရေအတွက် *</label>
+                <input type="number" id="edit-waste-qty" min="1" required class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-amber-600 dark:text-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500">
             </div>
+
             <div>
-                <label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">အကြောင်းပြချက်</label>
-                <input type="text" id="edit-waste-reason" class="w-full text-sm font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက်</label>
+                <input type="text" id="edit-waste-reason" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
             </div>
-            <div class="pt-2">
-                <button type="submit" id="btn-save-waste-edit" class="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm rounded-xl shadow-lg transition cursor-pointer">
-                    ပြင်ဆင်ချက် သိမ်းဆည်းမည်
+
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button type="submit" id="btn-save-waste-edit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i>
+                    <span>ပြင်ဆင်ချက် သိမ်းဆည်းမည်</span>
                 </button>
             </div>
         </form>
     </div>
 </div>
+
+<FollowUp label="ရလဒ်များကို စမ်းသပ်စစ်ဆေးမည်" query="စနစ်တစ်ခုလုံး၏ မော်ဂျူးအားလုံး UI/UX နှင့် Toast/Confirm စနစ်များ အပြည့်အစုံ ပြီးစီးသွားပါပြီ။ လက်ရှိအခြေအနေကို အနှစ်ချုပ်တင်ပြပေးပါ။"/>

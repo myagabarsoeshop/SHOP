@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/yarn.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
 import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -19,6 +20,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 /**
@@ -136,7 +144,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredYarns);
 
     pageItems.forEach(item => {
@@ -204,7 +211,6 @@ function renderTable() {
         tbody.appendChild(tr);
     });
 
-    // Row Actions Events
     tbody.querySelectorAll(".btn-issue-row").forEach(btn => {
         btn.onclick = () => {
             const item = yarnList.find(y => y.id === Number(btn.dataset.id));
@@ -225,7 +231,6 @@ function renderTable() {
         });
     }
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("yarn-pagination");
 }
 
@@ -278,13 +283,13 @@ async function submitYarnIssue(e) {
     const branchId = state.currentBranch?.id || 1;
 
     if (!yarnId || !weaverName || qty <= 0) {
-        return alert("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
+        return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
     }
 
     const item = yarnList.find(y => y.id === yarnId);
     if (item && qty > Number(item.current_stock || 0)) {
         const unit = getYarnUnit(item);
-        return alert(`လက်ကျန်ချည်ပမာဏ (${item.current_stock} ${unit}) ထက် ပိုမို၍ ထုတ်ပေး၍မရပါ။`);
+        return ui.toast.warning(`လက်ကျန်ချည်ပမာဏ (${item.current_stock} ${unit}) ထက် ပိုမို၍ ထုတ်ပေး၍မရပါ။`);
     }
 
     if (btn) btn.disabled = true;
@@ -301,10 +306,10 @@ async function submitYarnIssue(e) {
     try {
         await api.post("/yarns/issue", payload);
         document.getElementById("yarn-issue-modal")?.classList.add("hidden");
-        alert("ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နုတ်ပြီးပါပြီ။");
+        ui.toast.success("ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နုတ်ပြီးပါပြီ။");
         await loadYarnInventory();
     } catch (err) {
-        alert("ထုတ်ပေး၍မရပါ: " + err.message);
+        ui.toast.error("ထုတ်ပေး၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -341,37 +346,41 @@ async function submitEditYarn(e) {
         wholesalePrice: parseFloat(document.getElementById("edit-yarn-wholesale")?.value) || 0
     };
 
-    if (!payload.itemName) return alert("ချည်အမည် ထည့်သွင်းပေးပါ");
+    if (!payload.itemName) {
+        return ui.toast.warning("ချည်အမည် ထည့်သွင်းပေးပါ။");
+    }
 
     if (btn) btn.disabled = true;
 
     try {
         await api.put(`/products/${id}`, payload);
         document.getElementById("yarn-edit-modal")?.classList.add("hidden");
-        alert("ချည်အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
+        ui.toast.success("ချည်အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
         await loadYarnInventory();
     } catch (err) {
-        alert("ပြင်ဆင်၍မရပါ: " + err.message);
+        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function deleteYarn(id) {
-    if (!confirm("ဤချည်စာရင်းကို အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?")) return;
+    const confirmed = await ui.confirm("ဤချည်စာရင်းကို အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?", "error");
+    if (!confirmed) return;
+
     try {
         await api.delete(`/products/${id}`);
+        ui.toast.success("ချည်စာရင်းမှ ဖျက်သိမ်းပြီးပါပြီ။");
         await loadYarnInventory();
     } catch (err) {
-        alert("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }
 
 function exportYarnToCSV() {
     const dataToExport = currentFilteredYarns.length > 0 ? currentFilteredYarns : yarnList;
     if (dataToExport.length === 0) {
-        alert("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
-        return;
+        return ui.toast.warning("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
     }
     const currentYear = new Date().getFullYear();
     let csvContent = "Yarn SKU,Barcode,Item Name,Color,Unit,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
@@ -379,11 +388,11 @@ function exportYarnToCSV() {
     dataToExport.forEach(y => {
         const unit = getYarnUnit(y);
         const row = [
-            `"${escapeHtml(y.sku || '')}"`,
-            `"${escapeHtml(y.barcode || '')}"`,
-            `"${escapeHtml(y.item_name || '')}"`,
-            `"${escapeHtml(y.color || '')}"`,
-            `"${escapeHtml(unit)}"`,
+            escapeCsv(y.sku),
+            escapeCsv(y.barcode),
+            escapeCsv(y.item_name),
+            escapeCsv(y.color),
+            escapeCsv(unit),
             y.cost_price || 0,
             y.retail_price || 0,
             y.wholesale_price || 0,
@@ -392,7 +401,7 @@ function exportYarnToCSV() {
         csvContent += row.join(",") + "\n";
     });
 
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);

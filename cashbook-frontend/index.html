@@ -70,31 +70,239 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <style>
-        body { font-family: 'Inter', 'Padauk', sans-serif; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 6px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+/* ============================================================
+   MYA GABAR SOE SHOP
+   GLOBAL UI - OPTIMIZED PRODUCTION CSS
+   ============================================================ */
 
-        /* Thermal Receipt Printer (80mm) Styles */
-        @media print {
-            @page { size: 80mm auto; margin: 0; }
-            body * { visibility: hidden; }
-            #receipt-print-area, #receipt-print-area * { visibility: visible; }
-            #receipt-print-area {
-                position: absolute;
-                left: 0; top: 0;
-                width: 80mm;
-                padding: 4mm;
-                background: #fff !important;
-                color: #000 !important;
-                box-shadow: none !important;
-            }
-            .no-print { display: none !important; }
-            /* Hide toasts and dialogs when printing */
-            #toast-container, #global-confirm-dialog { display: none !important; }
-        }
-    </style>
+/* 1. GLOBAL FONT & RESET */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: 'Inter', 'Padauk', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* 2. SCROLLBAR */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.3);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+/* ============================================================
+   3. DARK MODE - GLOBAL
+   ============================================================ */
+
+html.dark body {
+    background-color: #0b0f19 !important;
+    color: #e2e8f0;
+    color-scheme: dark;
+}
+
+/* 4. DARK MODE - CARDS & CONTAINERS */
+
+html.dark .bg-white {
+    background-color: #151e32 !important;
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .bg-slate-900,
+html.dark .bg-slate-950 {
+    background-color: #151e32;
+}
+
+/* 5. DARK MODE - BORDERS */
+
+html.dark table,
+html.dark th,
+html.dark td {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .border {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark [class*="border-slate-800"],
+html.dark [class*="border-slate-700"] {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark [class*="divide-slate-800"] > :not(:last-child) {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 6. DARK MODE - TABLE */
+
+html.dark thead tr {
+    background-color: #1e293b;
+}
+
+html.dark thead th {
+    color: #f1f5f9;
+}
+
+/* Table Hover */
+html.dark tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.035);
+}
+
+/* 7. DARK MODE - TEXT */
+
+html.dark .text-slate-900 {
+    color: #f1f5f9;
+}
+
+html.dark .text-slate-800 {
+    color: #e2e8f0;
+}
+
+html.dark .text-slate-700 {
+    color: #cbd5e1;
+}
+
+html.dark .text-slate-600 {
+    color: #cbd5e1;
+}
+
+html.dark .text-slate-500 {
+    color: #94a3b8;
+}
+
+html.dark .text-slate-400 {
+    color: #94a3b8;
+}
+
+/* 8. DARK MODE - INPUT FIELDS */
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+    color: #f1f5f9;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+    color: #94a3b8;
+}
+
+/* Select Dropdown */
+html.dark select option {
+    background-color: #151e32;
+    color: #f1f5f9;
+}
+
+/* 9. DARK MODE - CARD SHADOW */
+
+html.dark .shadow,
+html.dark .shadow-sm,
+html.dark .shadow-md,
+html.dark .shadow-lg {
+    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.4);
+}
+
+/* 10. POS PRODUCT CARD */
+
+.product-card {
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+html.dark .product-card:hover {
+    border-color: #10b981;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+
+/* 11. BUTTON & KEYBOARD ACCESSIBILITY */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   12. THERMAL RECEIPT PRINTER - 80MM
+   ============================================================ */
+
+@media print {
+
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+
+    html,
+    body {
+        width: 80mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    #receipt-print-area,
+    #receipt-print-area * {
+        visibility: visible !important;
+    }
+
+    #receipt-print-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 80mm !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 4mm !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: none !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+    }
+
+    #receipt-print-area * {
+        color: #000000 !important;
+        text-shadow: none !important;
+        box-shadow: none !important;
+    }
+
+    .no-print,
+    #toast-container,
+    #global-confirm-dialog {
+        display: none !important;
+    }
+}
+
+/* ============================================================
+   END OF GLOBAL CSS
+   ============================================================ */
+</style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen relative">
 

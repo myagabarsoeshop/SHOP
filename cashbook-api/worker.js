@@ -66,8 +66,55 @@ export default {
             // =================================================================
             // 1. HEALTH CHECK
             // =================================================================
-            if (path === "/api/health") {
+            if (path === "/api/health" && method === "GET") {
                 return jsonResponse({ status: "online", version: "2.8.0" });
+            }
+
+            // =================================================================
+            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Resend API)
+            // =================================================================
+            if (path === "/api/system/send-report-email" && method === "POST") {
+                const body = await request.json().catch(() => ({}));
+                const { year, email } = body;
+
+                if (!email) {
+                    return errorResponse("အီးမေးလ်လိပ်စာ ထည့်သွင်းပေးပါ", 400);
+                }
+
+                if (!env.RESEND_API_KEY) {
+                    return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
+                }
+
+                // Resend API ကို အသုံးပြု၍ အီးမေးလ် ပို့ခြင်း
+                const resendResponse = await fetch("https://api.resend.com/emails", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        from: "Garment ERP <onboarding@resend.dev>",
+                        to: [email],
+                        subject: `Executive Financial & Stock Report (${year})`,
+                        html: `
+                            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                                <h2 style="color: #064e3b;">မြကမ္ဘာစိုး ပိုးထည်တိုက် - GARMENT ERP</h2>
+                                <p>မင်္ဂလာပါရှင်၊</p>
+                                <p>တောင်းဆိုထားသော <b>${year} ခုနှစ်</b> အတွက် လုပ်ငန်းအနှစ်ချုပ်နှင့် စတော့အစီရင်ခံစာ (Financial & Stock Report) ကို ပူးတွဲတင်ပြအပ်ပါသည်။</p>
+                                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
+                                <p style="font-size: 12px; color: #777;">ဤအီးမေးလ်သည် Cloudflare D1 Serverless ERP စနစ်မှ အလိုအလျောက် ပို့ဆောင်ပေးသော အီးမေးလ် ဖြစ်ပါသည်။</p>
+                            </div>
+                        `
+                    })
+                });
+
+                const resendData = await resendResponse.json();
+
+                if (!resendResponse.ok) {
+                    return errorResponse(resendData.message || "Failed to send email via Resend", 500);
+                }
+
+                return jsonResponse({ success: true, message: "Email sent successfully", data: resendData });
             }
 
             // =================================================================

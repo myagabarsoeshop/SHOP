@@ -940,8 +940,50 @@ export default {
                 const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
                 const endDate = url.searchParams.get("end_date") || startDate;
 
-                // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
-                // (Description တွင် "Category - Item Name (Color)" သီးသန့် အလိုအလျောက် ပေါင်းစပ်ထုတ်ပေးခြင်း)
+                // ၁။ products ဇယားထဲရှိ Column အမည်အမှန်များကို အလိုအလျောက် စစ်ဆေးခြင်း (no such column error လုံးဝမတက်စေရန်)
+                const prodInfo = await env.DB.prepare("PRAGMA table_info(products)").all().catch(() => ({ results: [] }));
+                const pCols = (prodInfo.results || []).map(r => r.name.toLowerCase());
+
+                const nameCol = ["product_name", "item_name", "name", "title"].find(c => pCols.includes(c));
+                const catCol = ["category", "category_name", "cat_name"].find(c => pCols.includes(c));
+                const colorCol = ["color", "colour"].find(c => pCols.includes(c));
+
+                let saleDescExpr = "ce.description";
+                let purchaseDescExpr = "ce.description";
+
+                if (nameCol) {
+                    const namePart = `p.${nameCol}`;
+                    const catPart = catCol ? `p.${catCol}` : "NULL";
+                    const colorPart = colorCol ? `p.${colorCol}` : "NULL";
+
+                    const formatExpr = `
+                        CASE 
+                            WHEN (${catPart} IS NOT NULL AND ${catPart} != '') AND (${colorPart} IS NOT NULL AND ${colorPart} != '')
+                            THEN ${catPart} || ' - ' || ${namePart} || ' (' || ${colorPart} || ')'
+                            WHEN (${catPart} IS NOT NULL AND ${catPart} != '')
+                            THEN ${catPart} || ' - ' || ${namePart}
+                            WHEN (${colorPart} IS NOT NULL AND ${colorPart} != '')
+                            THEN ${namePart} || ' (' || ${colorPart} || ')'
+                            ELSE ${namePart}
+                        END
+                    `;
+
+                    saleDescExpr = `(
+                        SELECT GROUP_CONCAT(${formatExpr}, ', ')
+                        FROM sale_items si
+                        LEFT JOIN products p ON si.product_id = p.id
+                        WHERE si.sale_id = ce.sale_id
+                    )`;
+
+                    purchaseDescExpr = `(
+                        SELECT GROUP_CONCAT(${formatExpr}, ', ')
+                        FROM purchase_items pi
+                        LEFT JOIN products p ON pi.product_id = p.id
+                        WHERE pi.purchase_id = ce.purchase_id
+                    )`;
+                }
+
+                // ၂။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
                 let sql = `
                     SELECT 
                         ce.id, 
@@ -963,44 +1005,8 @@ export default {
                             (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id),
                             NULL
                         ) AS total_quantity,
-                        -- Description: Category - Item Name (Color) ဖော်ပြမှု
-                        COALESCE(
-                            (
-                                SELECT GROUP_CONCAT(
-                                    CASE 
-                                        WHEN (p.category IS NOT NULL AND p.category != '') AND (p.color IS NOT NULL AND p.color != '')
-                                        THEN p.category || ' - ' || p.name || ' (' || p.color || ')'
-                                        WHEN (p.category IS NOT NULL AND p.category != '')
-                                        THEN p.category || ' - ' || p.name
-                                        WHEN (p.color IS NOT NULL AND p.color != '')
-                                        THEN p.name || ' (' || p.color || ')'
-                                        ELSE p.name 
-                                    END, 
-                                    ', '
-                                )
-                                FROM sale_items si
-                                LEFT JOIN products p ON si.product_id = p.id
-                                WHERE si.sale_id = ce.sale_id
-                            ),
-                            (
-                                SELECT GROUP_CONCAT(
-                                    CASE 
-                                        WHEN (p.category IS NOT NULL AND p.category != '') AND (p.color IS NOT NULL AND p.color != '')
-                                        THEN p.category || ' - ' || p.name || ' (' || p.color || ')'
-                                        WHEN (p.category IS NOT NULL AND p.category != '')
-                                        THEN p.category || ' - ' || p.name
-                                        WHEN (p.color IS NOT NULL AND p.color != '')
-                                        THEN p.name || ' (' || p.color || ')'
-                                        ELSE p.name 
-                                    END, 
-                                    ', '
-                                )
-                                FROM purchase_items pi
-                                LEFT JOIN products p ON pi.product_id = p.id
-                                WHERE pi.purchase_id = ce.purchase_id
-                            ),
-                            ce.description
-                        ) AS description
+                        -- Description: Category - Item Name (Color) အလိုအလျောက် သတ်မှတ်ခြင်း
+                        COALESCE(${saleDescExpr}, ${purchaseDescExpr}, ce.description) AS description
                     FROM cashbook_entries ce
                     LEFT JOIN branches b ON ce.branch_id = b.id
                     LEFT JOIN cash_categories cc ON ce.category_id = cc.id
@@ -1017,7 +1023,7 @@ export default {
                 sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
                 const { results } = await env.DB.prepare(sql).bind(...bindings).all();
 
-                // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance up to endDate)
+                // ၃။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance)
                 let balanceSql = `
                     SELECT 
                         COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -1034,7 +1040,7 @@ export default {
                 }
                 const balanceRow = await env.DB.prepare(balanceSql).bind(...balanceBindings).first();
 
-                // ၃။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
+                // ၄။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
                 let summarySql = `
                     SELECT 
                         COALESCE(SUM(CASE WHEN ce.entry_type = 'EXPENSE' AND (cc.name LIKE '%ပိုင်ရှင်%' OR cc.name LIKE '%အပ်ငွေ%' OR cc.name LIKE '%လွှဲ%' OR ce.category_id = 10) THEN ce.amount ELSE 0 END), 0) AS today_remittance,
@@ -1069,7 +1075,6 @@ export default {
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
                 const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
 
-                // အကြောင်းအရာ (Description) မပါမဖြစ် လိုအပ်သည့် စစ်ဆေးမှု
                 const cleanDesc = String(description || "").trim();
                 if (!cleanDesc) {
                     return errorResponse("အသေးစိတ် အကြောင်းအရာ (Description) ထည့်သွင်းပေးပါ", 400);
@@ -1153,7 +1158,6 @@ export default {
                 await env.DB.prepare("DELETE FROM cashbook_entries WHERE id = ?").bind(id).run();
                 return jsonResponse({ message: "ဖျက်ပြီးပါပြီ" });
             }
-
             // =================================================================
             // 8. POS CHECKOUT & SALES LOGS (ATOMIC TRANSACTION & STOCK INTEGRITY)
             // =================================================================

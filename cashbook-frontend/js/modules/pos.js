@@ -10,6 +10,7 @@ let cart = []; // Each item: { product, quantity, unitPrice, costPrice, itemSale
 let defaultSaleType = "retail"; // Default for newly added items
 let selectedPaymentMethod = "cash";
 let allCustomers = [];
+let isEventsBound = false; // SPA Re-render Safety flag
 
 // Today Sales State
 let todaySalesList = [];
@@ -39,8 +40,16 @@ function getLocalBusinessDate() {
 }
 
 export async function initPOS() {
-    // SPA Re-render Safety: Always bind events to fresh DOM elements
-    bindEvents();
+    // Prevent duplicate event bindings when navigating back to POS
+    if (!isEventsBound) {
+        bindEvents();
+        isEventsBound = true;
+    }
+    
+    // Clear state safely on fresh init
+    cart = [];
+    defaultSaleType = "retail";
+    
     await loadProducts();
     await loadCustomers();
     renderCart();
@@ -207,7 +216,6 @@ function addToCart(product) {
         });
     }
     renderCart();
-    updatePOSKPIs();
 }
 
 /**
@@ -225,7 +233,6 @@ function toggleCartItemPriceType(index) {
         item.unitPrice = Number(item.product.retail_price || 0);
     }
     renderCart();
-    updatePOSKPIs();
 }
 
 function renderCart() {
@@ -249,9 +256,8 @@ function renderCart() {
         if (subtotalEl) subtotalEl.textContent = "0 Ks";
         if (finalTotalEl) finalTotalEl.textContent = "0 Ks";
         if (discountDisplay) discountDisplay.textContent = "-0 Ks";
-        if (discountInput) discountInput.value = 0; // Fix: Reset discount to 0 on empty cart
+        if (discountInput) discountInput.value = 0;
         if (checkoutBtn) checkoutBtn.disabled = true;
-        updatePOSKPIs();
         return;
     }
 
@@ -268,7 +274,6 @@ function renderCart() {
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 mb-0.5">
                     <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(item.product.item_name)}</span>
-                    <!-- Row-level Retail/Wholesale Toggle Badge -->
                     <button type="button" data-idx="${index}" class="btn-toggle-price-type px-1.5 py-0.5 rounded text-[10px] font-black cursor-pointer transition ${isWholesale ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'}" title="လက်လီ/လက်ကား ဈေးနှုန်းပြောင်းရန် နှိပ်ပါ">
                         ${isWholesale ? 'လက်ကား' : 'လက်လီ'}
                     </button>
@@ -290,7 +295,6 @@ function renderCart() {
         container.appendChild(row);
     });
 
-    // Discount Validation: Ensure discount never exceeds subtotal
     let rawDiscount = parseFloat(discountInput?.value) || 0;
     let discount = Math.min(Math.max(0, rawDiscount), subtotal);
     if (discountInput && discountInput.value !== String(discount) && rawDiscount > subtotal) {
@@ -304,7 +308,7 @@ function renderCart() {
     if (finalTotalEl) finalTotalEl.textContent = `${finalTotal.toLocaleString()} Ks`;
     if (checkoutBtn) checkoutBtn.disabled = false;
 
-    // Attach Row Event Listeners
+    // Attach Row Listeners
     container.querySelectorAll(".btn-toggle-price-type").forEach(btn => {
         btn.onclick = () => toggleCartItemPriceType(Number(btn.dataset.idx));
     });
@@ -319,7 +323,6 @@ function renderCart() {
             }
             cart[idx].quantity += 1; 
             renderCart(); 
-            updatePOSKPIs(); 
         };
     });
 
@@ -329,21 +332,16 @@ function renderCart() {
             if (cart[idx].quantity > 1) cart[idx].quantity -= 1;
             else cart.splice(idx, 1);
             renderCart();
-            updatePOSKPIs();
         };
     });
 
     container.querySelectorAll(".btn-remove-item").forEach(btn => {
         btn.onclick = () => { 
             cart.splice(Number(btn.dataset.idx), 1); 
-            // If cart is now empty, zero out discount
             if (cart.length === 0 && discountInput) discountInput.value = 0;
             renderCart(); 
-            updatePOSKPIs(); 
         };
     });
-
-    updatePOSKPIs();
 }
 
 function bindEvents() {
@@ -377,12 +375,10 @@ function bindEvents() {
                 cart = [];
                 if (discountInput) discountInput.value = 0;
                 renderCart();
-                updatePOSKPIs();
             }
         };
     }
 
-    // Default Sale Type Toggles
     if (retailBtn) {
         retailBtn.onclick = () => {
             defaultSaleType = "retail";
@@ -405,7 +401,6 @@ function bindEvents() {
     if (checkoutBtn) checkoutBtn.onclick = openCheckoutModal;
     if (closeModalBtn) closeModalBtn.onclick = () => modal?.classList.add("hidden");
 
-    // Payment Method Selection Tabs
     document.querySelectorAll(".method-btn").forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll(".method-btn").forEach(b => {
@@ -430,12 +425,10 @@ function bindEvents() {
                     paidInput.placeholder = "ကျသင့်ငွေ အပြည့် သို့မဟုတ် လက်ခံငွေ";
                 }
             }
-
             calculateChange();
         };
     });
 
-    // Customer Selection Sync
     const handleCustomerChange = (e) => {
         const val = e.target.value;
         const newBox = document.getElementById("modal-new-customer-box");
@@ -468,7 +461,6 @@ function bindEvents() {
     const closeReceiptBtn = document.getElementById("btn-close-receipt");
     if (closeReceiptBtn) closeReceiptBtn.onclick = () => document.getElementById("receipt-modal")?.classList.add("hidden");
 
-    // Today Sales Modal Events
     const openTodayBtn = document.getElementById("btn-open-today-sales");
     if (openTodayBtn) openTodayBtn.onclick = openTodaySalesModal;
 
@@ -546,7 +538,6 @@ async function updatePOSKPIs() {
         const branchId = state.currentBranch?.id || 1;
         const today = getLocalBusinessDate();
 
-        // ၁။ ငွေစာရင်း (Cashbook) မှ Cash & Bank အရောင်းငွေများ ဆွဲယူခြင်း
         const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
         const s = res.data?.summary || { cash: { in: 0 }, bank: { in: 0 } };
 
@@ -554,7 +545,6 @@ async function updatePOSKPIs() {
         const bankSale = s.bank?.in || 0;
         const totalSale = cashSale + bankSale;
 
-        // ၂။ ယနေ့ ရောင်းချခဲ့ရသော အထည်/ပစ္စည်း စုစုပေါင်း အရေအတွက်ကို /pos/sales မှ အမှန်တကယ် တွက်ချက်ခြင်း
         let todaySoldQty = 0;
         try {
             const salesRes = await api.get("/pos/sales", { branch_id: branchId, date: today });
@@ -564,7 +554,6 @@ async function updatePOSKPIs() {
             console.warn("Failed to fetch today sold items count:", e);
         }
 
-        // ၃။ KPI Bar သို့ အမှန်တကယ် ရောင်းရသည့် အရေအတွက် ပေးပို့ပြသခြင်း
         setKPI(1, "Today Sale (Cash)", cashSale, "fa-money-bill-wave");
         setKPI(2, "Today Sale (Bank)", bankSale, "fa-building-columns");
         setKPI(3, "Total Today Sale", totalSale, "fa-cash-register");
@@ -574,9 +563,6 @@ async function updatePOSKPIs() {
     }
 }
 
-/**
- * Checkout & Sale Submission with Money-Leak Prevention
- */
 async function submitSale() {
     const finalTotal = getFinalTotal();
     const paidInput = document.getElementById("modal-paid-amount");
@@ -631,6 +617,7 @@ async function submitSale() {
     const bankName = document.getElementById("modal-bank-name")?.value.trim();
     if (selectedPaymentMethod === "bank" && paidAmount > 0 && !bankName) {
         alert("ဘဏ်လွှဲဖြစ်ပါက ကျေးဇူးပြု၍ ဘဏ်အမည် ထည့်သွင်းပေးပါ။");
+        document.getElementById("modal-bank-name")?.focus();
         return;
     }
 
@@ -644,7 +631,6 @@ async function submitSale() {
         const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
         const discountAmount = parseFloat(document.getElementById("pos-discount")?.value) || 0;
 
-        // Money-Leak Prevention: Route deposit during credit sales to Cash or Bank correctly
         const actualPaid = Math.min(paidAmount, finalTotal);
         let pCash = 0;
         let pBank = 0;
@@ -693,7 +679,6 @@ async function submitSale() {
                 bankName: bankName
             });
 
-            // Reset Cart & Form
             cart = [];
             if (document.getElementById("pos-discount")) document.getElementById("pos-discount").value = 0;
             if (document.getElementById("pos-customer-select")) document.getElementById("pos-customer-select").value = "";
@@ -767,10 +752,6 @@ function showReceiptModal(data) {
 
     document.getElementById("receipt-modal")?.classList.remove("hidden");
 }
-
-// =========================================================================
-// --- Today Sales Modal Logic with Accurate Sums -------------------------
-// =========================================================================
 
 async function openTodaySalesModal() {
     const modal = document.getElementById("today-sales-modal");

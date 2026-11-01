@@ -612,8 +612,46 @@ export default {
             }
 
             // =================================================================
-            // 8. POS CHECKOUT
+            // 8. POS CHECKOUT & SALES LOGS
             // =================================================================
+            if (path === "/api/pos/sales" && method === "GET") {
+                const branchId = url.searchParams.get("branch_id") || 1;
+                const date = url.searchParams.get("date") || getMyanmarTodayDate();
+
+                const sql = `
+                    SELECT 
+                        s.id AS sale_id,
+                        s.invoice_no,
+                        s.sale_type,
+                        s.payment_method,
+                        s.bank_account_name,
+                        s.total_amount,
+                        s.discount_amount,
+                        s.final_amount,
+                        s.paid_amount,
+                        s.created_at,
+                        COALESCE(c.name, 'Walk-in') AS customer_name,
+                        si.id AS item_row_id,
+                        si.quantity,
+                        si.unit_price,
+                        si.subtotal,
+                        p.category,
+                        p.item_name,
+                        p.sku,
+                        p.color,
+                        p.size,
+                        p.pattern
+                    FROM sales s
+                    LEFT JOIN customers c ON s.customer_id = c.id
+                    JOIN sale_items si ON s.id = si.sale_id
+                    JOIN products p ON si.product_id = p.id
+                    WHERE s.branch_id = ? AND date(s.created_at) = ?
+                    ORDER BY s.id DESC, si.id ASC
+                `;
+                const { results } = await env.DB.prepare(sql).bind(Number(branchId), date).all();
+                return jsonResponse(results || []);
+            }
+
             if (path === "/api/pos/sales" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const {
@@ -630,6 +668,7 @@ export default {
                 for (const item of items) {
                     totalAmount += (parseFloat(item.quantity) * parseFloat(item.unitPrice));
                 }
+                
                 const discount = Math.max(0, parseFloat(discountAmount) || 0);
                 const finalAmount = Math.max(0, totalAmount - discount);
                 const rawPaid = Math.max(0, parseFloat(paidAmount) || 0);
@@ -638,19 +677,37 @@ export default {
 
                 const todayDate = getMyanmarTodayDate();
                 const dateStr = todayDate.replace(/-/g, "");
-                const countToday = await env.DB.prepare("SELECT COUNT(id) AS count FROM sales WHERE branch_id = ?").bind(Number(branchId)).first();
+                const countToday = await env.DB.prepare("SELECT COUNT(id) AS count FROM sales WHERE branch_id = ? AND date(created_at) = ?").bind(Number(branchId), todayDate).first();
                 const seq = String((countToday?.count || 0) + 1).padStart(4, "0");
                 const invoiceNo = `INV-B${branchId}-${dateStr}-${seq}`;
 
-                const pCash = paymentMethod === "cash" ? effectivePaid : (parseFloat(cashAmount) || 0);
-                const pBank = paymentMethod === "bank" ? effectivePaid : (parseFloat(bankAmount) || 0);
+                // --- Accounting Integrity: Ensure proper cash/bank routing for deposits during credit sales ---
+                let pCash = 0;
+                let pBank = 0;
+
+                if (paymentMethod === "cash") {
+                    pCash = effectivePaid;
+                } else if (paymentMethod === "bank") {
+                    pBank = effectivePaid;
+                } else if (paymentMethod === "credit") {
+                    // Route partial paid amounts (deposits) correctly even on credit invoices
+                    if (bankAccountName) {
+                        pBank = effectivePaid;
+                    } else {
+                        pCash = effectivePaid;
+                    }
+                } else {
+                    // Fallback to explicit payload values for mixed payments if specified
+                    pCash = parseFloat(cashAmount) || 0;
+                    pBank = parseFloat(bankAmount) || 0;
+                }
 
                 const saleInsert = await env.DB.prepare(`
                     INSERT INTO sales (
                         invoice_no, branch_id, customer_id, sale_type,
                         total_amount, discount_amount, final_amount, paid_amount, debt_amount,
-                        payment_method, cash_amount, bank_amount, bank_account_name, created_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        payment_method, cash_amount, bank_amount, bank_account_name, created_by, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `).bind(
                     invoiceNo, Number(branchId), customerId ? Number(customerId) : null, saleType,
                     totalAmount, discount, finalAmount, effectivePaid, debtAmount,
@@ -692,7 +749,7 @@ export default {
                             env.DB.prepare(`
                                 INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
                                 VALUES (?, 1, ?, 'INCOME', 'bank', ?, ?, ?, ?, ?)
-                            `).bind(Number(branchId), saleId, bankAccountName, pBank, `အရောင်း ${invoiceNo} (${bankAccountName || "Bank"})`, todayDate, Number(createdBy))
+                            `).bind(Number(branchId), saleId, bankAccountName || 'Bank', pBank, `အရောင်း ${invoiceNo} (${bankAccountName || 'Bank'})`, todayDate, Number(createdBy))
                         );
                     }
                 }

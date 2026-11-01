@@ -71,14 +71,14 @@ export default {
             }
 
             // =================================================================
-            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Resend API)
+            // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Resend API with Excel/CSV Attachment)
             // =================================================================
-            // System Setting & Email Automation (Resend API)
             if (path === "/api/system/send-report-email" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                const { year, email } = body;
+                const targetYear = String(body.year || new Date().getFullYear());
+                const targetEmail = body.email;
 
-                if (!email) {
+                if (!targetEmail) {
                     return errorResponse("အီးမေးလ်လိပ်စာ ထည့်သွင်းပေးပါ", 400);
                 }
 
@@ -86,6 +86,128 @@ export default {
                     return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
                 }
 
+                // ၁။ D1 Database မှ သက်ဆိုင်ရာ နှစ်အတွက် Products နှင့် လအလိုက် စတော့အချက်အလက်များ ဆွဲယူခြင်း
+                const { results: products } = await env.DB.prepare(`
+                    SELECT 
+                        p.id, p.sku, p.category, p.item_name, p.cost_price,
+                        COALESCE(SUM(bi.quantity), 0) AS current_balance
+                    FROM products p
+                    LEFT JOIN branch_inventory bi ON p.id = bi.product_id
+                    WHERE p.is_active = 1
+                    GROUP BY p.id
+                    ORDER BY p.category ASC, p.item_name ASC
+                `).all();
+
+                // အဝယ် (Purchases)
+                const { results: purchases } = await env.DB.prepare(`
+                    SELECT pi.product_id, CAST(strftime('%m', p.created_at) AS INTEGER) AS m, SUM(pi.quantity) AS qty
+                    FROM purchase_items pi
+                    JOIN purchases p ON pi.purchase_id = p.id
+                    WHERE strftime('%Y', p.created_at) = ?
+                    GROUP BY pi.product_id, m
+                `).bind(targetYear).all();
+
+                // အရောင်း (Sales)
+                const { results: sales } = await env.DB.prepare(`
+                    SELECT si.product_id, CAST(strftime('%m', s.created_at) AS INTEGER) AS m, SUM(si.quantity) AS qty
+                    FROM sale_items si
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE strftime('%Y', s.created_at) = ?
+                    GROUP BY si.product_id, m
+                `).bind(targetYear).all();
+
+                // အလေအလွင့်/ပျက်စီး (Waste)
+                let waste = [];
+                try {
+                    const resW = await env.DB.prepare(`
+                        SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
+                        FROM waste_logs
+                        WHERE strftime('%Y', created_at) = ?
+                        GROUP BY product_id, m
+                    `).bind(targetYear).all();
+                    waste = resW.results || [];
+                } catch (e) {
+                    waste = [];
+                }
+
+                // ၂။ Excel တွင် မြန်မာစာ မှန်ကန်စွာဖတ်နိုင်ရန် UTF-8 BOM ဖြင့် CSV ဖိုင် တည်ဆောက်ခြင်း
+                const MONTH_KEYS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                let csvContent = "\uFEFF"; // UTF-8 BOM for Microsoft Excel
+                csvContent += `စဉ်,အမျိုးအစား,ပစ္စည်းအမည်,SKU,${MONTH_KEYS.map(m => `${m} ${targetYear.slice(-2)}`).join(",")},စုစုပေါင်းအဝင်,စုစုပေါင်းအထွက်,လက်ရှိလက်ကျန်,အရင်းဈေး,စတော့တန်ဖိုး (ကျပ်)\n`;
+
+                let grandTotalStock = 0;
+                let grandTotalValuation = 0;
+                let grandTotalIn = 0;
+                let grandTotalOut = 0;
+
+                (products || []).forEach((prod, index) => {
+                    const pid = prod.id;
+                    const inMap = {};
+                    const outMap = {};
+
+                    purchases.filter(r => r.product_id === pid).forEach(r => {
+                        inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    sales.filter(r => r.product_id === pid).forEach(r => {
+                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    waste.filter(r => r.product_id === pid).forEach(r => {
+                        outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0);
+                    });
+
+                    let totalIn = 0;
+                    let totalOut = 0;
+                    for (let m = 1; m <= 12; m++) {
+                        totalIn += (inMap[m] || 0);
+                        totalOut += (outMap[m] || 0);
+                    }
+
+                    const monthlyBalances = {};
+                    let running = Number(prod.current_balance || 0);
+                    for (let m = 12; m >= 1; m--) {
+                        monthlyBalances[m] = Math.max(0, running);
+                        running = running - (inMap[m] || 0) + (outMap[m] || 0);
+                    }
+
+                    const curBal = Number(prod.current_balance || 0);
+                    const cost = Number(prod.cost_price || 0);
+                    const val = curBal * cost;
+
+                    grandTotalStock += curBal;
+                    grandTotalValuation += val;
+                    grandTotalIn += totalIn;
+                    grandTotalOut += totalOut;
+
+                    const rowValues = [
+                        index + 1,
+                        `"${String(prod.category || '').replace(/"/g, '""')}"`,
+                        `"${String(prod.item_name || '').replace(/"/g, '""')}"`,
+                        `"${String(prod.sku || '').replace(/"/g, '""')}"`,
+                        ...Array.from({ length: 12 }, (_, i) => monthlyBalances[i + 1] || 0),
+                        totalIn,
+                        totalOut,
+                        curBal,
+                        cost,
+                        val
+                    ];
+
+                    csvContent += rowValues.join(",") + "\n";
+                });
+
+                // Total Summary Row
+                csvContent += `စုစုပေါင်း,"-","-","-",${Array(12).fill("-").join(",")},${grandTotalIn},${grandTotalOut},${grandTotalStock},-,${grandTotalValuation}\n`;
+
+                // ၃။ CSV Text ကို Base64 အဖြစ် ပြောင်းလဲခြင်း
+                const utf8Bytes = new TextEncoder().encode(csvContent);
+                let binaryStr = "";
+                for (let i = 0; i < utf8Bytes.length; i++) {
+                    binaryStr += String.fromCharCode(utf8Bytes[i]);
+                }
+                const base64Csv = btoa(binaryStr);
+
+                // ၄။ Resend API သို့ Attached ဖိုင်နှင့်တကွ အီးမေးလ် ပေးပို့ခြင်း
                 const resendResponse = await fetch("https://api.resend.com/emails", {
                     method: "POST",
                     headers: {
@@ -94,17 +216,53 @@ export default {
                     },
                     body: JSON.stringify({
                         from: "Garment ERP <onboarding@resend.dev>",
-                        to: [email],
-                        subject: `Executive Financial & Stock Report (${year})`,
+                        to: [targetEmail],
+                        subject: `မြကမ္ဘာစိုး ပိုးထည်တိုက် - စတော့နှင့် ဘဏ္ဍာရေး အစီရင်ခံစာ (${targetYear})`,
                         html: `
-                            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-                                <h2 style="color: #064e3b;">မြကမ္ဘာစိုး ပိုးထည်တိုက် - GARMENT ERP</h2>
-                                <p>မင်္ဂလာပါရှင်၊</p>
-                                <p>တောင်းဆိုထားသော <b>${year} ခုနှစ်</b> အတွက် လုပ်ငန်းအနှစ်ချုပ်နှင့် စတော့အစီရင်ခံစာ (Financial & Stock Report) ကို ပူးတွဲတင်ပြအပ်ပါသည်။</p>
-                                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-                                <p style="font-size: 12px; color: #777;">ဤအီးမေးလ်သည် Cloudflare D1 Serverless ERP စနစ်မှ အလိုအလျောက် ပို့ဆောင်ပေးသော အီးမေးလ် ဖြစ်ပါသည်။</p>
+                            <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; background-color: #f8fafc; border-radius: 12px; max-width: 650px; margin: auto;">
+                                <div style="border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px;">
+                                    <h2 style="color: #064e3b; margin: 0; font-size: 22px;">မြကမ္ဘာစိုး ပိုးထည်တိုက် (GARMENT ERP)</h2>
+                                    <p style="color: #64748b; font-size: 13px; margin-top: 4px;">Executive Financial & Stock Movement Report</p>
+                                </div>
+                                <p style="font-size: 14px; line-height: 1.6;">မင်္ဂလာပါရှင်၊</p>
+                                <p style="font-size: 14px; line-height: 1.6;">
+                                    Cloudflare D1 Database စနစ်မှ ထုတ်ယူထားသော <b>${targetYear} ခုနှစ်</b> အတွက် ကုန်လက်ကျန်နှင့် စတော့လှုပ်ရှားမှု စာရင်းချုပ် ဖြစ်ပါသည်။
+                                </p>
+                                <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                                    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="padding: 8px 0; color: #475569;">လက်ရှိ စုစုပေါင်း လက်ကျန်:</td>
+                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #2563eb;">${grandTotalStock.toLocaleString()} ထည်</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 8px 0; color: #475569;">စုစုပေါင်း စတော့တန်ဖိုး:</td>
+                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #d97706;">${grandTotalValuation.toLocaleString()} ကျပ်</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 8px 0; color: #475569;">ယခုနှစ် စုစုပေါင်း အဝင်:</td>
+                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #059669;">+${grandTotalIn.toLocaleString()}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 8px 0; color: #475569;">ယခုနှစ် စုစုပေါင်း အထွက်:</td>
+                                            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #e11d48;">-${grandTotalOut.toLocaleString()}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                <p style="font-size: 13px; color: #334155;">
+                                    📎 အသေးစိတ် လအလိုက် ကုန်လက်ကျန်ဇယား အပြည့်အစုံကို ပူးတွဲပါ <b>Stock_Movement_Report_${targetYear}.csv</b> (Excel ဖြင့် ဖွင့်နိုင်သည်) ဖိုင်တွင် ကြည့်ရှုနိုင်ပါသည်။
+                                </p>
+                                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0 16px 0;" />
+                                <p style="font-size: 11px; color: #94a3b8; text-align: center; margin: 0;">
+                                    ဤအီးမေးလ်သည် Cloudflare Workers & D1 Engine မှ အလိုအလျောက် ပေးပို့သော စနစ်သုံး အီးမေးလ် ဖြစ်ပါသည်။
+                                </p>
                             </div>
-                        `
+                        `,
+                        attachments: [
+                            {
+                                filename: `Stock_Movement_Report_${targetYear}.csv`,
+                                content: base64Csv
+                            }
+                        ]
                     })
                 });
 
@@ -114,7 +272,7 @@ export default {
                     return errorResponse(resendData.message || "Failed to send email via Resend", 500);
                 }
 
-                return jsonResponse({ success: true, message: "Email sent successfully", data: resendData });
+                return jsonResponse({ success: true, message: "Email with attachment sent successfully", data: resendData });
             }
 
             // =================================================================

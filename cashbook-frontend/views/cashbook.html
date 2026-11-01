@@ -1,19 +1,17 @@
 <!-- cashbook-frontend/views/cashbook.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar (KPI Card 1 အကျယ်နှင့် အညီ တန်းညှိထားခြင်း) -->
+    <!-- Top Filter & Action Toolbar -->
     <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
         <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း ညီညာစွာထားရှိခြင်း) နှင့် Calendar -->
         <div class="flex items-center gap-3 flex-1 min-w-0">
-            <!-- Search Box: KPI Card 1 ၏ အကျယ်အတိုင်း ဒေါင်လိုက်လိုင်းတန်းကျစေရန် သတ်မှတ်ထားပါသည် -->
             <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="cb-search" placeholder="ခေါင်းစဉ်၊ ဘောင်ချာ သို့မဟုတ် အကြောင်းအရာ ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
 
-            <!-- Calendar Filter -->
             <div class="relative shrink-0">
                 <input type="date" id="cb-date-filter"
                     class="w-36 px-3 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white cursor-pointer transition shadow-sm font-mono">
@@ -22,13 +20,11 @@
 
         <!-- ညာဘက်ခြမ်း: Refresh, Export CSV နှင့် Add New Button -->
         <div class="flex items-center gap-2 shrink-0">
-            <!-- Refresh Button -->
             <button type="button" id="btn-refresh-cashbook" title="စာရင်းများ ပြန်လည်ဆွဲယူမည်" 
                 class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-arrows-rotate text-xs"></i>
             </button>
 
-            <!-- Export CSV Button -->
             <button type="button" id="btn-export-csv" title="ယနေ့ ငွေစာရင်းကို CSV ဖြင့် ထုတ်ယူမည်" 
                 class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-file-export text-emerald-500 text-xs"></i>
@@ -37,7 +33,6 @@
 
             <div class="h-5 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
-            <!-- Add New Button -->
             <button type="button" id="btn-open-add-modal" 
                 class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95">
                 <i class="fa-solid fa-plus text-xs"></i>
@@ -49,7 +44,6 @@
     <!-- Entries Table Container -->
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
         <table class="w-full text-left border-collapse min-w-[1100px]">
-            <!-- Table Head (REF အား text-left ဖြင့် ဘယ်ဘက်ကပ်ထားပါသည်) -->
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-12">
                     <th class="py-3 px-3 w-14 text-center">NO</th>
@@ -60,7 +54,6 @@
                     <th class="py-3 px-3 w-24 text-center">METHOD</th>
                     <th class="py-3 px-4 w-36 text-right">AMOUNT</th>
                     <th class="py-3 px-4 w-44 text-left">REF</th>
-                    <!-- Sticky Right Action Column Header -->
                     <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
@@ -83,7 +76,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Consolidated Cashbook Entry Modal (Font 16px & Compact Line Spacing)  -->
+<!-- Consolidated Cashbook Entry Modal                                    -->
 <!-- ===================================================================== -->
 <div id="entry-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col scale-100 transition-all">
@@ -115,7 +108,7 @@
             </div>
         </div>
 
-        <!-- Form Body: မြန်မာစာ ၁၆ (text-base) နှင့် leading-normal ဖြင့် ချိန်ညှိထားပါသည် -->
+        <!-- Form Body -->
         <form id="entry-form" class="p-5 pt-3 space-y-3">
             <input type="hidden" id="entry-type" value="EXPENSE">
             
@@ -142,20 +135,20 @@
                 </div>
             </div>
 
-            <!-- Amount Input -->
+            <!-- Amount Input (မြန်မာဂဏန်းရော အင်္ဂလိပ်ဂဏန်းပါ အဆင်ပြေစေရန် inputmode="numeric") -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေပမာဏ (Amount) *</label>
                 <div class="relative">
-                    <input type="number" id="entry-amount" required min="1" step="any" placeholder="0" 
+                    <input type="text" inputmode="numeric" id="entry-amount" required placeholder="0" 
                         class="w-full text-xl font-mono font-black bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Ks</span>
                 </div>
             </div>
 
-            <!-- Description (Text 16px, leading-normal) -->
+            <!-- Description (မဖြစ်မနေ မလိုအပ်တော့ဘဲ ကွက်လပ်ထားနိုင်ပါသည်) -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description) *</label>
-                <textarea id="entry-desc" required rows="3" placeholder="ဥပမာ - မီးဖိုချောင် ကုန်ကျစရိတ် / ဆိုင်လခ / ကားခ..." 
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description)</label>
+                <textarea id="entry-desc" rows="3" placeholder="မှတ်ချက် သို့မဟုတ် အကြောင်းအရာ (မထည့်လည်း ရပါသည်)..." 
                     class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-normal"></textarea>
             </div>
 

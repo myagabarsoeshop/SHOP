@@ -8,36 +8,36 @@
                 <i class="fa-solid fa-gauge-high"></i>
             </div>
             <div>
-                <h3 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 class="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 uppercase tracking-wide">
                     <span>လုပ်ငန်းအနှစ်ချုပ် Dashboard</span>
                 </h3>
-                <p id="dash-greeting-text" class="text-xs text-slate-500 dark:text-slate-400 font-semibold">စာရင်းအင်း အချက်အလက်များ အချိန်နှင့်တပြေးညီ တင်ပြမှု</p>
+                <p id="dash-greeting-text" class="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">စာရင်းအင်း အချက်အလက်များ အချိန်နှင့်တပြေးညီ တင်ပြမှု</p>
             </div>
         </div>
 
         <!-- Filter Controls -->
         <div class="flex flex-wrap items-center gap-2.5">
             <div id="dash-branch-container" class="relative">
-                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3.5 top-3 pointer-events-none"></i>
-                <select id="dash-branch-select" class="pl-9 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none transition">
+                <i class="fa-solid fa-store text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="dash-branch-select" class="pl-8 pr-7 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white cursor-pointer appearance-none transition shadow-sm">
                 </select>
-                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             </div>
 
             <div id="dash-year-container" class="relative hidden">
-                <i class="fa-regular fa-calendar text-blue-500 text-xs absolute left-3.5 top-3 pointer-events-none"></i>
-                <select id="dash-year-select" class="pl-9 pr-7 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer appearance-none transition">
+                <i class="fa-regular fa-calendar text-blue-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="dash-year-select" class="pl-8 pr-7 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white cursor-pointer appearance-none transition shadow-sm">
                 </select>
-                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-3.5 pointer-events-none"></i>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             </div>
 
-            <button type="button" id="btn-refresh-dashboard" title="ဒေတာ ပြန်ဆွဲတင်မည်" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center transition border border-slate-200 dark:border-slate-800 cursor-pointer">
-                <i class="fa-solid fa-rotate"></i>
+            <button type="button" id="btn-refresh-dashboard" title="ဒေတာ ပြန်ဆွဲတင်မည်" class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition border border-slate-300 dark:border-slate-700 cursor-pointer shadow-sm">
+                <i class="fa-solid fa-rotate text-xs"></i>
             </button>
 
-            <button type="button" id="btn-export-dash-csv" class="hidden px-3.5 py-2 bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-800 dark:text-white font-bold text-xs rounded-xl transition items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-800">
+            <button type="button" id="btn-export-dash-csv" title="Executive Summary များကို CSV ဖြင့် ထုတ်ယူမည်" class="hidden px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition items-center gap-1.5 cursor-pointer border border-slate-300 dark:border-slate-700 shadow-sm">
                 <i class="fa-solid fa-file-export text-emerald-500"></i>
-                <span>Export CSV</span>
+                <span class="hidden sm:inline">Export CSV</span>
             </button>
         </div>
     </div>
@@ -145,10 +145,10 @@
         </div>
     </div>
 
-    <!-- 4. ADMIN SPECIFIC SECTION (အလယ်သို့ ဆိုင်ခွဲဇယား ရွှေ့ထားပြီး အောက်ဆုံးသို့ Expense & Top Items ရွှေ့ထားသည်) -->
+    <!-- 4. ADMIN SPECIFIC SECTION -->
     <div id="dash-admin-view" class="hidden flex flex-col gap-4">
         
-        <!-- (အလယ်ပိုင်း) Branch Valuation Table -->
+        <!-- Branch Valuation Table -->
         <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
                 <div class="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
@@ -175,7 +175,7 @@
             </div>
         </div>
 
-        <!-- (အောက်ဆုံးပိုင်း) Expense Breakdown & Top Items -->
+        <!-- Expense Breakdown & Top Items -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <!-- Expense Breakdown -->
             <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">

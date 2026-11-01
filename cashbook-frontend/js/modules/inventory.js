@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/inventory.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Global UI (Toast & Confirm)
 import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -20,6 +21,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initInventory() {
@@ -144,7 +152,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredProducts);
 
     pageItems.forEach(item => {
@@ -152,7 +159,6 @@ function renderTable() {
         const isLow = stock <= Number(item.alert_quantity || 5);
         const unit = item.size || "ထည်";
 
-        // Edit (Blue) ၊ Transfer (Purple လေထီးပုံ) ၊ Waste (Amber) ၊ Delete (Rose)
         const actionButtons = state.isAdmin() ? `
             <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" class="btn-edit-prod w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
                 <i class="fa-solid fa-pen-to-square text-xs"></i>
@@ -209,7 +215,6 @@ function renderTable() {
         tbody.appendChild(tr);
     });
 
-    // Event Delegations
     tbody.querySelectorAll(".btn-transfer-prod").forEach(btn => {
         btn.onclick = () => {
             const prod = products.find(p => p.id === Number(btn.dataset.id));
@@ -234,17 +239,20 @@ function renderTable() {
 
         tbody.querySelectorAll(".btn-delete-prod").forEach(btn => {
             btn.onclick = () => {
-                const id = Number(btn.dataset.id);
-                deleteProduct(id);
+                deleteProduct(Number(btn.dataset.id));
             };
         });
     }
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("inventory-pagination");
 }
 
-// --- Stock Transfer Logic (ဆိုင်ခွဲအချင်းချင်း ပို့ဆောင်ခြင်း) ---
+function safeSetValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+}
+
+// --- Stock Transfer Logic ---
 function openTransferModal(prod) {
     const modal = document.getElementById("transfer-modal");
     document.getElementById("transfer-form")?.reset();
@@ -263,7 +271,7 @@ function openTransferModal(prod) {
     }
 
     if (destSelect) {
-        destSelect.innerHTML = `<option value="">-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
+        destSelect.innerHTML = `<option value="" disabled selected>-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
             if (b.id !== currentBranchId) {
                 destSelect.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code || "-")})</option>`;
@@ -285,16 +293,16 @@ async function submitStockTransfer(e) {
     const fromBranchId = state.currentBranch?.id || 1;
 
     if (!toBranchId) {
-        return alert("ကျေးဇူးပြု၍ ပစ္စည်းပို့ဆောင်မည့် ဆိုင်ခွဲကို ရွေးချယ်ပေးပါ");
+        return ui.toast.warning("ကျေးဇူးပြု၍ ပစ္စည်းပို့ဆောင်မည့် ဆိုင်ခွဲကို ရွေးချယ်ပေးပါ။");
     }
 
     if (qty <= 0) {
-        return alert("မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ");
+        return ui.toast.warning("မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ။");
     }
 
     const prod = products.find(p => p.id === Number(prodId));
     if (prod && qty > Number(prod.current_stock || 0)) {
-        return alert(`လက်ရှိဆိုင်တွင် လက်ကျန်ပစ္စည်း (${prod.current_stock}) ထက် ပိုမို၍ လွှဲပြောင်း၍ မရပါ`);
+        return ui.toast.error(`လက်ရှိဆိုင်တွင် လက်ကျန် (${prod.current_stock}) ထက် ပိုမိုလွှဲပြောင်း၍ မရပါ။`);
     }
 
     if (btn) btn.disabled = true;
@@ -311,28 +319,26 @@ async function submitStockTransfer(e) {
     try {
         await api.post("/transfers", payload);
         document.getElementById("transfer-modal")?.classList.add("hidden");
-        alert("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်းများ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်း ညှိနှိုင်းပြီးပါပြီ။");
         await loadInventory();
     } catch (err) {
-        alert("လွှဲပြောင်း၍မရပါ: " + err.message);
+        ui.toast.error("လွှဲပြောင်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function deleteProduct(id) {
-    if (!confirm("ဤအထည်ကို စာရင်းမှ အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?")) return;
+    const confirmed = await ui.confirm("ဤအထည်ကို စာရင်းမှ အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?", "error");
+    if (!confirmed) return;
+    
     try {
         await api.delete(`/products/${id}`);
+        ui.toast.success("ပစ္စည်းစာရင်းမှ ဖျက်သိမ်းပြီးပါပြီ။");
         await loadInventory();
     } catch (err) {
-        alert("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
-}
-
-function safeSetValue(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.value = value;
 }
 
 // --- Waste Modal Logic ---
@@ -364,6 +370,11 @@ async function submitWaste(e) {
     const unitCost = parseFloat(document.getElementById("waste-unit-cost")?.value) || 0;
     const reason = document.getElementById("waste-reason")?.value.trim();
 
+    if (qty <= 0) {
+        if (btn) btn.disabled = false;
+        return ui.toast.warning("အလေအလွင့် အရေအတွက် ထည့်သွင်းပေးပါ။");
+    }
+
     const payload = {
         branch_id: branchId,
         product_id: parseInt(prodId, 10),
@@ -375,10 +386,10 @@ async function submitWaste(e) {
     try {
         await api.post("/waste", payload); 
         document.getElementById("waste-modal")?.classList.add("hidden");
+        ui.toast.success("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
         await loadInventory(); 
-        alert("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ လက်ကျန်ထဲမှ နှုတ်ပြီးပါပြီ။");
     } catch (err) {
-        alert("စာရင်းသွင်း၍မရပါ: " + err.message);
+        ui.toast.error("စာရင်းသွင်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -438,15 +449,17 @@ async function submitProduct(e) {
     try {
         if (prodId) {
             await api.put(`/products/${prodId}`, payload);
+            ui.toast.success("အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
         } else {
             payload.initialStock = 0; 
             payload.quantity = 0;
             await api.post("/products", payload);
+            ui.toast.success("အထည်အသစ် မှတ်ပုံတင်ပြီးပါပြီ။");
         }
         document.getElementById("product-modal")?.classList.add("hidden");
         await loadInventory();
     } catch (err) {
-        alert("သိမ်းဆည်း၍မရပါ: " + err.message);
+        ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -456,21 +469,20 @@ async function submitProduct(e) {
 function exportToCSV() {
     const dataToExport = currentFilteredProducts.length > 0 ? currentFilteredProducts : products;
     if (dataToExport.length === 0) {
-        alert("ထုတ်ယူရန် စာရင်းမရှိပါ။");
-        return;
+        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိပါ။");
     }
     const currentYear = new Date().getFullYear();
     let csvContent = "SKU,Barcode,Category,Item Name,Pattern,Color,Unit/Size,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
     
     dataToExport.forEach(p => {
         const row = [
-            `"${escapeHtml(p.sku || '')}"`,
-            `"${escapeHtml(p.barcode || '')}"`,
-            `"${escapeHtml(p.category || '')}"`,
-            `"${escapeHtml(p.item_name || '')}"`,
-            `"${escapeHtml(p.pattern || '')}"`,
-            `"${escapeHtml(p.color || '')}"`,
-            `"${escapeHtml(p.size || 'ထည်')}"`,
+            escapeCsv(p.sku),
+            escapeCsv(p.barcode),
+            escapeCsv(p.category),
+            escapeCsv(p.item_name),
+            escapeCsv(p.pattern),
+            escapeCsv(p.color),
+            escapeCsv(p.size || 'ထည်'),
             p.cost_price || 0,
             p.retail_price || 0,
             p.wholesale_price || 0,
@@ -510,8 +522,7 @@ function triggerImport() {
 async function processImport(csvText) {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     if (lines.length <= 1) {
-        alert("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
-        return;
+        return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
     
     let successCount = 0;
@@ -545,6 +556,6 @@ async function processImport(csvText) {
             console.error("Import error line " + i, e);
         }
     }
-    alert(`အထည်အချက်အလက် အသစ် ${successCount} ခု အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
+    ui.toast.success(`အထည်အချက်အလက် အသစ် ${successCount} ခု အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
     await loadInventory();
 }

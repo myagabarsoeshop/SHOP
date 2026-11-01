@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/dashboard.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Professional UI (Toast)
 
 let dashboardData = null;
 let branchesList = [];
@@ -12,6 +13,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initDashboard() {
@@ -118,6 +126,7 @@ async function fetchDashboardData() {
         }
     } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
+        ui.toast.error("Dashboard အချက်အလက် ဆွဲယူ၍ မရပါ: " + err.message);
     }
 }
 
@@ -318,7 +327,7 @@ function updateCard(num, title, val, sub, icon, theme) {
 // -------------------------------------------------------------
 function exportDashboardToCSV() {
     if (!dashboardData || !dashboardData.admin) {
-        return alert("ထုတ်ယူရန် Dashboard အချက်အလက် မရှိသေးပါ");
+        return ui.toast.warning("ထုတ်ယူရန် Dashboard အချက်အလက် မရှိသေးပါ။");
     }
 
     const a = dashboardData.admin;
@@ -333,14 +342,14 @@ function exportDashboardToCSV() {
     csv += `Branch Valuation & Balances\n`;
     csv += `Branch Name,Cash Net,Bank Net,Stock Valuation,Outstanding Debt\n`;
     (a.branch_metrics || []).forEach(b => {
-        csv += `"${(b.name || '').replace(/"/g, '""')}",${b.cash_net || 0},${b.bank_net || 0},${b.stock_value || 0},${b.outstanding_debt || 0}\n`;
+        csv += `${escapeCsv(b.name)},${b.cash_net || 0},${b.bank_net || 0},${b.stock_value || 0},${b.outstanding_debt || 0}\n`;
     });
     csv += `\n`;
 
     csv += `Expense Breakdown by Category\n`;
     csv += `Category Name,Amount (MMK)\n`;
     (a.expense_breakdown || []).forEach(e => {
-        csv += `"${(e.category_name || '').replace(/"/g, '""')}",${e.amount || 0}\n`;
+        csv += `${escapeCsv(e.category_name)},${e.amount || 0}\n`;
     });
 
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: "text/csv;charset=utf-8;" });

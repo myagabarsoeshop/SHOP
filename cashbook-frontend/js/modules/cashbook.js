@@ -1,6 +1,7 @@
 // cashbook-frontend/js/modules/cashbook.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
+import { ui } from "../core/ui.js"; // Import Global UI tools (Toast & Confirm)
 import { setKPI, getLocalTodayDate } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
@@ -32,6 +33,13 @@ function escapeHtml(str) {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    // Excel Formula Injection ကာကွယ်ရန်
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
 }
 
 export async function initCashbook() {
@@ -127,7 +135,6 @@ function renderTable() {
         return;
     }
 
-    // လက်ရှိ စာမျက်နှာအတွက် စာကြောင်း (၁၅) ခု ဖြတ်ယူပြသခြင်း
     const pageItems = pagination.getPageItems(currentFilteredEntries);
 
     pageItems.forEach(item => {
@@ -164,7 +171,6 @@ function renderTable() {
         tbody.appendChild(row);
     });
 
-    // Edit ခလုတ်များအတွက် Event ချိတ်ဆက်ခြင်း
     tbody.querySelectorAll(".btn-edit-entry").forEach(btn => {
         btn.addEventListener("click", () => {
             const item = entries.find(r => r.id == btn.dataset.id);
@@ -172,12 +178,10 @@ function renderTable() {
         });
     });
 
-    // Delete ခလုတ်များအတွက် Event ချိတ်ဆက်ခြင်း
     tbody.querySelectorAll(".btn-delete").forEach(btn => {
         btn.addEventListener("click", () => deleteEntry(btn.dataset.id));
     });
 
-    // အောက်ခြေ Pagination Controls ဘား ဆွဲတင်ခြင်း
     pagination.renderControls("cashbook-pagination");
 }
 
@@ -286,13 +290,13 @@ async function submitEntry(e) {
     const description = document.getElementById("entry-desc")?.value.trim();
 
     if (!description) {
-        alert("ကျေးဇူးပြု၍ အသေးစိတ် ဖော်ပြချက် (မှတ်ချက်) ထည့်သွင်းပေးပါ");
+        ui.toast.warning("အသေးစိတ် ဖော်ပြချက် (မှတ်ချက်) ထည့်သွင်းပေးပါ။");
         document.getElementById("entry-desc")?.focus();
         return;
     }
 
     if (!categoryId || isNaN(amount) || amount <= 0) {
-        alert("ကျေးဇူးပြု၍ ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ");
+        ui.toast.warning("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ။");
         return;
     }
 
@@ -322,44 +326,53 @@ async function submitEntry(e) {
             if (editIdInput) editIdInput.value = "";
 
             document.getElementById("entry-modal")?.classList.add("hidden");
+            ui.toast.success(editId ? "ငွေစာရင်း ပြင်ဆင်ပြီးပါပြီ။" : "ငွေစာရင်း အသစ်ထည့်သွင်းပြီးပါပြီ။");
             await loadEntries();
         } else {
             throw new Error(res.error || "သိမ်းဆည်း၍ မရပါ");
         }
     } catch (err) {
-        alert("စာရင်းသွင်း၍ မရပါ: " + err.message);
+        ui.toast.error("စာရင်းသွင်း၍ မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function deleteEntry(id) {
-    if (!confirm("ဤစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?")) return;
+    const confirmed = await ui.confirm("ဤစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?", "error");
+    if (!confirmed) return;
+    
     try {
         await api.delete(`/cashbook/entries/${id}`);
+        ui.toast.success("မှတ်တမ်းကို ပယ်ဖျက်ပြီးပါပြီ။");
         await loadEntries();
     } catch (err) {
-        alert(err.message || "ဖျက်၍မရပါ");
+        ui.toast.error(err.message || "ဖျက်၍မရပါ");
     }
 }
 
 function exportCSV() {
-    if (entries.length === 0) return alert("ထုတ်ယူရန် စာရင်းမရှိသေးပါ");
+    if (entries.length === 0) {
+        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
+    }
+    
     let csv = "Date,Category,Type,Method,Amount,Description\n";
     entries.forEach(r => {
         const date = r.entry_date || r.date || "";
-        const cat = (r.category_name || r.category || "").replace(/"/g, '""');
+        const cat = r.category_name || r.category || "";
         const type = r.entry_type || r.type || "";
         const method = r.payment_method || "";
         const amt = r.amount || 0;
-        const desc = (r.description || "").replace(/"/g, '""');
-        csv += `"${date}","${cat}","${type}","${method}","${amt}","${desc}"\n`;
+        const desc = r.description || "";
+        
+        csv += `${escapeCsv(date)},${escapeCsv(cat)},${escapeCsv(type)},${escapeCsv(method)},${amt},${escapeCsv(desc)}\n`;
     });
+    
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cashbook-${document.getElementById("cb-date-filter")?.value || getLocalTodayDate()}.csv`;
+    a.download = `Cashbook_Records_${document.getElementById("cb-date-filter")?.value || getLocalTodayDate()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }

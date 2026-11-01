@@ -73,6 +73,7 @@ export default {
             // =================================================================
             // 1.1. SYSTEM SETTING & EMAIL AUTOMATION (Resend API)
             // =================================================================
+            // System Setting & Email Automation (Resend API)
             if (path === "/api/system/send-report-email" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const { year, email } = body;
@@ -85,7 +86,6 @@ export default {
                     return errorResponse("Resend API Key ကို Server တွင် ထည့်သွင်းထားခြင်း မရှိသေးပါ", 500);
                 }
 
-                // Resend API ကို အသုံးပြု၍ အီးမေးလ် ပို့ခြင်း
                 const resendResponse = await fetch("https://api.resend.com/emails", {
                     method: "POST",
                     headers: {

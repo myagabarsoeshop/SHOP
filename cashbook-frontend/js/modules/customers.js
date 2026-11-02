@@ -52,7 +52,7 @@ function bindEvents() {
         });
     }
 
-    // ၂။ Add Customer Modal ဖွင့်/ပိတ်
+    // ၂။ Add New Button (Customer Modal ဖွင့်/ပိတ်)
     document.getElementById("btn-add-customer")?.addEventListener("click", () => {
         document.getElementById("customer-form")?.reset();
         document.getElementById("cust-edit-id").value = "";
@@ -115,7 +115,7 @@ async function loadCustomers() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="p-16 text-center text-slate-400">
+                <td colspan="9" class="p-16 text-center text-slate-400">
                     <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                     <div class="font-bold text-xs">ဖောက်သည်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                 </td>
@@ -142,7 +142,7 @@ async function loadCustomers() {
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-rose-500 font-bold text-xs">ဖောက်သည်စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-rose-500 font-bold text-xs">ဖောက်သည်စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -155,7 +155,7 @@ function renderTable() {
     if (currentFilteredCustomers.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="9" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-users text-3xl mb-3 opacity-30"></i>
                     <div>ရှာဖွေထားသော ဖောက်သည်စာရင်း မရှိသေးပါ</div>
                 </td>
@@ -171,8 +171,9 @@ function renderTable() {
     pageItems.forEach((c, idx) => {
         const debt = Number(c.current_debt || 0);
         const isWholesale = String(c.customer_type || "").toLowerCase() === "wholesale";
+        const typeStr = isWholesale ? "WHOLESALE" : "RETAIL";
 
-        // Action Buttons: Square Icon Buttons (တူညီသော အရွယ်အစား w-7 h-7 ဖြင့် ညာဘက် Sticky ထားရှိခြင်း)
+        // Action Buttons: Cashbook Standard Square Button Boxes (w-7 h-7)
         const actionButtons = `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${c.id}" title="အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း ကြည့်မည်" 
@@ -195,47 +196,45 @@ function renderTable() {
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
         row.innerHTML = `
-            <!-- NO -->
+            <!-- 1. NO -->
             <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
             
-            <!-- CUSTOMER NAME: မြန်မာစာ text-base (16px) font-bold -->
-            <td class="py-3 px-4 text-base font-bold text-slate-900 dark:text-slate-100 min-w-[190px] leading-snug">
+            <!-- 2. CUSTOMER NAME: မြန်မာစာ text-base font-bold -->
+            <td class="py-3 px-4 text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate leading-snug">
                 ${ui.escapeHtml(c.name)}
             </td>
 
-            <!-- PHONE NO -->
+            <!-- 3. PHONE NO -->
             <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
                 ${ui.escapeHtml(c.phone || "-")}
             </td>
 
-            <!-- SHOP / TYPE: မြန်မာစာ text-base နှင့် အောက်တွင် Badge ကပ်လျက်ပြသခြင်း -->
-            <td class="py-3 px-4 w-48 leading-snug">
-                <div class="text-base font-medium text-slate-800 dark:text-slate-200 truncate max-w-[170px]" title="${ui.escapeHtml(c.shop_name || "-")}">
-                    ${ui.escapeHtml(c.shop_name || "-")}
-                </div>
-                <span class="inline-block text-[10px] px-1.5 py-0.2 rounded font-mono font-bold uppercase tracking-wider ${isWholesale ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}">
-                    ${isWholesale ? 'WHOLESALE' : 'RETAIL'}
-                </span>
+            <!-- 4. SHOP: One Line သီးသန့် text-base font-medium -->
+            <td class="py-3 px-4 text-base font-medium text-slate-800 dark:text-slate-200 w-40 truncate leading-snug" title="${ui.escapeHtml(c.shop_name || "-")}">
+                ${ui.escapeHtml(c.shop_name || "-")}
             </td>
 
-            <!-- ADDRESS: မြန်မာစာ text-base နှင့် leading-snug -->
-            <td class="py-3 px-4 text-base text-slate-600 dark:text-slate-300 min-w-[200px] max-w-xs truncate leading-snug" title="${ui.escapeHtml(c.address || "-")}">
+            <!-- 5. TYPE: One Line သီးသန့် text-xs font-mono font-bold -->
+            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                ${typeStr}
+            </td>
+
+            <!-- 6. ADDRESS: One Line သီးသန့် text-base -->
+            <td class="py-3 px-4 text-base text-slate-600 dark:text-slate-300 min-w-[180px] max-w-xs truncate leading-snug" title="${ui.escapeHtml(c.address || "-")}">
                 ${ui.escapeHtml(c.address || "-")}
             </td>
 
-            <!-- RECEIVABLES: font-black font-mono text-base -->
+            <!-- 7. RECEIVABLES: text-base font-black font-mono -->
             <td class="py-3 px-4 text-right font-black font-mono text-base ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
                 ${debt.toLocaleString()} Ks
             </td>
 
-            <!-- STATUS: Badge -->
-            <td class="py-3 px-3 text-center whitespace-nowrap">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${debt > 0 ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
-                    ${debt > 0 ? 'အကြွေးကျန်ရှိ' : 'ရှင်းပြီး'}
-                </span>
+            <!-- 8. STATUS: နောက်ခံ Badge Pill ဖြုတ်ထားသော Plain Text -->
+            <td class="py-3 px-3 text-center whitespace-nowrap font-mono text-xs font-bold ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
+                ${debt > 0 ? 'အကြွေးကျန်ရှိ' : 'ရှင်းပြီး'}
             </td>
 
-            <!-- ACTION: Sticky Right Cell -->
+            <!-- 9. ACTION: Sticky Right Cell -->
             <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                 ${actionButtons}
             </td>
@@ -243,7 +242,7 @@ function renderTable() {
         tbody.appendChild(row);
     });
 
-    // Row Event Listeners
+    // Event Listeners
     tbody.querySelectorAll(".btn-repay").forEach(btn => {
         btn.addEventListener("click", () => {
             const cust = customers.find(item => item.id === Number(btn.dataset.id));
@@ -449,7 +448,7 @@ function renderCustomerLedger(ledgerList) {
 
 /**
  * UI Table Column Header အတိုင်း အတိအကျ ထုတ်ယူပေးသော CSV Export စနစ်
- * Columns: NO, CUSTOMER NAME, PHONE NO, SHOP / TYPE, ADDRESS, RECEIVABLES, STATUS
+ * Columns: NO, CUSTOMER NAME, PHONE NO, SHOP, TYPE, ADDRESS, RECEIVABLES, STATUS
  */
 function exportAllCustomersToCSV() {
     const listToExport = currentFilteredCustomers.length > 0 ? currentFilteredCustomers : customers;
@@ -458,19 +457,20 @@ function exportAllCustomersToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
     }
 
-    let csvContent = "NO,CUSTOMER NAME,PHONE NO,SHOP / TYPE,ADDRESS,RECEIVABLES,STATUS\n";
+    let csvContent = "NO,CUSTOMER NAME,PHONE NO,SHOP,TYPE,ADDRESS,RECEIVABLES,STATUS\n";
 
     listToExport.forEach((c, idx) => {
         const no = idx + 1;
         const debt = Number(c.current_debt || 0);
         const status = debt > 0 ? "အကြွေးကျန်ရှိ" : "ရှင်းပြီး";
-        const shopWithType = `${c.shop_name || "-"} (${String(c.customer_type || "retail").toUpperCase()})`;
+        const typeStr = String(c.customer_type || "retail").toUpperCase();
 
         const row = [
             no,
             ui.escapeCsv(c.name),
             ui.escapeCsv(c.phone || "-"),
-            ui.escapeCsv(shopWithType),
+            ui.escapeCsv(c.shop_name || "-"),
+            ui.escapeCsv(typeStr),
             ui.escapeCsv(c.address || "-"),
             debt,
             ui.escapeCsv(status)

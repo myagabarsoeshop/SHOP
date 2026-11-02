@@ -205,7 +205,7 @@ function renderTable() {
             </td>
 
             <!-- 3. PHONE NO -->
-            <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <td class="py-3 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
                 ${ui.escapeHtml(c.phone || "-")}
             </td>
 

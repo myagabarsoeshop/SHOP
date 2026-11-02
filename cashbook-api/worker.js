@@ -917,7 +917,7 @@ export default {
             }
 
             // =================================================================
-            // 7. CASHBOOK CATEGORIES & ENTRIES (CLEAN DESCRIPTION WITH COLOR)
+            // 7. CASHBOOK CATEGORIES & ENTRIES (WITH DYNAMIC UNIT PRICE & COLOR)
             // =================================================================
 
             // 7.1 CATEGORIES GET
@@ -940,13 +940,23 @@ export default {
                 const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
                 const endDate = url.searchParams.get("end_date") || startDate;
 
-                // ၁။ products ဇယားထဲရှိ Column အမည်အမှန်များကို အလိုအလျောက် စစ်ဆေးခြင်း (no such column error လုံးဝမတက်စေရန်)
-                const prodInfo = await env.DB.prepare("PRAGMA table_info(products)").all().catch(() => ({ results: [] }));
+                // ၁။ products, sale_items, purchase_items ဇယားများရှိ Column အမည်များကို Dynamic စစ်ဆေးခြင်း (no such column error လုံးဝမတက်စေရန်)
+                const [prodInfo, saleItemInfo, purchItemInfo] = await Promise.all([
+                    env.DB.prepare("PRAGMA table_info(products)").all().catch(() => ({ results: [] })),
+                    env.DB.prepare("PRAGMA table_info(sale_items)").all().catch(() => ({ results: [] })),
+                    env.DB.prepare("PRAGMA table_info(purchase_items)").all().catch(() => ({ results: [] }))
+                ]);
+
                 const pCols = (prodInfo.results || []).map(r => r.name.toLowerCase());
+                const siCols = (saleItemInfo.results || []).map(r => r.name.toLowerCase());
+                const piCols = (purchItemInfo.results || []).map(r => r.name.toLowerCase());
 
                 const nameCol = ["product_name", "item_name", "name", "title"].find(c => pCols.includes(c));
                 const catCol = ["category", "category_name", "cat_name"].find(c => pCols.includes(c));
                 const colorCol = ["color", "colour"].find(c => pCols.includes(c));
+
+                const siPriceCol = ["unit_price", "price", "sale_price"].find(c => siCols.includes(c));
+                const piPriceCol = ["unit_price", "price", "cost_price", "purchase_price"].find(c => piCols.includes(c));
 
                 let saleDescExpr = "ce.description";
                 let purchaseDescExpr = "ce.description";
@@ -983,6 +993,15 @@ export default {
                     )`;
                 }
 
+                // Price Expression (Database တွင်ရှိသော ဈေးနှုန်း သို့မဟုတ် Total Amount / Qty ဖြင့် အလိုအလျောက် တွက်ချက်ခြင်း)
+                const salePriceExpr = siPriceCol 
+                    ? `(SELECT ROUND(AVG(si.${siPriceCol})) FROM sale_items si WHERE si.sale_id = ce.sale_id)`
+                    : `NULL`;
+
+                const purchasePriceExpr = piPriceCol 
+                    ? `(SELECT ROUND(AVG(pi.${piPriceCol})) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)`
+                    : `NULL`;
+
                 // ၂။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
                 let sql = `
                     SELECT 
@@ -1005,6 +1024,22 @@ export default {
                             (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id),
                             NULL
                         ) AS total_quantity,
+                        -- Price (တစ်ယူနစ် ရောင်းဈေး/ဝယ်ဈေး)
+                        COALESCE(
+                            ${salePriceExpr},
+                            ${purchasePriceExpr},
+                            CASE 
+                                WHEN COALESCE(
+                                    (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
+                                    (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
+                                ) > 0 
+                                THEN ROUND(ce.amount / COALESCE(
+                                    (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
+                                    (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
+                                ))
+                                ELSE NULL 
+                            END
+                        ) AS unit_price,
                         -- Description: Category - Item Name (Color) အလိုအလျောက် သတ်မှတ်ခြင်း
                         COALESCE(${saleDescExpr}, ${purchaseDescExpr}, ce.description) AS description
                     FROM cashbook_entries ce

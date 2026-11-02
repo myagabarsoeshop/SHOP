@@ -243,32 +243,27 @@ function renderTable() {
             amountColorClass = "text-rose-600 dark:text-rose-400";
         }
 
-        // ၂။ Description နှင့် Reference (VR No)
+        // ၂။ Description စာသား
         let desc = String(item.description || "-");
-        let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
 
-        if (!refNo || refNo === "-") {
-            const matchInv = desc.match(/INV-[A-Za-z0-9-]+/);
-            const matchPo = desc.match(/PO-[A-Za-z0-9-]+/);
-            if (matchInv) {
-                refNo = matchInv[0];
-                desc = desc.replace(matchInv[0], "").replace(/\(ငွေသား\)|\(KPay\)|\(Bank\)/gi, "").trim();
-            } else if (matchPo) {
-                refNo = matchPo[0];
-                desc = desc.replace(matchPo[0], "").trim();
-            } else {
-                refNo = `VR-CB-${String(item.id).padStart(5, "0")}`;
-            }
-        }
-
-        // ၃။ Qty (အရေအတွက်) Format
-        const qtyVal = item.total_quantity || item.quantity;
-        const qtyStr = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0 ? Number(qtyVal).toLocaleString() : "-";
-
-        // ၄။ Method (CASH / BANK)
+        // ၃။ Method (CASH / BANK)
         const method = String(item.payment_method || "cash").toUpperCase();
 
-        // ၅။ Sticky Right Action Buttons
+        // ၄။ Qty (အရေအတွက်) Format
+        const qtyVal = item.total_quantity || item.quantity;
+        const hasQty = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0;
+        const qtyStr = hasQty ? Number(qtyVal).toLocaleString() : "-";
+
+        // ၅။ Price (တစ်ယူနစ် ရောင်းဈေး / ဝယ်ဈေး တွက်ချက်ခြင်း)
+        let priceVal = item.unit_price;
+        if ((priceVal === undefined || priceVal === null) && hasQty && Number(item.amount) > 0) {
+            priceVal = Math.round(Number(item.amount) / Number(qtyVal));
+        }
+        const priceStr = (priceVal !== undefined && priceVal !== null && Number(priceVal) > 0)
+            ? Number(priceVal).toLocaleString()
+            : "-";
+
+        // ၆။ Sticky Right Action Buttons
         const actionButtons = `
             <div class="flex items-center justify-center gap-2">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" 
@@ -285,18 +280,33 @@ function renderTable() {
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
         row.innerHTML = `
+            <!-- 1. NO -->
             <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
+            
+            <!-- 2. DATE -->
             <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
+            
+            <!-- 3. CATEGORY -->
             <td class="py-3 px-4 text-base ${catColor} truncate max-w-[170px]">${ui.escapeHtml(catName)}</td>
-            <td class="py-3 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[260px] max-w-md truncate leading-snug" title="${ui.escapeHtml(desc)}">
+            
+            <!-- 4. DESCRIPTION -->
+            <td class="py-3 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[240px] max-w-md truncate leading-snug" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc || "-")}
             </td>
-            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
+            
+            <!-- 5. METHOD (ဘယ်ဘက်သို့ ရွှေ့ထားသည်) -->
             <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
+            
+            <!-- 6. QTY -->
+            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
+            
+            <!-- 7. PRICE (ရောင်းဈေး / နှုန်း) -->
+            <td class="py-3 px-4 text-right font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${priceStr}</td>
+            
+            <!-- 8. AMOUNT -->
             <td class="py-3 px-4 text-right font-black font-mono text-base ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            <td class="py-3 px-4 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                ${ui.escapeHtml(refNo)}
-            </td>
+            
+            <!-- 9. ACTION (Sticky Right) -->
             <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                 ${actionButtons}
             </td>
@@ -406,9 +416,6 @@ function openEditModal(item) {
     amountInput?.focus();
 }
 
-/**
- * စာရင်းသွင်းမှု စိစစ်အတည်ပြုခြင်း: Description မပါမဖြစ် လိုအပ်ပြီး မြန်မာဂဏန်းများကိုပါ အလိုအလျောက် ပေါင်းစပ်ပေးခြင်း
- */
 async function submitEntry(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-entry");
@@ -484,6 +491,10 @@ async function deleteEntry(id) {
     }
 }
 
+/**
+ * UI Table Header အသစ်အတိုင်း ထုတ်ယူပေးသော CSV Export စနစ်
+ * Columns: NO, DATE, CATEGORY, DESCRIPTION, METHOD, QTY, PRICE, AMOUNT, REF
+ */
 function exportCSV() {
     const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
 
@@ -491,7 +502,7 @@ function exportCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
     
-    let csv = "NO,DATE,CATEGORY,DESCRIPTION,QTY,METHOD,AMOUNT,REF\n";
+    let csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,QTY,PRICE,AMOUNT,REF\n";
 
     listToExport.forEach((item, idx) => {
         const no = idx + 1;
@@ -501,31 +512,24 @@ function exportCSV() {
         const sign = isIncome ? "+" : "-";
 
         const catName = item.category_name || item.category || "General";
-
         let desc = String(item.description || "-");
-        let refNo = item.reference_no || item.invoice_no || item.purchase_no || "";
-
-        if (!refNo || refNo === "-") {
-            const matchInv = desc.match(/INV-[A-Za-z0-9-]+/);
-            const matchPo = desc.match(/PO-[A-Za-z0-9-]+/);
-            if (matchInv) {
-                refNo = matchInv[0];
-                desc = desc.replace(matchInv[0], "").replace(/\(ငွေသား\)|\(KPay\)|\(Bank\)/gi, "").trim();
-            } else if (matchPo) {
-                refNo = matchPo[0];
-                desc = desc.replace(matchPo[0], "").trim();
-            } else {
-                refNo = `VR-CB-${String(item.id).padStart(5, "0")}`;
-            }
-        }
-
-        const qtyVal = item.total_quantity || item.quantity;
-        const qtyStr = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0 ? Number(qtyVal) : "-";
+        let refNo = item.reference_no || item.invoice_no || item.purchase_no || `VR-CB-${String(item.id).padStart(5, "0")}`;
 
         const method = String(item.payment_method || "cash").toUpperCase();
+
+        const qtyVal = item.total_quantity || item.quantity;
+        const hasQty = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0;
+        const qtyStr = hasQty ? Number(qtyVal) : "-";
+
+        let priceVal = item.unit_price;
+        if ((priceVal === undefined || priceVal === null) && hasQty && Number(item.amount) > 0) {
+            priceVal = Math.round(Number(item.amount) / Number(qtyVal));
+        }
+        const priceStr = (priceVal !== undefined && priceVal !== null && Number(priceVal) > 0) ? Number(priceVal) : "-";
+
         const amountStr = `${sign}${Number(item.amount || 0)}`;
 
-        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(method)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)}\n`;
+        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(priceStr)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)}\n`;
     });
     
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });

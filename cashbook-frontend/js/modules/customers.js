@@ -214,8 +214,8 @@ function renderTable() {
                 ${ui.escapeHtml(c.shop_name || "-")}
             </td>
 
-            <!-- 5. TYPE: One Line သီးသန့် text-xs font-mono font-bold -->
-            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+            <!-- 5. TYPE: ဘယ်ဘက်ကပ် (text-left px-4) One Line သီးသန့် text-xs font-mono font-bold -->
+            <td class="py-3 px-4 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
                 ${typeStr}
             </td>
 
@@ -446,10 +446,6 @@ function renderCustomerLedger(ledgerList) {
     });
 }
 
-/**
- * UI Table Column Header အတိုင်း အတိအကျ ထုတ်ယူပေးသော CSV Export စနစ်
- * Columns: NO, CUSTOMER NAME, PHONE NO, SHOP, TYPE, ADDRESS, RECEIVABLES, STATUS
- */
 function exportAllCustomersToCSV() {
     const listToExport = currentFilteredCustomers.length > 0 ? currentFilteredCustomers : customers;
 

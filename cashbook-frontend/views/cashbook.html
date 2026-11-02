@@ -8,7 +8,7 @@
         <div class="flex items-center gap-3 flex-1 min-w-0">
             <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                <input type="text" id="cb-search" placeholder="ခေါင်းစဉ်၊ ဘောင်ချာ သို့မဟုတ် အကြောင်းအရာ ရှာရန်..."
+                <input type="text" id="cb-search" placeholder="ခေါင်းစဉ် သို့မဟုတ် အကြောင်းအရာ ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
 
@@ -44,16 +44,18 @@
     <!-- Entries Table Container -->
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
         <table class="w-full text-left border-collapse min-w-[1100px]">
+            <!-- Table Head (METHOD -> QTY -> PRICE -> AMOUNT အစဉ်လိုက် Standard) -->
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-12">
                     <th class="py-3 px-3 w-14 text-center">NO</th>
                     <th class="py-3 px-3 w-28 text-center">DATE</th>
                     <th class="py-3 px-4 w-44">CATEGORY</th>
-                    <th class="py-3 px-4 min-w-[260px]">DESCRIPTION</th>
-                    <th class="py-3 px-3 w-20 text-center">QTY</th>
+                    <th class="py-3 px-4 min-w-[240px]">DESCRIPTION</th>
                     <th class="py-3 px-3 w-24 text-center">METHOD</th>
+                    <th class="py-3 px-3 w-20 text-center">QTY</th>
+                    <th class="py-3 px-4 w-32 text-right">PRICE</th>
                     <th class="py-3 px-4 w-36 text-right">AMOUNT</th>
-                    <th class="py-3 px-4 w-44 text-left">REF</th>
+                    <!-- Sticky Right Action Column Header -->
                     <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
@@ -135,7 +137,7 @@
                 </div>
             </div>
 
-            <!-- Amount Input (မြန်မာဂဏန်းရော အင်္ဂလိပ်ဂဏန်းပါ အဆင်ပြေစေရန် inputmode="numeric") -->
+            <!-- Amount Input -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေပမာဏ (Amount) *</label>
                 <div class="relative">
@@ -145,10 +147,10 @@
                 </div>
             </div>
 
-            <!-- Description (မဖြစ်မနေ မလိုအပ်တော့ဘဲ ကွက်လပ်ထားနိုင်ပါသည်) -->
+            <!-- Description (မဖြစ်မနေ လိုအပ်သော Validation စံနှုန်း) -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description)</label>
-                <textarea id="entry-desc" rows="3" placeholder="မှတ်ချက် သို့မဟုတ် အကြောင်းအရာ (မထည့်လည်း ရပါသည်)..." 
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description) *</label>
+                <textarea id="entry-desc" rows="3" required placeholder="မှတ်ချက် သို့မဟုတ် အကြောင်းအရာ မဖြစ်မနေ ရေးသားပါ..." 
                     class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-normal"></textarea>
             </div>
 

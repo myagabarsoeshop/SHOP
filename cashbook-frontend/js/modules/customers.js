@@ -522,3 +522,22 @@ function exportCustomerLedgerToCSV() {
     link.click();
     URL.revokeObjectURL(url);
 }
+
+/**
+ * မြန်မာဖုန်းနံပါတ်များကို သန့်ရှင်းသော အင်္ဂလိပ်ဂဏန်း (09xxxxxxxxx) အဖြစ် အလိုအလျောက် ပြောင်းလဲခြင်း
+ */
+function normalizePhoneNumber(phoneStr) {
+    if (!phoneStr) return null;
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let clean = String(phoneStr).trim();
+    
+    // မြန်မာဂဏန်းများကို အင်္ဂလိပ်ဂဏန်းသို့ ပြောင်းခြင်း
+    myanmarDigits.forEach((d, idx) => {
+        clean = clean.replaceAll(d, String(idx));
+    });
+    
+    // space များနှင့် dash (-) များကို ဖြုတ်ပြီး standard format ပြုလုပ်ခြင်း
+    clean = clean.replace(/[^0-9]/g, "");
+    
+    return clean || null;
+}

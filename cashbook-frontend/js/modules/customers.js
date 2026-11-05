@@ -30,6 +30,24 @@ function parseAnyNumber(val) {
     return isNaN(num) ? 0 : num;
 }
 
+/**
+ * ဖုန်းနံပါတ်ကို မြန်မာဂဏန်းရိုက်ရိုက်/အင်္ဂလိပ်ဂဏန်းရိုက်ရိုက် သန့်ရှင်းသော 09xxxxxxxxx အဖြစ် အလိုအလျောက် ပြောင်းလဲခြင်း
+ */
+function normalizePhoneNumber(phoneStr) {
+    if (!phoneStr) return null;
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let clean = String(phoneStr).trim();
+    
+    // မြန်မာဂဏန်းများကို အင်္ဂလိပ်ဂဏန်းသို့ ပြောင်းခြင်း
+    myanmarDigits.forEach((d, idx) => {
+        clean = clean.replaceAll(d, String(idx));
+    });
+    
+    // space နှင့် dash (-) များကို ဖယ်ရှားပြီး ဂဏန်းသီးသန့် ထုတ်ယူခြင်း
+    clean = clean.replace(/[^0-9]/g, "");
+    return clean || null;
+}
+
 export async function initCustomers() {
     bindEvents();
     await loadCustomers();
@@ -172,6 +190,7 @@ function renderTable() {
         const debt = Number(c.current_debt || 0);
         const isWholesale = String(c.customer_type || "").toLowerCase() === "wholesale";
         const typeStr = isWholesale ? "WHOLESALE" : "RETAIL";
+        const cleanPhone = normalizePhoneNumber(c.phone) || c.phone || "-";
 
         // Action Buttons: Dark Mode တွင် ပီပြင်သော Cashbook Standard Square Buttons (w-7 h-7)
         const actionButtons = `
@@ -205,9 +224,9 @@ function renderTable() {
                 ${ui.escapeHtml(c.name)}
             </td>
 
-            <!-- 3. PHONE NO -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
-                ${ui.escapeHtml(c.phone || "-")}
+            <!-- 3. PHONE NO: Header နှင့် တစ်သားတည်း text-center ထားရှိခြင်း -->
+            <td class="py-2 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+                ${ui.escapeHtml(cleanPhone)}
             </td>
 
             <!-- 4. SHOP: One Line သီးသန့် text-base font-medium -->
@@ -341,7 +360,8 @@ async function submitCustomerForm(e) {
 
     const payload = {
         name,
-        phone: document.getElementById("cust-phone").value.trim() || null,
+        // ဖုန်းနံပါတ်ကို normalizePhoneNumber ဖြင့် 09xxxxxxxxx အဖြစ် အလိုအလျောက် သန့်စင်သိမ်းဆည်းခြင်း
+        phone: normalizePhoneNumber(document.getElementById("cust-phone").value),
         customerType: document.getElementById("cust-type").value,
         shopName: document.getElementById("cust-shop").value.trim() || null,
         address: document.getElementById("cust-address").value.trim() || null,
@@ -374,8 +394,10 @@ async function openCustomerLedgerModal(cust) {
     const debtEl = document.getElementById("ledger-cust-debt");
     const tbody = document.getElementById("cust-ledger-table-body");
 
+    const cleanPhone = normalizePhoneNumber(cust.phone) || cust.phone;
+
     if (nameEl) nameEl.textContent = cust.name;
-    if (phoneEl) phoneEl.textContent = cust.phone ? `ဖုန်း: ${cust.phone}` : "ဖုန်း: မရှိပါ";
+    if (phoneEl) phoneEl.textContent = cleanPhone ? `ဖုန်း: ${cleanPhone}` : "ဖုန်း: မရှိပါ";
     if (debtEl) debtEl.textContent = `${Number(cust.current_debt || 0).toLocaleString()} Ks`;
 
     if (tbody) {
@@ -402,6 +424,9 @@ async function openCustomerLedgerModal(cust) {
     }
 }
 
+/**
+ * Customer Statement Modal: One-Line Compact Standard (စာကြောင်းမကျိုး၊ အတန်းမကျဲစေသော စံနှုန်း)
+ */
 function renderCustomerLedger(ledgerList) {
     const tbody = document.getElementById("cust-ledger-table-body");
     if (!tbody) return;
@@ -414,32 +439,59 @@ function renderCustomerLedger(ledgerList) {
 
     ledgerList.forEach(entry => {
         const isDebit = entry.type === "DEBIT";
-        const dateStr = entry.created_at ? new Date(entry.created_at).toLocaleString("en-GB", { hour12: true }) : "-";
+        
+        // ရက်စွဲနှင့် အချိန်ကို တစ်လိုင်းတည်း သပ်ရပ်စွာ ပြသခြင်း (DD/MM/YYYY hh:mm AM/PM)
+        let dateStr = "-";
+        if (entry.created_at) {
+            const d = new Date(entry.created_at);
+            const datePart = d.toLocaleDateString("en-GB");
+            const timePart = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+            dateStr = `${datePart} ${timePart}`;
+        }
+
         const amt = Number(entry.amount || 0);
         const balanceAfter = Number(entry.balance_after || 0);
 
+        // Description စာသားကို တစ်လိုင်းတည်း သန့်စင်ခြင်း
+        let desc = entry.reference_note || (isDebit ? "အရောင်းဘောင်ချာ အကြွေးကျန်" : "အကြွေးဆပ်ငွေ");
+        desc = desc.replace(/\r?\n|\r/g, " ").trim();
+
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition h-11";
+        // h-11 နှင့် whitespace-nowrap ဖြင့် တစ်လိုင်းတည်း ကျစ်လျစ်စေခြင်း
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition h-11 whitespace-nowrap text-xs border-b border-slate-100 dark:border-slate-800/60";
         tr.innerHTML = `
-            <td class="py-2 px-3 text-center font-mono text-xs text-slate-500">${dateStr}</td>
-            <td class="py-2 px-3 text-center">
-                <span class="px-2 py-0.5 rounded font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
-                    ${isDebit ? 'အကြွေးယူခြင်း (Debit)' : 'အကြွေးဆပ်ခြင်း (Credit)'}
+            <!-- 1. DATE & TIME (တစ်လိုင်းတည်း) -->
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400">${dateStr}</td>
+            
+            <!-- 2. TYPE (ကျစ်လျစ်သော Badge) -->
+            <td class="py-2.5 px-3 text-center">
+                <span class="px-2 py-0.5 rounded font-mono font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
+                    ${isDebit ? 'DEBIT (+)' : 'CREDIT (-)'}
                 </span>
             </td>
-            <td class="py-2 px-4 text-xs font-bold text-slate-800 dark:text-slate-200">
-                ${ui.escapeHtml(entry.reference_note || (isDebit ? 'အရောင်းဘောင်ချာ အကြွေးကျန်' : 'အကြွေးဆပ်ငွေ'))}
+
+            <!-- 3. DESCRIPTION / REF (တစ်လိုင်းတည်း truncate) -->
+            <td class="py-2.5 px-4 font-bold text-slate-800 dark:text-slate-200 max-w-[260px] truncate" title="${ui.escapeHtml(desc)}">
+                ${ui.escapeHtml(desc)}
             </td>
-            <td class="py-2 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">
+
+            <!-- 4. METHOD -->
+            <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400 uppercase">
                 ${ui.escapeHtml(entry.payment_method || (isDebit ? 'DEBT' : 'CASH'))}
             </td>
-            <td class="py-2 px-4 text-right font-mono font-bold text-xs ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
+
+            <!-- 5. AMOUNT -->
+            <td class="py-2.5 px-4 text-right font-mono font-black ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
                 ${isDebit ? '+' : '-'}${amt.toLocaleString()}
             </td>
-            <td class="py-2 px-4 text-right font-mono font-black text-xs text-slate-900 dark:text-white">
-                ${balanceAfter.toLocaleString()} Ks
+
+            <!-- 6. BALANCE DEBT (Ks ဖြုတ်ထားသော ဂဏန်းသီးသန့် ညာဘက်ကပ်) -->
+            <td class="py-2.5 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100">
+                ${balanceAfter.toLocaleString()}
             </td>
-            <td class="py-2 px-3 text-center text-slate-500 font-mono text-xs">
+
+            <!-- 7. USER (တစ်လိုင်းတည်း) -->
+            <td class="py-2.5 px-3 text-center text-slate-400 font-medium max-w-[130px] truncate" title="${ui.escapeHtml(entry.created_by_name || 'Admin')}">
                 ${ui.escapeHtml(entry.created_by_name || "Admin")}
             </td>
         `;
@@ -465,11 +517,12 @@ function exportAllCustomersToCSV() {
         const debt = Number(c.current_debt || 0);
         const status = debt > 0 ? "အကြွေးကျန်ရှိ" : "ရှင်းပြီး";
         const typeStr = String(c.customer_type || "retail").toUpperCase();
+        const cleanPhone = normalizePhoneNumber(c.phone) || c.phone || "-";
 
         const row = [
             no,
             ui.escapeCsv(c.name),
-            ui.escapeCsv(c.phone || "-"),
+            ui.escapeCsv(cleanPhone),
             ui.escapeCsv(c.shop_name || "-"),
             ui.escapeCsv(c.address || "-"),
             ui.escapeCsv(typeStr),
@@ -521,23 +574,4 @@ function exportCustomerLedgerToCSV() {
     link.download = `Statement_${safeName}_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-}
-
-/**
- * မြန်မာဖုန်းနံပါတ်များကို သန့်ရှင်းသော အင်္ဂလိပ်ဂဏန်း (09xxxxxxxxx) အဖြစ် အလိုအလျောက် ပြောင်းလဲခြင်း
- */
-function normalizePhoneNumber(phoneStr) {
-    if (!phoneStr) return null;
-    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
-    let clean = String(phoneStr).trim();
-    
-    // မြန်မာဂဏန်းများကို အင်္ဂလိပ်ဂဏန်းသို့ ပြောင်းခြင်း
-    myanmarDigits.forEach((d, idx) => {
-        clean = clean.replaceAll(d, String(idx));
-    });
-    
-    // space များနှင့် dash (-) များကို ဖြုတ်ပြီး standard format ပြုလုပ်ခြင်း
-    clean = clean.replace(/[^0-9]/g, "");
-    
-    return clean || null;
 }

@@ -2,7 +2,7 @@
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
     <!-- Top Filter & Action Toolbar (KPI Card 1 အကျယ်နှင့် အညီ တန်းညှိထားခြင်း) -->
-    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
         <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း ညီညာစွာထားရှိခြင်း) -->
         <div class="flex items-center gap-3 flex-1 min-w-0">
@@ -30,7 +30,7 @@
 
             <div class="h-5 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
-            <!-- Add New Button (Cashbook Standard အတိုင်း နာမည်နှင့် အရွယ်အစား အတိအကျ တူညီစေခြင်း) -->
+            <!-- Add New Button -->
             <button type="button" id="btn-add-customer" 
                 class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95">
                 <i class="fa-solid fa-plus text-xs"></i>
@@ -42,19 +42,19 @@
     <!-- Customers Table Container -->
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
         <table class="w-full text-left border-collapse min-w-[1100px]">
-            <!-- Table Head (SHOP နှင့် TYPE ခွဲထုတ်ထားသော 9-Columns Standard) -->
+            <!-- Table Head (TYPE ကို ADDRESS နောက်သို့ ရွှေ့ပြောင်းပြီး Line Spacing ကျစ်လျစ်အောင် h-11 ထားရှိသည်) -->
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
-                <tr class="h-12">
-                    <th class="py-3 px-3 w-14 text-center">NO</th>
-                    <th class="py-3 px-4 min-w-[180px]">CUSTOMER NAME</th>
-                    <th class="py-3 px-3 w-32 text-left">PHONE NO</th>
-                    <th class="py-3 px-4 w-40">SHOP</th>
-                    <th class="py-3 px-4 w-28 text-left">TYPE</th>
-                    <th class="py-3 px-4 min-w-[180px]">ADDRESS</th>
-                    <th class="py-3 px-4 w-36 text-right">RECEIVABLES</th>
-                    <th class="py-3 px-3 w-28 text-center">STATUS</th>
+                <tr class="h-11">
+                    <th class="py-2.5 px-3 w-14 text-center">NO</th>
+                    <th class="py-2.5 px-4 min-w-[180px]">CUSTOMER NAME</th>
+                    <th class="py-2.5 px-3 w-32 text-center">PHONE NO</th>
+                    <th class="py-2.5 px-4 w-40">SHOP</th>
+                    <th class="py-2.5 px-4 min-w-[180px]">ADDRESS</th>
+                    <th class="py-2.5 px-4 w-28 text-left">TYPE</th>
+                    <th class="py-2.5 px-4 w-36 text-right">RECEIVABLES</th>
+                    <th class="py-2.5 px-3 w-28 text-center">STATUS</th>
                     <!-- Sticky Right Action Column Header -->
-                    <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+                    <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
                 </tr>

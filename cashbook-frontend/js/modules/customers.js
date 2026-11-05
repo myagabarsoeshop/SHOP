@@ -130,13 +130,13 @@ async function loadCustomers() {
 
         const totalCust = customers.length;
         const wholesaleCust = customers.filter(c => String(c.customer_type || "").toLowerCase() === "wholesale").length;
-        const debtors = customers.filter(c => Number(c.current_debt || 0) > 0);
+        const retailCust = customers.filter(c => String(c.customer_type || "").toLowerCase() === "retail" || !c.customer_type).length;
         const totalDebt = customers.reduce((sum, c) => sum + Number(c.current_debt || 0), 0);
 
-        // Standard KPI Boxes (English Labels)
+        // Standard 4-KPI Boxes (Total Customers, Wholesale Customers, Retail Customers, Total Receivables)
         setKPI(1, "Total Customers", totalCust, "fa-users", "blue");
         setKPI(2, "Wholesale Customers", wholesaleCust, "fa-store", "emerald");
-        setKPI(3, "Debtors Count", debtors.length, "fa-user-clock", "rose");
+        setKPI(3, "Retail Customers", retailCust, "fa-user", "purple");
         setKPI(4, "Total Receivables", totalDebt, "fa-hand-holding-dollar", "amber");
 
         renderTable();
@@ -173,69 +173,70 @@ function renderTable() {
         const isWholesale = String(c.customer_type || "").toLowerCase() === "wholesale";
         const typeStr = isWholesale ? "WHOLESALE" : "RETAIL";
 
-        // Action Buttons: Cashbook Standard Square Button Boxes (w-7 h-7)
+        // Action Buttons: Dark Mode တွင် ပီပြင်သော Cashbook Standard Square Buttons (w-7 h-7)
         const actionButtons = `
-            <div class="flex items-center justify-center gap-2">
-                <button type="button" data-id="${c.id}" title="အကြွေးနှင့် ပြန်ဆပ်မှတ်တမ်း ကြည့်မည်" 
-                    class="btn-view-ledger w-7 h-7 flex items-center justify-center text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition cursor-pointer shadow-sm active:scale-95">
+            <div class="flex items-center justify-center gap-1.5">
+                <button type="button" data-id="${c.id}" title="Statement ကြည့်မည်" 
+                    class="btn-view-ledger w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-receipt text-xs"></i>
                 </button>
 
                 ${debt > 0 ? `
                 <button type="button" data-id="${c.id}" title="အကြွေးဆပ်ငွေ လက်ခံမည်" 
-                    class="btn-repay w-7 h-7 flex items-center justify-center text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-lg transition cursor-pointer shadow-sm active:scale-95">
+                    class="btn-repay w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-600 hover:text-white dark:text-emerald-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-hand-holding-dollar text-xs"></i>
                 </button>` : `
                 <button type="button" disabled title="အကြွေးကင်းရှင်းပါသည်" 
-                    class="w-7 h-7 flex items-center justify-center text-slate-300 dark:text-slate-700 rounded-lg cursor-not-allowed">
+                    class="w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-900/40 text-slate-300 dark:text-slate-700 rounded-lg border border-slate-200/50 dark:border-slate-800/50 cursor-not-allowed">
                     <i class="fa-solid fa-check text-xs"></i>
                 </button>`}
             </div>
         `;
 
+        // Row Line Spacing ကို ကျစ်လျစ်စေရန် h-12 နှင့် py-2 ကို အသုံးပြုထားပါသည်
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12";
         row.innerHTML = `
             <!-- 1. NO -->
-            <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
             
             <!-- 2. CUSTOMER NAME: မြန်မာစာ text-base font-bold -->
-            <td class="py-3 px-4 text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate leading-snug">
+            <td class="py-2 px-4 text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate leading-tight">
                 ${ui.escapeHtml(c.name)}
             </td>
 
             <!-- 3. PHONE NO -->
-            <td class="py-3 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <td class="py-2 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
                 ${ui.escapeHtml(c.phone || "-")}
             </td>
 
             <!-- 4. SHOP: One Line သီးသန့် text-base font-medium -->
-            <td class="py-3 px-4 text-base font-medium text-slate-800 dark:text-slate-200 w-40 truncate leading-snug" title="${ui.escapeHtml(c.shop_name || "-")}">
+            <td class="py-2 px-4 text-base font-medium text-slate-800 dark:text-slate-200 w-40 truncate leading-tight" title="${ui.escapeHtml(c.shop_name || "-")}">
                 ${ui.escapeHtml(c.shop_name || "-")}
             </td>
 
-            <!-- 5. TYPE: ဘယ်ဘက်ကပ် (text-left px-4) One Line သီးသန့် text-xs font-mono font-bold -->
-            <td class="py-3 px-4 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
-                ${typeStr}
-            </td>
-
-            <!-- 6. ADDRESS: One Line သီးသန့် text-base -->
-            <td class="py-3 px-4 text-base text-slate-600 dark:text-slate-300 min-w-[180px] max-w-xs truncate leading-snug" title="${ui.escapeHtml(c.address || "-")}">
+            <!-- 5. ADDRESS: (TYPE အရှေ့သို့ ရွှေ့ထားသည်) One Line သီးသန့် text-base -->
+            <td class="py-2 px-4 text-base text-slate-600 dark:text-slate-300 min-w-[180px] max-w-xs truncate leading-tight" title="${ui.escapeHtml(c.address || "-")}">
                 ${ui.escapeHtml(c.address || "-")}
             </td>
 
-            <!-- 7. RECEIVABLES: text-base font-black font-mono -->
-            <td class="py-3 px-4 text-right font-black font-mono text-base ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
-                ${debt.toLocaleString()} Ks
+            <!-- 6. TYPE: (ADDRESS ၏ နောက်သို့ ရွှေ့ထားသည်) text-left px-4 -->
+            <td class="py-2 px-4 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                ${typeStr}
+            </td>
+
+            <!-- 7. RECEIVABLES: Ks မပါဝင်ဘဲ ဂဏန်းသီးသန့် text-base font-black font-mono -->
+            <td class="py-2 px-4 text-right font-black font-mono text-base whitespace-nowrap ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
+                ${debt.toLocaleString()}
             </td>
 
             <!-- 8. STATUS: နောက်ခံ Badge Pill ဖြုတ်ထားသော Plain Text -->
-            <td class="py-3 px-3 text-center whitespace-nowrap font-mono text-xs font-bold ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
+            <td class="py-2 px-3 text-center whitespace-nowrap font-mono text-xs font-bold ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
                 ${debt > 0 ? 'အကြွေးကျန်ရှိ' : 'ရှင်းပြီး'}
             </td>
 
             <!-- 9. ACTION: Sticky Right Cell -->
-            <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                 ${actionButtons}
             </td>
         `;
@@ -418,27 +419,27 @@ function renderCustomerLedger(ledgerList) {
         const balanceAfter = Number(entry.balance_after || 0);
 
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition h-12";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition h-11";
         tr.innerHTML = `
-            <td class="py-2.5 px-3 text-center font-mono text-xs text-slate-500">${dateStr}</td>
-            <td class="py-2.5 px-3 text-center">
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-500">${dateStr}</td>
+            <td class="py-2 px-3 text-center">
                 <span class="px-2 py-0.5 rounded font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">
                     ${isDebit ? 'အကြွေးယူခြင်း (Debit)' : 'အကြွေးဆပ်ခြင်း (Credit)'}
                 </span>
             </td>
-            <td class="py-2.5 px-4 text-xs font-bold text-slate-800 dark:text-slate-200">
+            <td class="py-2 px-4 text-xs font-bold text-slate-800 dark:text-slate-200">
                 ${ui.escapeHtml(entry.reference_note || (isDebit ? 'အရောင်းဘောင်ချာ အကြွေးကျန်' : 'အကြွေးဆပ်ငွေ'))}
             </td>
-            <td class="py-2.5 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">
+            <td class="py-2 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">
                 ${ui.escapeHtml(entry.payment_method || (isDebit ? 'DEBT' : 'CASH'))}
             </td>
-            <td class="py-2.5 px-4 text-right font-mono font-bold text-xs ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
+            <td class="py-2 px-4 text-right font-mono font-bold text-xs ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
                 ${isDebit ? '+' : '-'}${amt.toLocaleString()}
             </td>
-            <td class="py-2.5 px-4 text-right font-mono font-black text-xs text-slate-900 dark:text-white">
+            <td class="py-2 px-4 text-right font-mono font-black text-xs text-slate-900 dark:text-white">
                 ${balanceAfter.toLocaleString()} Ks
             </td>
-            <td class="py-2.5 px-3 text-center text-slate-500 font-mono text-xs">
+            <td class="py-2 px-3 text-center text-slate-500 font-mono text-xs">
                 ${ui.escapeHtml(entry.created_by_name || "Admin")}
             </td>
         `;
@@ -446,6 +447,10 @@ function renderCustomerLedger(ledgerList) {
     });
 }
 
+/**
+ * UI Table Header အစီအစဉ်သစ်အတိုင်း ထုတ်ယူပေးသော CSV Export စနစ်
+ * Columns: NO, CUSTOMER NAME, PHONE NO, SHOP, ADDRESS, TYPE, RECEIVABLES, STATUS
+ */
 function exportAllCustomersToCSV() {
     const listToExport = currentFilteredCustomers.length > 0 ? currentFilteredCustomers : customers;
 
@@ -453,7 +458,7 @@ function exportAllCustomersToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် ဖောက်သည်စာရင်း မရှိသေးပါ။");
     }
 
-    let csvContent = "NO,CUSTOMER NAME,PHONE NO,SHOP,TYPE,ADDRESS,RECEIVABLES,STATUS\n";
+    let csvContent = "NO,CUSTOMER NAME,PHONE NO,SHOP,ADDRESS,TYPE,RECEIVABLES,STATUS\n";
 
     listToExport.forEach((c, idx) => {
         const no = idx + 1;
@@ -466,8 +471,8 @@ function exportAllCustomersToCSV() {
             ui.escapeCsv(c.name),
             ui.escapeCsv(c.phone || "-"),
             ui.escapeCsv(c.shop_name || "-"),
-            ui.escapeCsv(typeStr),
             ui.escapeCsv(c.address || "-"),
+            ui.escapeCsv(typeStr),
             debt,
             ui.escapeCsv(status)
         ];

@@ -161,7 +161,6 @@ async function loadMasterProducts() {
 
 async function loadSuppliers() {
     try {
-        // Customer & Supplier စာရင်းများမှ ပွဲရုံအမည်များကို Datalist အဖြစ် ထုတ်ယူခြင်း
         const res = await api.get("/customers");
         const list = res.data || [];
         supplierList = [...new Set(list.map(c => (c.shop_name || c.name || "").trim()).filter(Boolean))];
@@ -217,7 +216,6 @@ async function loadPurchases() {
         purchasesList = res.data || [];
         currentFilteredPurchases = [...purchasesList];
 
-        // ၄-KPI Boxes တန်ဖိုးများ တွက်ချက်ခြင်း
         const uniqueOrders = new Set(purchasesList.map(p => p.purchase_id || p.id)).size;
         const totalItemsQty = purchasesList.reduce((sum, p) => sum + Number(p.quantity || 0), 0);
         
@@ -234,7 +232,6 @@ async function loadPurchases() {
             }
         });
 
-        // Standard 4-KPI Boxes (Total Purchases, Purchase Items, Cash Purchases, Credit Purchases)
         setKPI(1, "Total Purchases", uniqueOrders, "fa-file-invoice-dollar", "blue");
         setKPI(2, "Purchase Items", totalItemsQty, "fa-boxes-stacked", "emerald");
         setKPI(3, "Cash Purchases", cashPurchasesTotal, "fa-money-bill-wave", "purple");
@@ -263,7 +260,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (Compact One-Line View: REF ပါဝင်သော ၁၆ ကော်လံ)
+ * Purchases History Table Rendering (Compact One-Line View: မျဉ်းတားဖြုတ်ထားသော Flat Row စံနှုန်း)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -292,7 +289,6 @@ function renderPurchasesTable() {
         const barcodeStr = pur.barcode || pur.sku || "-";
         const refNo = pur.ref_no || "-";
 
-        // Method: CASH သို့မဟုတ် BANK
         const rawMethod = String(pur.payment_method || "cash").toLowerCase();
         let methodStr = "CASH";
         if (rawMethod === "bank") {
@@ -301,7 +297,6 @@ function renderPurchasesTable() {
             methodStr = "-";
         }
 
-        // Type: လက်ငင်းဝယ်ယူမှု (CASH) သို့မဟုတ် အကြွေးဝယ်ယူမှု (CREDIT)
         const isCredit = rawMethod === "credit";
         const typeStr = isCredit ? "CREDIT" : "CASH";
 
@@ -311,7 +306,6 @@ function renderPurchasesTable() {
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
 
-        // Action Buttons: Dark Mode တွင် ပီပြင်သော Square Box Buttons (w-7 h-7)
         const actionButtons = `
             <div class="flex items-center justify-center gap-1.5">
                 <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" 
@@ -325,8 +319,9 @@ function renderPurchasesTable() {
             </div>
         `;
 
+        // border-b ဖြုတ်ထားပြီး Customers & Debt အတိုင်း Flat Row အဖြစ် ပြင်ဆင်ထားပါသည်
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap border-b border-slate-100 dark:border-slate-800/60";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         row.innerHTML = `
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
@@ -834,7 +829,6 @@ function updateDifference() {
 
     const actualPaid = parseAnyNumber(paidInput.value);
     
-    // ပေးငွေ မထည့်ရသေးပါက
     if (!paidInput.value) {
         diffLabel.textContent = "Balance (ညီမျှ)";
         diffAmount.textContent = "0 Ks";
@@ -849,12 +843,10 @@ function updateDifference() {
         diffAmount.textContent = "0 Ks";
         diffAmount.className = "text-sm font-black font-mono text-slate-400";
     } else if (diff > 0) {
-        // ပစ္စည်းတန်ဖိုးထက် ငွေပိုပေးထားမိခြင်း (ပွဲရုံထံမှ ၄,၀၀၀ ပြန်ရရန်ရှိသည်)
         diffLabel.textContent = "Overpaid (ပိုပေးငွေ / ပြန်ရရန်)";
         diffAmount.textContent = `+${diff.toLocaleString()} Ks`;
         diffAmount.className = "text-sm font-black font-mono text-amber-500";
     } else {
-        // ပစ္စည်းတန်ဖိုးထက် ငွေလျော့ပေးရခြင်း (အကြွေးကျန်ငွေ သို့မဟုတ် လျှော့ငွေ)
         diffLabel.textContent = "Debt / Balance (ပေးရန်ကျန်)";
         diffAmount.textContent = `${diff.toLocaleString()} Ks`;
         diffAmount.className = "text-sm font-black font-mono text-rose-500";

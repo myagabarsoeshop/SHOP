@@ -8,6 +8,7 @@ import { PaginationController } from "../core/pagination.js";
 let purchasesList = [];
 let currentFilteredPurchases = [];
 let masterProducts = [];
+let supplierList = [];
 let selectedOrderItems = [];
 
 // စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
@@ -15,6 +16,25 @@ const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderPurchasesTable()
 });
+
+/**
+ * မြန်မာဂဏန်း (၀-၉) မှ အင်္ဂလိပ်ဂဏန်း (0-9) သို့ အလိုအလျောက် ချက်ချင်း ပြောင်းပေးသည့် Helper
+ */
+function normalizeDigits(val) {
+    if (!val && val !== 0) return "";
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let cleanStr = String(val).replace(/,/g, "").trim();
+    myanmarDigits.forEach((d, idx) => {
+        cleanStr = cleanStr.replaceAll(d, String(idx));
+    });
+    return cleanStr;
+}
+
+function parseAnyNumber(val) {
+    const clean = normalizeDigits(val);
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+}
 
 /**
  * VR NO အား DDMMYY-01 ပုံစံသို့ စနစ်တကျ ပြောင်းလဲဖော်ပြသည့် Helper
@@ -27,7 +47,6 @@ function formatVRNo(pur, index) {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const yy = String(d.getFullYear()).slice(-2);
     
-    // purchase_id သို့မဟုတ် row index ပေါ် မူတည်၍ 2-digit sequence ထုတ်ပေးခြင်း
     const seqNum = pur.purchase_id || pur.id || (index + 1);
     const seq = String(seqNum % 100 || index + 1).padStart(2, "0");
     
@@ -37,6 +56,7 @@ function formatVRNo(pur, index) {
 export async function initPurchases() {
     bindEvents();
     await loadMasterProducts();
+    await loadSuppliers();
     await loadPurchases();
 }
 
@@ -55,6 +75,7 @@ function bindEvents() {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
             await loadMasterProducts();
+            await loadSuppliers();
             await loadPurchases();
             setTimeout(() => icon?.classList.remove("fa-spin"), 500);
             ui.toast.info("အဝယ်စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
@@ -76,6 +97,18 @@ function bindEvents() {
             if (bankInput) bankInput.value = "";
         }
     });
+
+    // Actual Paid Input Event (Auto-Difference Calculation & Number Normalization)
+    const paidInput = document.getElementById("pur-actual-paid");
+    if (paidInput) {
+        paidInput.addEventListener("input", (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) {
+                e.target.value = normalized;
+            }
+            updateDifference();
+        });
+    }
 
     // Quick Search Input Events
     const searchInput = document.getElementById("pur-quick-search-input");
@@ -126,6 +159,25 @@ async function loadMasterProducts() {
     }
 }
 
+async function loadSuppliers() {
+    try {
+        // Customer & Supplier စာရင်းများမှ ပွဲရုံအမည်များကို Datalist အဖြစ် ထုတ်ယူခြင်း
+        const res = await api.get("/customers");
+        const list = res.data || [];
+        supplierList = [...new Set(list.map(c => (c.shop_name || c.name || "").trim()).filter(Boolean))];
+        
+        const datalist = document.getElementById("pur-supplier-datalist");
+        if (datalist) {
+            datalist.innerHTML = "";
+            supplierList.forEach(name => {
+                datalist.innerHTML += `<option value="${ui.escapeHtml(name)}">`;
+            });
+        }
+    } catch (err) {
+        console.error("Suppliers စာရင်း ရယူ၍ မရပါ:", err);
+    }
+}
+
 function populateCategoryFilters() {
     const categories = [...new Set(masterProducts.map(p => (p.category || "").trim()).filter(Boolean))];
     const catSelect = document.getElementById("pur-quick-cat-filter");
@@ -151,7 +203,7 @@ async function loadPurchases() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="15" class="p-16 text-center text-slate-400">
+                <td colspan="16" class="p-16 text-center text-slate-400">
                     <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                     <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                 </td>
@@ -192,7 +244,7 @@ async function loadPurchases() {
         renderPurchasesTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="15" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="16" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -202,7 +254,7 @@ function filterAndRenderPurchases() {
 
     currentFilteredPurchases = purchasesList.filter(p => {
         if (!kw) return true;
-        const hay = `${p.purchase_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.category || ""} ${p.color || ""} ${p.supplier_name || ""}`.toLowerCase();
+        const hay = `${p.purchase_no || ""} ${p.ref_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.category || ""} ${p.color || ""} ${p.supplier_name || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
@@ -211,7 +263,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (Compact One-Line View: h-12 whitespace-nowrap)
+ * Purchases History Table Rendering (Compact One-Line View: REF ပါဝင်သော ၁၆ ကော်လံ)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -221,7 +273,7 @@ function renderPurchasesTable() {
     if (currentFilteredPurchases.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="15" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="16" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-cart-flatbed text-3xl mb-3 opacity-30"></i>
                     <div>အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</div>
                 </td>
@@ -238,6 +290,7 @@ function renderPurchasesTable() {
         const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
         const vrNo = formatVRNo(pur, startIdx + idx);
         const barcodeStr = pur.barcode || pur.sku || "-";
+        const refNo = pur.ref_no || "-";
 
         // Method: CASH သို့မဟုတ် BANK
         const rawMethod = String(pur.payment_method || "cash").toLowerCase();
@@ -272,53 +325,55 @@ function renderPurchasesTable() {
             </div>
         `;
 
-        // Row Height ကို Customers & Debt အတိုင်း h-12 ထားရှိပြီး စာလုံးအရွယ်အစားများ ညှိထားခြင်း
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap border-b border-slate-100 dark:border-slate-800/60";
         row.innerHTML = `
-            <!-- 1. NO: text-xs -->
+            <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
-            <!-- 2. DATE: text-xs -->
+            <!-- 2. DATE -->
             <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
-            <!-- 3. VR NO: text-xs font-bold -->
+            <!-- 3. VR NO -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
             
-            <!-- 4. BARCODE: text-xs -->
+            <!-- 4. BARCODE -->
             <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
             
-            <!-- 5. CATEGORY: မြန်မာစာ text-base font-semibold (Customers စံနှုန်း) -->
+            <!-- 5. CATEGORY -->
             <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
             
-            <!-- 6. ITEM NAME: မြန်မာစာ text-base font-bold (Customers စံနှုန်း) -->
+            <!-- 6. ITEM NAME -->
             <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
             
-            <!-- 7. COLOR: မြန်မာစာ text-base font-medium (Customers စံနှုန်း) -->
+            <!-- 7. COLOR -->
             <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
             
-            <!-- 8. UNIT PRICE: text-base font-mono (Customers စံနှုန်း) -->
+            <!-- 8. UNIT PRICE -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
             
-            <!-- 9. AMOUNT: text-base font-mono font-black (Customers စံနှုန်း) -->
+            <!-- 9. AMOUNT -->
             <td class="py-2 px-4 text-right font-mono text-base font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
             
-            <!-- 10. METHOD: text-xs font-mono -->
+            <!-- 10. METHOD -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-24">${methodStr}</td>
             
-            <!-- 11. TYPE: text-xs font-mono -->
+            <!-- 11. TYPE -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold w-24 ${isCredit ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">${typeStr}</td>
             
-            <!-- 12. WHOLESALE: text-base font-mono font-bold -->
+            <!-- 12. WHOLESALE -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
             
-            <!-- 13. RETAIL: text-base font-mono font-bold -->
+            <!-- 13. RETAIL -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
             
-            <!-- 14. SUPPLIER: မြန်မာစာ text-base font-semibold (Customers စံနှုန်း) -->
+            <!-- 14. SUPPLIER -->
             <td class="py-2 px-4 text-left text-base font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
             
-            <!-- 15. ACTION (Sticky Right) -->
+            <!-- 15. REF (Supplier Invoice No) -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(refNo)}">${ui.escapeHtml(refNo)}</td>
+
+            <!-- 16. ACTION (Sticky Right) -->
             <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
@@ -353,7 +408,7 @@ function generateAutoSKU(categoryName = "") {
 }
 
 // =========================================================================
-// --- MODAL WORKSPACE LOGIC (4-SECTIONS) ----------------------------------
+// --- MODAL WORKSPACE LOGIC (Compact One-Line Pro View) --------------------
 // =========================================================================
 
 function openPurchaseModal(pur = null) {
@@ -365,6 +420,7 @@ function openPurchaseModal(pur = null) {
         title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
         editIdInput.value = pur.purchase_id || pur.id;
         document.getElementById("pur-supplier").value = pur.supplier_name || "";
+        document.getElementById("pur-ref-no").value = pur.ref_no || "";
         document.getElementById("pur-payment-method").value = pur.payment_method || "cash";
         document.getElementById("pur-bank-name").value = pur.bank_account_name || "";
         if (pur.payment_method === "bank") {
@@ -396,10 +452,14 @@ function openPurchaseModal(pur = null) {
                 subtotal: Number(p.subtotal || (p.quantity * p.unit_cost))
             }));
 
+        const totalAmt = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+        document.getElementById("pur-actual-paid").value = totalAmt;
+
     } else {
         title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
         editIdInput.value = "";
         document.getElementById("pur-supplier").value = "";
+        document.getElementById("pur-ref-no").value = "";
         document.getElementById("pur-payment-method").value = "cash";
         document.getElementById("pur-bank-name").value = "";
         document.getElementById("pur-bank-container")?.classList.add("hidden");
@@ -409,6 +469,7 @@ function openPurchaseModal(pur = null) {
         document.getElementById("pur-date").value = todayStr;
 
         selectedOrderItems = [];
+        document.getElementById("pur-actual-paid").value = "";
     }
 
     renderOrderItemsTable();
@@ -456,10 +517,10 @@ function renderQuickSuggestions() {
     } else {
         matches.forEach(p => {
             const card = document.createElement("div");
-            card.className = "p-3 hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer flex items-center justify-between transition";
+            card.className = "p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer flex items-center justify-between transition";
             card.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-xs shrink-0">
+                    <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-xs shrink-0">
                         ${ui.escapeHtml((p.category || "Item").slice(0, 2))}
                     </div>
                     <div>
@@ -519,6 +580,9 @@ function addOrderItem(prod, isNew = false) {
     renderOrderItemsTable();
 }
 
+/**
+ * Compact One-Line Order Items Table Rendering (စာကြောင်းမကျိုးသော Standard Layout)
+ */
 function renderOrderItemsTable() {
     const tbody = document.getElementById("pur-items-container");
     const rowCountEl = document.getElementById("pur-row-count");
@@ -529,7 +593,7 @@ function renderOrderItemsTable() {
     if (selectedOrderItems.length === 0) {
         tbody.innerHTML = `
             <tr id="pur-empty-row">
-                <td colspan="8" class="p-12 text-center text-slate-400 font-bold text-sm">
+                <td colspan="8" class="p-10 text-center text-slate-400 font-bold text-xs">
                     <i class="fa-solid fa-cart-arrow-down text-3xl mb-2 opacity-40"></i>
                     <div>ပစ္စည်း ရွေးချယ်ထားခြင်း မရှိသေးပါ။ အပေါ်ရှိ Search Bar တွင် ရှာဖွေရွေးချယ်ပါ။</div>
                 </td>
@@ -543,49 +607,67 @@ function renderOrderItemsTable() {
 
     selectedOrderItems.forEach((item, index) => {
         const tr = document.createElement("tr");
-        tr.className = "pur-row-item hover:bg-slate-50 dark:hover:bg-slate-900/60 transition";
+        tr.className = "pur-row-item hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap border-b border-slate-100 dark:border-slate-800/80";
         tr.dataset.idx = index;
 
         tr.innerHTML = `
-            <td class="p-3.5 text-center text-slate-400 font-mono">${index + 1}</td>
-            <td class="p-3.5">
-                <div class="font-extrabold text-slate-900 dark:text-white text-xs">${ui.escapeHtml(item.item_name)}</div>
-                <div class="text-[11px] text-slate-400 font-mono">
-                    ${ui.escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(item.category || "-")}</span>
-                    ${item.color ? `• ${ui.escapeHtml(item.color)}` : ''} (${ui.escapeHtml(item.size || 'ထည်')})
+            <!-- 1. စဉ် -->
+            <td class="py-1 px-2.5 text-center text-slate-400 font-mono text-xs">${index + 1}</td>
+            
+            <!-- 2. ပစ္စည်းအချက်အလက် (One-Line Truncate) -->
+            <td class="py-1 px-3">
+                <div class="font-extrabold text-slate-900 dark:text-white text-xs truncate max-w-[220px]" title="${ui.escapeHtml(item.item_name)}">${ui.escapeHtml(item.item_name)}</div>
+                <div class="text-[10px] text-slate-400 font-mono truncate max-w-[220px]">
+                    ${ui.escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(item.category || "-")}</span> ${item.color ? `• ${ui.escapeHtml(item.color)}` : ''} (${ui.escapeHtml(item.size || 'ထည်')})
                 </div>
             </td>
-            <td class="p-3.5 text-center">
-                <input type="number" min="0.1" step="any" value="${item.quantity}" data-idx="${index}"
-                    class="item-qty w-20 h-9 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+
+            <!-- 3. အရေအတွက် -->
+            <td class="py-1 px-2 text-center">
+                <input type="text" inputmode="numeric" value="${item.quantity}" data-idx="${index}"
+                    class="item-qty w-20 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-center text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
             </td>
-            <td class="p-3.5 text-right">
-                <input type="number" min="0" step="any" value="${item.unit_cost}" data-idx="${index}"
-                    class="item-cost w-28 h-9 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2.5 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+
+            <!-- 4. ဝယ်ရင်းဈေး -->
+            <td class="py-1 px-2.5 text-right">
+                <input type="text" inputmode="numeric" value="${item.unit_cost}" data-idx="${index}"
+                    class="item-cost w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
             </td>
-            <td class="p-3.5 text-right space-y-1">
-                <input type="number" min="0" step="any" value="${item.retail_price}" data-idx="${index}"
-                    class="item-retail w-32 h-8 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                <div class="flex items-center justify-end gap-1 text-[10px] text-slate-400">
-                    <span>Margin %:</span>
-                    <input type="number" value="${item.retail_margin_pct || ''}" placeholder="0" data-idx="${index}"
-                        class="item-retail-pct w-12 h-6 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1">
+
+            <!-- 5. လက်လီရောင်းဈေး / % (ဘေးချင်းကပ် One-Line Layout) -->
+            <td class="py-1 px-2.5 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                    <input type="text" inputmode="numeric" value="${item.retail_price}" data-idx="${index}" placeholder="ရောင်းဈေး"
+                        class="item-retail w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    <div class="flex items-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-1.5 h-7">
+                        <input type="text" inputmode="numeric" value="${item.retail_margin_pct || ''}" placeholder="0" data-idx="${index}"
+                            class="item-retail-pct w-8 text-[11px] font-mono text-right bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none">
+                        <span class="text-[10px] text-slate-400 ml-0.5">%</span>
+                    </div>
                 </div>
             </td>
-            <td class="p-3.5 text-right space-y-1">
-                <input type="number" min="0" step="any" value="${item.wholesale_price}" data-idx="${index}"
-                    class="item-wholesale w-32 h-8 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                <div class="flex items-center justify-end gap-1 text-[10px] text-slate-400">
-                    <span>Margin %:</span>
-                    <input type="number" value="${item.wholesale_margin_pct || ''}" placeholder="0" data-idx="${index}"
-                        class="item-wholesale-pct w-12 h-6 text-[10px] font-mono text-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded px-1">
+
+            <!-- 6. လက်ကားရောင်းဈေး / % (ဘေးချင်းကပ် One-Line Layout) -->
+            <td class="py-1 px-2.5 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                    <input type="text" inputmode="numeric" value="${item.wholesale_price}" data-idx="${index}" placeholder="လက်ကား"
+                        class="item-wholesale w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <div class="flex items-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-1.5 h-7">
+                        <input type="text" inputmode="numeric" value="${item.wholesale_margin_pct || ''}" placeholder="0" data-idx="${index}"
+                            class="item-wholesale-pct w-8 text-[11px] font-mono text-right bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none">
+                        <span class="text-[10px] text-slate-400 ml-0.5">%</span>
+                    </div>
                 </div>
             </td>
-            <td class="p-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm line-subtotal">
+
+            <!-- 7. သင့်ငွေ -->
+            <td class="py-1 px-3 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-xs line-subtotal">
                 ${Number(item.subtotal || 0).toLocaleString()}
             </td>
-            <td class="p-3.5 text-center">
-                <button type="button" data-idx="${index}" class="btn-remove-item text-slate-400 hover:text-rose-500 text-sm transition cursor-pointer" title="စာရင်းမှ ဖယ်ရှားမည်">
+
+            <!-- 8. ဖျက်မည် -->
+            <td class="py-1 px-2 text-center">
+                <button type="button" data-idx="${index}" class="btn-remove-item text-slate-400 hover:text-rose-500 text-xs transition cursor-pointer p-1" title="စာရင်းမှ ဖယ်ရှားမည်">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
             </td>
@@ -601,11 +683,15 @@ function attachRowEvents() {
     const tbody = document.getElementById("pur-items-container");
     if (!tbody) return;
 
+    // ၁။ အရေအတွက် Input Event (Auto-Normalize Myanmar Digits)
     tbody.querySelectorAll(".item-qty").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const qty = parseFloat(e.target.value) || 0;
+            const qty = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].quantity = qty;
             selectedOrderItems[idx].subtotal = qty * selectedOrderItems[idx].unit_cost;
 
@@ -614,11 +700,15 @@ function attachRowEvents() {
         };
     });
 
+    // ၂။ ဝယ်ရင်းဈေး Input Event
     tbody.querySelectorAll(".item-cost").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const cost = parseFloat(e.target.value) || 0;
+            const cost = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].unit_cost = cost;
 
             if (selectedOrderItems[idx].retail_margin_pct > 0) {
@@ -638,11 +728,15 @@ function attachRowEvents() {
         };
     });
 
+    // ၃။ လက်လီရောင်းဈေး Input Event
     tbody.querySelectorAll(".item-retail").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const retail = parseFloat(e.target.value) || 0;
+            const retail = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].retail_price = retail;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && retail > cost) {
@@ -653,11 +747,15 @@ function attachRowEvents() {
         };
     });
 
+    // ၄။ လက်လီ Margin % Input Event
     tbody.querySelectorAll(".item-retail-pct").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const pct = parseFloat(e.target.value) || 0;
+            const pct = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].retail_margin_pct = pct;
             const newRetail = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
             selectedOrderItems[idx].retail_price = newRetail;
@@ -665,11 +763,15 @@ function attachRowEvents() {
         };
     });
 
+    // ၅။ လက်ကားရောင်းဈေး Input Event
     tbody.querySelectorAll(".item-wholesale").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const wholesale = parseFloat(e.target.value) || 0;
+            const wholesale = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].wholesale_price = wholesale;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && wholesale > cost) {
@@ -680,11 +782,15 @@ function attachRowEvents() {
         };
     });
 
+    // ၆။ လက်ကား Margin % Input Event
     tbody.querySelectorAll(".item-wholesale-pct").forEach(input => {
         input.oninput = (e) => {
+            const normalized = normalizeDigits(e.target.value);
+            if (e.target.value !== normalized) e.target.value = normalized;
+
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const pct = parseFloat(e.target.value) || 0;
+            const pct = parseAnyNumber(e.target.value);
             selectedOrderItems[idx].wholesale_margin_pct = pct;
             const newWholesale = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
             selectedOrderItems[idx].wholesale_price = newWholesale;
@@ -692,6 +798,7 @@ function attachRowEvents() {
         };
     });
 
+    // ၇။ ဖျက်သိမ်းခြင်း Button Event
     tbody.querySelectorAll(".btn-remove-item").forEach(btn => {
         btn.onclick = (e) => {
             const idx = Number(e.currentTarget.dataset.idx);
@@ -701,6 +808,9 @@ function attachRowEvents() {
     });
 }
 
+/**
+ * စုစုပေါင်းတန်ဖိုးများနှင့် အမှန်ပေးငွေ / ကွာခြားချက် Auto Calculator
+ */
 function updateOrderSummary() {
     const totalQty = selectedOrderItems.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
     const grandTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
@@ -710,6 +820,34 @@ function updateOrderSummary() {
 
     if (qtyEl) qtyEl.textContent = totalQty.toLocaleString();
     if (totalEl) totalEl.textContent = `${grandTotal.toLocaleString()} Ks`;
+
+    updateDifference();
+}
+
+function updateDifference() {
+    const grandTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+    const paidInput = document.getElementById("pur-actual-paid");
+    const diffLabel = document.getElementById("pur-diff-label");
+    const diffAmount = document.getElementById("pur-diff-amount");
+
+    if (!paidInput || !diffAmount || !diffLabel) return;
+
+    const actualPaid = parseAnyNumber(paidInput.value);
+    const diff = actualPaid - grandTotal;
+
+    if (diff === 0) {
+        diffLabel.textContent = "Balance (ညီမျှ)";
+        diffAmount.textContent = "0 Ks";
+        diffAmount.className = "text-sm font-black font-mono text-slate-400";
+    } else if (diff > 0) {
+        diffLabel.textContent = "Discount / Return (+)";
+        diffAmount.textContent = `+${diff.toLocaleString()} Ks`;
+        diffAmount.className = "text-sm font-black font-mono text-emerald-500";
+    } else {
+        diffLabel.textContent = "Debt / Balance (-)";
+        diffAmount.textContent = `${diff.toLocaleString()} Ks`;
+        diffAmount.className = "text-sm font-black font-mono text-rose-500";
+    }
 }
 
 // --- Dedicated Create Product Sub-Modal Logic ---
@@ -764,6 +902,7 @@ function submitNewProductSubModal(e) {
 // --- Submit Purchase Order to Backend API ---
 async function submitPurchase() {
     const supplier = document.getElementById("pur-supplier")?.value.trim();
+    const refNo = document.getElementById("pur-ref-no")?.value.trim() || null;
     const paymentMethod = document.getElementById("pur-payment-method")?.value || "cash";
     const bankName = document.getElementById("pur-bank-name")?.value.trim();
     const editId = document.getElementById("pur-edit-id")?.value;
@@ -826,6 +965,7 @@ async function submitPurchase() {
     const payload = {
         branch_id: branchId,
         supplier_name: supplier,
+        ref_no: refNo,
         payment_method: paymentMethod,
         bank_account_name: paymentMethod === "bank" ? bankName : null,
         total_amount: totalAmount,
@@ -848,6 +988,7 @@ async function submitPurchase() {
         }
         closePurchaseModal();
         await loadMasterProducts();
+        await loadSuppliers();
         await loadPurchases();
     } catch (err) {
         ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
@@ -873,7 +1014,7 @@ async function deletePurchase(id) {
 }
 
 /**
- * Purchases စာရင်းအား UI Table Columns အတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
+ * Purchases စာရင်းအား REF ကော်လံပါဝင်သော ၁၆ ကော်လံစနစ်အတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
  */
 function exportPurchasesToCSV() {
     const listToExport = currentFilteredPurchases.length > 0 ? currentFilteredPurchases : purchasesList;
@@ -882,7 +1023,7 @@ function exportPurchasesToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် အဝယ်စာရင်း မရှိသေးပါ။");
     }
 
-    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER\n";
+    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER,REF\n";
 
     listToExport.forEach((pur, idx) => {
         const no = idx + 1;
@@ -904,6 +1045,7 @@ function exportPurchasesToCSV() {
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
         const supplierName = pur.supplier_name || "-";
+        const refNo = pur.ref_no || "-";
 
         const row = [
             no,
@@ -919,7 +1061,8 @@ function exportPurchasesToCSV() {
             ui.escapeCsv(typeStr),
             wholesalePrice,
             retailPrice,
-            ui.escapeCsv(supplierName)
+            ui.escapeCsv(supplierName),
+            ui.escapeCsv(refNo)
         ];
         csvContent += row.join(",") + "\n";
     });

@@ -833,18 +833,29 @@ function updateDifference() {
     if (!paidInput || !diffAmount || !diffLabel) return;
 
     const actualPaid = parseAnyNumber(paidInput.value);
-    const diff = actualPaid - grandTotal;
-
-    if (diff === 0) {
+    
+    // ပေးငွေ မထည့်ရသေးပါက
+    if (!paidInput.value) {
         diffLabel.textContent = "Balance (ညီမျှ)";
         diffAmount.textContent = "0 Ks";
         diffAmount.className = "text-sm font-black font-mono text-slate-400";
+        return;
+    }
+
+    const diff = actualPaid - grandTotal;
+
+    if (diff === 0) {
+        diffLabel.textContent = "Balance (အပြေအကျေ)";
+        diffAmount.textContent = "0 Ks";
+        diffAmount.className = "text-sm font-black font-mono text-slate-400";
     } else if (diff > 0) {
-        diffLabel.textContent = "Discount / Return (+)";
+        // ပစ္စည်းတန်ဖိုးထက် ငွေပိုပေးထားမိခြင်း (ပွဲရုံထံမှ ၄,၀၀၀ ပြန်ရရန်ရှိသည်)
+        diffLabel.textContent = "Overpaid (ပိုပေးငွေ / ပြန်ရရန်)";
         diffAmount.textContent = `+${diff.toLocaleString()} Ks`;
-        diffAmount.className = "text-sm font-black font-mono text-emerald-500";
+        diffAmount.className = "text-sm font-black font-mono text-amber-500";
     } else {
-        diffLabel.textContent = "Debt / Balance (-)";
+        // ပစ္စည်းတန်ဖိုးထက် ငွေလျော့ပေးရခြင်း (အကြွေးကျန်ငွေ သို့မဟုတ် လျှော့ငွေ)
+        diffLabel.textContent = "Debt / Balance (ပေးရန်ကျန်)";
         diffAmount.textContent = `${diff.toLocaleString()} Ks`;
         diffAmount.className = "text-sm font-black font-mono text-rose-500";
     }

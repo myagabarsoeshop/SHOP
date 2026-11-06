@@ -123,8 +123,7 @@ function bindEvents() {
     }
 
     // ၈။ Statement ပရင့်ထုတ်ခြင်း
-    document.getElementById("btn-print-ledger")?.addEventListener("click", () => {
-        window.print();
+    document.getElementById("btn-print-ledger")?.addEventListener("click", printCustomerStatement);
     });
 }
 
@@ -575,3 +574,184 @@ function exportCustomerLedgerToCSV() {
     link.click();
     URL.revokeObjectURL(url);
 }
+
+/**
+ * Customer Statement ကို A4/A5 စာရွက်ပေါ်တွင် သန့်ရှင်းစွာ ပရင့်ထုတ်ပေးသည့် Function
+ */
+function printCustomerStatement() {
+    if (!currentCustomer) {
+        return ui.toast.warning("ပရင့်ထုတ်ရန် ဖောက်သည် မရှိပါ။");
+    }
+
+    const custName = currentCustomer.name || "-";
+    const custPhone = normalizePhoneNumber(currentCustomer.phone) || currentCustomer.phone || "-";
+    const custShop = currentCustomer.shop_name || "-";
+    const custAddress = currentCustomer.address || "-";
+    const currentDebt = Number(currentCustomer.current_debt || 0).toLocaleString();
+    const todayDate = new Date().toLocaleDateString("en-GB");
+
+    // ဇယား အတန်းများ တည်ဆောက်ခြင်း
+    let tableRows = "";
+    if (activeCustomerLedger.length === 0) {
+        tableRows = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #888;">စာရင်းမှတ်တမ်း မရှိသေးပါ</td></tr>`;
+    } else {
+        activeCustomerLedger.forEach((entry, idx) => {
+            const isDebit = entry.type === "DEBIT";
+            let dateStr = "-";
+            if (entry.created_at) {
+                const d = new Date(entry.created_at);
+                dateStr = `${d.toLocaleDateString("en-GB")} ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+            }
+
+            const desc = (entry.reference_note || (isDebit ? "အရောင်းဘောင်ချာ အကြွေးကျန်" : "အကြွေးဆပ်ငွေ")).replace(/\r?\n|\r/g, " ");
+            const method = String(entry.payment_method || (isDebit ? "DEBT" : "CASH")).toUpperCase();
+            const sign = isDebit ? "+" : "-";
+            const amt = Number(entry.amount || 0).toLocaleString();
+            const bal = Number(entry.balance_after || 0).toLocaleString();
+
+            tableRows += `
+                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
+                    <td style="padding: 6px 4px; text-align: center; color: #64748b;">${idx + 1}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace;">${dateStr}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-weight: bold; color: ${isDebit ? '#dc2626' : '#16a34a'};">
+                        ${isDebit ? 'DEBIT (+)' : 'CREDIT (-)'}
+                    </td>
+                    <td style="padding: 6px 8px; text-align: left;">${desc}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; color: #475569;">${method}</td>
+                    <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: bold; color: ${isDebit ? '#dc2626' : '#16a34a'};">
+                        ${sign}${amt}
+                    </td>
+                    <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 800;">
+                        ${bal}
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // သီးသန့် Print Window ဖွင့်လှစ်ခြင်း
+    const printWindow = window.open("", "_blank", "width=900,height=650");
+    if (!printWindow) {
+        return ui.toast.error("Browser pop-up ကို ခွင့်ပြုပေးပါရန်");
+    }
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Statement - ${custName}</title>
+            <style>
+                @page { size: auto; margin: 10mm; }
+                body {
+                    font-family: 'Padauk', 'Myanmar Text', sans-serif;
+                    background: #fff;
+                    color: #0f172a;
+                    margin: 0;
+                    padding: 10px;
+                }
+                .voucher-box {
+                    max-width: 800px;
+                    margin: auto;
+                    border: 1px solid #cbd5e1;
+                    padding: 24px;
+                    border-radius: 8px;
+                }
+                .header-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+                .info-box {
+                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin-bottom: 16px;
+                    font-size: 12px;
+                }
+                .data-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 16px;
+                }
+                .data-table th {
+                    background: #f1f5f9;
+                    color: #334155;
+                    font-size: 11px;
+                    font-weight: 800;
+                    padding: 8px;
+                    border-bottom: 2px solid #cbd5e1;
+                }
+                .footer {
+                    margin-top: 24px;
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 11px;
+                    color: #64748b;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="voucher-box">
+                <!-- Header -->
+                <table class="header-table">
+                    <tr>
+                        <td>
+                            <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a;">မြကမ္ဘာစိုး ပိုးထည်တိုက်</h2>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">CUSTOMER ACCOUNT STATEMENT</div>
+                        </td>
+                        <td style="text-align: right;">
+                            <div style="font-size: 11px; color: #64748b;">ရက်စွဲ: <strong>${todayDate}</strong></div>
+                            <div style="font-size: 13px; font-weight: bold; color: #dc2626; margin-top: 4px;">
+                                လက်ကျန်အကြွေး: ${currentDebt} Ks
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Customer Info -->
+                <div class="info-box">
+                    <table style="width: 100%; font-size: 12px;">
+                        <tr>
+                            <td style="width: 50%;"><strong>ဖောက်သည်အမည်:</strong> ${custName}</td>
+                            <td style="width: 50%;"><strong>ဖုန်းနံပါတ်:</strong> ${custPhone}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 4px;"><strong>ဆိုင်အမည်:</strong> ${custShop}</td>
+                            <td style="padding-top: 4px;"><strong>လိပ်စာ:</strong> ${custAddress}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Ledger Table -->
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30px; text-align: center;">NO</th>
+                            <th style="width: 130px; text-align: center;">DATE & TIME</th>
+                            <th style="width: 90px; text-align: center;">TYPE</th>
+                            <th style="text-align: left;">DESCRIPTION / REF</th>
+                            <th style="width: 60px; text-align: center;">METHOD</th>
+                            <th style="width: 100px; text-align: right;">AMOUNT</th>
+                            <th style="width: 100px; text-align: right;">BALANCE (Ks)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+
+                <!-- Signatures -->
+                <div class="footer" style="margin-top: 40px; padding-top: 20px;">
+                    <div>စာရင်းကိုင်လက်မှတ်: __________________</div>
+                    <div>ဖောက်သည်လက်မှတ်: __________________</div>
+                </div>
+            </div>
+            <script>
+                window.onload = function() {
+                    window.print();
+                    setTimeout(function() { window.close(); }, 500);
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+

@@ -211,7 +211,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (Compact One-Line View: h-11 whitespace-nowrap)
+ * Purchases History Table Rendering (Compact One-Line View: h-12 whitespace-nowrap)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -272,9 +272,7 @@ function renderPurchasesTable() {
             </div>
         `;
 
-        const row = document.createElement("tr");
-        
-        // Row Height ကို h-12 ထားရှိပြီး text-xs အား ဖြုတ်ပယ်ထားပါသည်
+        // Row Height ကို Customers & Debt အတိုင်း h-12 ထားရှိပြီး စာလုံးအရွယ်အစားများ ညှိထားခြင်း
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap border-b border-slate-100 dark:border-slate-800/60";
         row.innerHTML = `

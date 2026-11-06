@@ -1,7 +1,8 @@
 // cashbook-frontend/js/modules/purchases.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
+import { ui } from "../core/ui.js"; // Standardized UI components (Toast, Confirm, escapeHtml, escapeCsv)
+import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let purchasesList = [];
@@ -9,17 +10,28 @@ let currentFilteredPurchases = [];
 let masterProducts = [];
 let selectedOrderItems = [];
 
+// စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderPurchasesTable()
 });
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+/**
+ * VR NO အား DDMMYY-01 ပုံစံသို့ စနစ်တကျ ပြောင်းလဲဖော်ပြသည့် Helper
+ */
+function formatVRNo(pur, index) {
+    if (pur.vr_no && /^\d{6}-\d{2,}$/.test(pur.vr_no)) return pur.vr_no;
+    
+    const d = pur.created_at ? new Date(pur.created_at) : new Date();
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    
+    // purchase_id သို့မဟုတ် row index ပေါ် မူတည်၍ 2-digit sequence ထုတ်ပေးခြင်း
+    const seqNum = pur.purchase_id || pur.id || (index + 1);
+    const seq = String(seqNum % 100 || index + 1).padStart(2, "0");
+    
+    return `${dd}${mm}${yy}-${seq}`;
 }
 
 export async function initPurchases() {
@@ -29,11 +41,28 @@ export async function initPurchases() {
 }
 
 function bindEvents() {
+    // Toolbar Buttons
     document.getElementById("btn-add-purchase")?.addEventListener("click", () => openPurchaseModal());
     document.getElementById("btn-close-purchase-modal")?.addEventListener("click", closePurchaseModal);
     document.getElementById("btn-cancel-purchase")?.addEventListener("click", closePurchaseModal);
     document.getElementById("btn-submit-purchase")?.addEventListener("click", submitPurchase);
     document.getElementById("pur-search")?.addEventListener("input", filterAndRenderPurchases);
+
+    // Refresh Button
+    const refreshBtn = document.getElementById("btn-refresh-purchases");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            icon?.classList.add("fa-spin");
+            await loadMasterProducts();
+            await loadPurchases();
+            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            ui.toast.info("အဝယ်စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
+        });
+    }
+
+    // Export CSV Button
+    document.getElementById("btn-export-purchases-csv")?.addEventListener("click", exportPurchasesToCSV);
 
     // Payment Method Change
     document.getElementById("pur-payment-method")?.addEventListener("change", (e) => {
@@ -105,14 +134,14 @@ function populateCategoryFilters() {
     if (catSelect) {
         catSelect.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${categories.length})</option>`;
         categories.forEach(c => {
-            catSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+            catSelect.innerHTML += `<option value="${ui.escapeHtml(c)}">${ui.escapeHtml(c)}</option>`;
         });
     }
 
     if (datalist) {
         datalist.innerHTML = "";
         categories.forEach(c => {
-            datalist.innerHTML += `<option value="${escapeHtml(c)}">`;
+            datalist.innerHTML += `<option value="${ui.escapeHtml(c)}">`;
         });
     }
 }
@@ -120,7 +149,14 @@ function populateCategoryFilters() {
 async function loadPurchases() {
     const tbody = document.getElementById("pur-table-body");
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="13" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="15" class="p-16 text-center text-slate-400">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
+                    <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
+                </td>
+            </tr>
+        `;
     }
 
     try {
@@ -128,11 +164,35 @@ async function loadPurchases() {
         const res = await api.get("/purchases", { branch_id: branchId });
         purchasesList = res.data || [];
         currentFilteredPurchases = [...purchasesList];
+
+        // ၄-KPI Boxes တန်ဖိုးများ တွက်ချက်ခြင်း
+        const uniqueOrders = new Set(purchasesList.map(p => p.purchase_id || p.id)).size;
+        const totalItemsQty = purchasesList.reduce((sum, p) => sum + Number(p.quantity || 0), 0);
+        
+        let cashPurchasesTotal = 0;
+        let creditPurchasesTotal = 0;
+
+        purchasesList.forEach(p => {
+            const lineAmt = Number(p.subtotal || (Number(p.quantity || 0) * Number(p.unit_cost || 0)));
+            const method = String(p.payment_method || "cash").toLowerCase();
+            if (method === "credit") {
+                creditPurchasesTotal += lineAmt;
+            } else {
+                cashPurchasesTotal += lineAmt;
+            }
+        });
+
+        // Standard 4-KPI Boxes (Total Purchases, Purchase Items, Cash Purchases, Credit Purchases)
+        setKPI(1, "Total Purchases", uniqueOrders, "fa-file-invoice-dollar", "blue");
+        setKPI(2, "Purchase Items", totalItemsQty, "fa-boxes-stacked", "emerald");
+        setKPI(3, "Cash Purchases", cashPurchasesTotal, "fa-money-bill-wave", "purple");
+        setKPI(4, "Credit Purchases", creditPurchasesTotal, "fa-hand-holding-dollar", "amber");
+
         pagination.reset();
         renderPurchasesTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="13" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="15" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -142,7 +202,7 @@ function filterAndRenderPurchases() {
 
     currentFilteredPurchases = purchasesList.filter(p => {
         if (!kw) return true;
-        const hay = `${p.purchase_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.supplier_name || ""}`.toLowerCase();
+        const hay = `${p.purchase_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.category || ""} ${p.color || ""} ${p.supplier_name || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
@@ -150,84 +210,119 @@ function filterAndRenderPurchases() {
     renderPurchasesTable();
 }
 
+/**
+ * Purchases History Table Rendering (Compact One-Line View: h-11 whitespace-nowrap)
+ */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (currentFilteredPurchases.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-slate-400 font-bold text-base">အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="15" class="p-16 text-center text-slate-400 text-xs font-bold">
+                    <i class="fa-solid fa-cart-flatbed text-3xl mb-3 opacity-30"></i>
+                    <div>အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</div>
+                </td>
+            </tr>
+        `;
         pagination.renderControls("purchases-pagination");
         return;
     }
 
     const pageItems = pagination.getPageItems(currentFilteredPurchases);
+    const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
-    pageItems.forEach(pur => {
+    pageItems.forEach((pur, idx) => {
         const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
-        
-        let paymentBadge = "";
-        if (pur.payment_method === "cash") {
-            paymentBadge = `<span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold">လက်ငင်း</span>`;
-        } else if (pur.payment_method === "bank") {
-            paymentBadge = `<span class="px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold">ဘဏ် (${escapeHtml(pur.bank_account_name || "Bank")})</span>`;
-        } else {
-            paymentBadge = `<span class="px-2.5 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold">အကြွေး</span>`;
+        const vrNo = formatVRNo(pur, startIdx + idx);
+        const barcodeStr = pur.barcode || pur.sku || "-";
+
+        // Method: CASH သို့မဟုတ် BANK
+        const rawMethod = String(pur.payment_method || "cash").toLowerCase();
+        let methodStr = "CASH";
+        if (rawMethod === "bank") {
+            methodStr = "BANK";
+        } else if (rawMethod === "credit") {
+            methodStr = "-";
         }
 
-        const unitDisplay = pur.size || "ထည်";
+        // Type: လက်ငင်းဝယ်ယူမှု (CASH) သို့မဟုတ် အကြွေးဝယ်ယူမှု (CREDIT)
+        const isCredit = rawMethod === "credit";
+        const typeStr = isCredit ? "CREDIT" : "CASH";
 
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
-        tr.innerHTML = `
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-blue-600 dark:text-blue-400 text-sm">${escapeHtml(pur.purchase_no || "-")}</div>
-                <div class="text-xs text-slate-400">${dateStr}</div>
-            </td>
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(pur.sku || "-")}</div>
-                <div class="text-xs">${escapeHtml(pur.barcode || "")}</div>
-            </td>
-            <td class="p-4">
-                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
-                    ${escapeHtml(pur.category || "-")}
-                </span>
-            </td>
-            <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(pur.item_name || "-")}</div>
-                <div class="text-sm text-slate-400">${escapeHtml(pur.pattern || "-")}</div>
-            </td>
-            <td class="p-4 text-sm">
-                <div class="font-bold text-slate-700 dark:text-slate-300">${escapeHtml(pur.color || "-")}</div>
-                <div class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">${escapeHtml(unitDisplay)}</div>
-            </td>
-            <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                    ${Number(pur.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(unitDisplay)}</span>
-                </span>
-            </td>
-            <td class="p-4 text-center">${paymentBadge}</td>
-            <td class="p-4 text-right font-mono text-base text-slate-500">${Number(pur.unit_cost || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(pur.retail_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(pur.wholesale_price || 0).toLocaleString()}</td>
-            <td class="p-4 font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(pur.supplier_name || "-")}</td>
-            <td class="p-4 text-center">
-                <span class="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold uppercase">
-                    ${escapeHtml(pur.status || "COMPLETED")}
-                </span>
-            </td>
-            <td class="p-4 text-center">
-                <div class="flex items-center justify-center gap-1.5">
-                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" class="btn-edit-pur w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
-                        <i class="fa-solid fa-pen-to-square text-xs"></i>
-                    </button>
-                    <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်ညှိမည်" class="btn-delete-pur w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
-                        <i class="fa-solid fa-trash-can text-xs"></i>
-                    </button>
-                </div>
+        const unitCost = Number(pur.unit_cost || 0);
+        const qty = Number(pur.quantity || 0);
+        const amount = Number(pur.subtotal || (unitCost * qty));
+        const wholesalePrice = Number(pur.wholesale_price || 0);
+        const retailPrice = Number(pur.retail_price || 0);
+
+        // Action Buttons: Dark Mode တွင် ပီပြင်သော Square Box Buttons (w-7 h-7)
+        const actionButtons = `
+            <div class="flex items-center justify-center gap-1.5">
+                <button type="button" data-id="${pur.purchase_id || pur.id}" title="ပြင်ဆင်မည်" 
+                    class="btn-edit-pur w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                </button>
+                <button type="button" data-id="${pur.purchase_id || pur.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်ညှိမည်" 
+                    class="btn-delete-pur w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+            </div>
+        `;
+
+        const row = document.createElement("tr");
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap text-xs border-b border-slate-100 dark:border-slate-800/60";
+        row.innerHTML = `
+            <!-- 1. NO -->
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400 w-12">${startIdx + idx + 1}</td>
+            
+            <!-- 2. DATE (Left) -->
+            <td class="py-2.5 px-3 text-left font-mono font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
+            
+            <!-- 3. VR NO: 061126-01 စံနှုန်း (Left) -->
+            <td class="py-2.5 px-3 text-left font-mono font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
+            
+            <!-- 4. BARCODE (Left) -->
+            <td class="py-2.5 px-3 text-left font-mono text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
+            
+            <!-- 5. CATEGORY (Left) -->
+            <td class="py-2.5 px-4 text-left font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
+            
+            <!-- 6. ITEM NAME (Left) -->
+            <td class="py-2.5 px-4 text-left font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
+            
+            <!-- 7. COLOR (Left) -->
+            <td class="py-2.5 px-3 text-left text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
+            
+            <!-- 8. UNIT PRICE (Right) -->
+            <td class="py-2.5 px-4 text-right font-mono text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
+            
+            <!-- 9. AMOUNT (Right) -->
+            <td class="py-2.5 px-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
+            
+            <!-- 10. METHOD: CASH / BANK (Left) -->
+            <td class="py-2.5 px-3 text-left font-mono font-bold text-slate-600 dark:text-slate-400 w-24">${methodStr}</td>
+            
+            <!-- 11. TYPE: CASH / CREDIT (Left) -->
+            <td class="py-2.5 px-3 text-left font-mono font-bold w-24 ${isCredit ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">${typeStr}</td>
+            
+            <!-- 12. WHOLESALE (Right) -->
+            <td class="py-2.5 px-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
+            
+            <!-- 13. RETAIL (Right) -->
+            <td class="py-2.5 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
+            
+            <!-- 14. SUPPLIER (Left) -->
+            <td class="py-2.5 px-4 text-left font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
+            
+            <!-- 15. ACTION (Sticky Right) -->
+            <td class="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
+                ${actionButtons}
             </td>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
     });
 
     tbody.querySelectorAll(".btn-edit-pur").forEach(btn => {
@@ -348,8 +443,8 @@ function renderQuickSuggestions() {
             <div class="p-6 text-center text-slate-400">
                 <i class="fa-solid fa-box-open text-2xl mb-2 opacity-50"></i>
                 <div class="text-xs font-bold mb-2">ကိုက်ညီသော ပစ္စည်း ရှာမတွေ့ပါ</div>
-                <button type="button" id="btn-quick-create-from-search" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer">
-                    + "${escapeHtml(kw)}" ဖြင့် အသစ်မှတ်ပုံတင်မည်
+                <button type="button" id="btn-quick-create-from-search" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer active:scale-95">
+                    + "${ui.escapeHtml(kw)}" ဖြင့် အသစ်မှတ်ပုံတင်မည်
                 </button>
             </div>
         `;
@@ -364,18 +459,18 @@ function renderQuickSuggestions() {
             card.innerHTML = `
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-xs shrink-0">
-                        ${escapeHtml((p.category || "Item").slice(0, 2))}
+                        ${ui.escapeHtml((p.category || "Item").slice(0, 2))}
                     </div>
                     <div>
-                        <div class="font-extrabold text-slate-900 dark:text-white text-xs">${escapeHtml(p.item_name)}</div>
+                        <div class="font-extrabold text-slate-900 dark:text-white text-xs">${ui.escapeHtml(p.item_name)}</div>
                         <div class="text-[11px] text-slate-400 font-mono">
-                            ${escapeHtml(p.sku || "-")} • <span class="text-emerald-500 font-bold">${escapeHtml(p.category || "-")}</span> ${p.color ? `• ${escapeHtml(p.color)}` : ''}
+                            ${ui.escapeHtml(p.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(p.category || "-")}</span> ${p.color ? `• ${ui.escapeHtml(p.color)}` : ''}
                         </div>
                     </div>
                 </div>
                 <div class="text-right">
                     <div class="font-mono font-bold text-slate-700 dark:text-slate-300 text-xs">ဝယ်ရင်း: ${Number(p.cost_price || 0).toLocaleString()} Ks</div>
-                    <div class="text-[10px] text-slate-400">လက်ရှိစတော့: ${Number(p.current_stock || 0).toLocaleString()} ${escapeHtml(p.size || 'ထည်')}</div>
+                    <div class="text-[10px] text-slate-400">လက်ရှိစတော့: ${Number(p.current_stock || 0).toLocaleString()} ${ui.escapeHtml(p.size || 'ထည်')}</div>
                 </div>
             `;
             card.onclick = () => {
@@ -423,9 +518,6 @@ function addOrderItem(prod, isNew = false) {
     renderOrderItemsTable();
 }
 
-/**
- * Table DOM Rendering (Row အသစ်ထည့်ခြင်းနှင့် ဖျက်ခြင်းတို့တွင်သာ ခေါ်သည်)
- */
 function renderOrderItemsTable() {
     const tbody = document.getElementById("pur-items-container");
     const rowCountEl = document.getElementById("pur-row-count");
@@ -456,10 +548,10 @@ function renderOrderItemsTable() {
         tr.innerHTML = `
             <td class="p-3.5 text-center text-slate-400 font-mono">${index + 1}</td>
             <td class="p-3.5">
-                <div class="font-extrabold text-slate-900 dark:text-white text-xs">${escapeHtml(item.item_name)}</div>
+                <div class="font-extrabold text-slate-900 dark:text-white text-xs">${ui.escapeHtml(item.item_name)}</div>
                 <div class="text-[11px] text-slate-400 font-mono">
-                    ${escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${escapeHtml(item.category || "-")}</span>
-                    ${item.color ? `• ${escapeHtml(item.color)}` : ''} (${escapeHtml(item.size || 'ထည်')})
+                    ${ui.escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(item.category || "-")}</span>
+                    ${item.color ? `• ${ui.escapeHtml(item.color)}` : ''} (${ui.escapeHtml(item.size || 'ထည်')})
                 </div>
             </td>
             <td class="p-3.5 text-center">
@@ -751,7 +843,7 @@ async function submitPurchase() {
             ui.toast.success("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
         } else {
             const res = await api.post("/purchases", payload);
-            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (INV: ${res.data?.purchaseNo || 'OK'})`);
+            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (VR: ${res.data?.purchaseNo || 'OK'})`);
         }
         closePurchaseModal();
         await loadMasterProducts();
@@ -777,4 +869,65 @@ async function deletePurchase(id) {
     } catch (err) {
         ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
+}
+
+/**
+ * Purchases စာရင်းအား UI Table Columns အတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
+ */
+function exportPurchasesToCSV() {
+    const listToExport = currentFilteredPurchases.length > 0 ? currentFilteredPurchases : purchasesList;
+
+    if (listToExport.length === 0) {
+        return ui.toast.warning("ထုတ်ယူရန် အဝယ်စာရင်း မရှိသေးပါ။");
+    }
+
+    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER\n";
+
+    listToExport.forEach((pur, idx) => {
+        const no = idx + 1;
+        const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
+        const vrNo = formatVRNo(pur, idx);
+        const barcodeStr = pur.barcode || pur.sku || "-";
+        const categoryStr = pur.category || "-";
+        const itemName = pur.item_name || "-";
+        const color = pur.color || "-";
+        const unitCost = Number(pur.unit_cost || 0);
+        const amount = Number(pur.subtotal || (unitCost * Number(pur.quantity || 0)));
+
+        const rawMethod = String(pur.payment_method || "cash").toLowerCase();
+        let methodStr = "CASH";
+        if (rawMethod === "bank") methodStr = "BANK";
+        else if (rawMethod === "credit") methodStr = "-";
+
+        const typeStr = rawMethod === "credit" ? "CREDIT" : "CASH";
+        const wholesalePrice = Number(pur.wholesale_price || 0);
+        const retailPrice = Number(pur.retail_price || 0);
+        const supplierName = pur.supplier_name || "-";
+
+        const row = [
+            no,
+            ui.escapeCsv(dateStr),
+            ui.escapeCsv(vrNo),
+            ui.escapeCsv(barcodeStr),
+            ui.escapeCsv(categoryStr),
+            ui.escapeCsv(itemName),
+            ui.escapeCsv(color),
+            unitCost,
+            amount,
+            ui.escapeCsv(methodStr),
+            ui.escapeCsv(typeStr),
+            wholesalePrice,
+            retailPrice,
+            ui.escapeCsv(supplierName)
+        ];
+        csvContent += row.join(",") + "\n";
+    });
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Purchases_Summary_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
 }

@@ -273,52 +273,55 @@ function renderPurchasesTable() {
         `;
 
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap text-xs border-b border-slate-100 dark:border-slate-800/60";
+        
+        // Row Height ကို h-12 ထားရှိပြီး text-xs အား ဖြုတ်ပယ်ထားပါသည်
+        const row = document.createElement("tr");
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap border-b border-slate-100 dark:border-slate-800/60";
         row.innerHTML = `
-            <!-- 1. NO -->
-            <td class="py-2.5 px-3 text-center font-mono text-slate-400 w-12">${startIdx + idx + 1}</td>
+            <!-- 1. NO: text-xs -->
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
-            <!-- 2. DATE (Left) -->
-            <td class="py-2.5 px-3 text-left font-mono font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
+            <!-- 2. DATE: text-xs -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
-            <!-- 3. VR NO: 061126-01 စံနှုန်း (Left) -->
-            <td class="py-2.5 px-3 text-left font-mono font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
+            <!-- 3. VR NO: text-xs font-bold -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
             
-            <!-- 4. BARCODE (Left) -->
-            <td class="py-2.5 px-3 text-left font-mono text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
+            <!-- 4. BARCODE: text-xs -->
+            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
             
-            <!-- 5. CATEGORY (Left) -->
-            <td class="py-2.5 px-4 text-left font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
+            <!-- 5. CATEGORY: မြန်မာစာ text-base font-semibold (Customers စံနှုန်း) -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
             
-            <!-- 6. ITEM NAME (Left) -->
-            <td class="py-2.5 px-4 text-left font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
+            <!-- 6. ITEM NAME: မြန်မာစာ text-base font-bold (Customers စံနှုန်း) -->
+            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
             
-            <!-- 7. COLOR (Left) -->
-            <td class="py-2.5 px-3 text-left text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
+            <!-- 7. COLOR: မြန်မာစာ text-base font-medium (Customers စံနှုန်း) -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
             
-            <!-- 8. UNIT PRICE (Right) -->
-            <td class="py-2.5 px-4 text-right font-mono text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
+            <!-- 8. UNIT PRICE: text-base font-mono (Customers စံနှုန်း) -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
             
-            <!-- 9. AMOUNT (Right) -->
-            <td class="py-2.5 px-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
+            <!-- 9. AMOUNT: text-base font-mono font-black (Customers စံနှုန်း) -->
+            <td class="py-2 px-4 text-right font-mono text-base font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
             
-            <!-- 10. METHOD: CASH / BANK (Left) -->
-            <td class="py-2.5 px-3 text-left font-mono font-bold text-slate-600 dark:text-slate-400 w-24">${methodStr}</td>
+            <!-- 10. METHOD: text-xs font-mono -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-24">${methodStr}</td>
             
-            <!-- 11. TYPE: CASH / CREDIT (Left) -->
-            <td class="py-2.5 px-3 text-left font-mono font-bold w-24 ${isCredit ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">${typeStr}</td>
+            <!-- 11. TYPE: text-xs font-mono -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold w-24 ${isCredit ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">${typeStr}</td>
             
-            <!-- 12. WHOLESALE (Right) -->
-            <td class="py-2.5 px-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
+            <!-- 12. WHOLESALE: text-base font-mono font-bold -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
             
-            <!-- 13. RETAIL (Right) -->
-            <td class="py-2.5 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
+            <!-- 13. RETAIL: text-base font-mono font-bold -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
             
-            <!-- 14. SUPPLIER (Left) -->
-            <td class="py-2.5 px-4 text-left font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
+            <!-- 14. SUPPLIER: မြန်မာစာ text-base font-semibold (Customers စံနှုန်း) -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
             
             <!-- 15. ACTION (Sticky Right) -->
-            <td class="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
         `;

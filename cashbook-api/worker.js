@@ -598,7 +598,7 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN
+            // 5. PURCHASES & STOCK IN (VR NO: DDMMYY-01 STANDARD)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
@@ -608,6 +608,7 @@ export default {
                         pi.id AS item_row_id,
                         p.id AS purchase_id,
                         p.purchase_no,
+                        p.purchase_no AS vr_no,
                         p.supplier_name,
                         p.payment_method,
                         p.bank_account_name,
@@ -641,15 +642,33 @@ export default {
                 const body = await request.json().catch(() => ({}));
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
 
-                const dateStr = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-                const purchaseNo = `PO-${targetBranch}-${dateStr}`;
+                // ၁။ VR NO အား DDMMYY-01 ပုံစံဖြင့် နေ့စဉ် Auto Sequence ထုတ်ယူခြင်း
+                const mmToday = getMyanmarTodayDate(); // YYYY-MM-DD
+                const [yyyy, mth, day] = mmToday.split("-");
+                const prefix = `${day}${mth}${yyyy.slice(-2)}`; // ဥပမာ - 061126
 
+                // ယနေ့အတွက် ထွက်ထားသော နောက်ဆုံး VR NO ကို ရှာဖွေပြီး နံပါတ်စဉ် (၀၁၊ ၀၂...) တိုးခြင်း
+                const lastPo = await env.DB.prepare(
+                    "SELECT purchase_no FROM purchases WHERE purchase_no LIKE ? AND branch_id = ? ORDER BY id DESC LIMIT 1"
+                ).bind(`${prefix}-%`, targetBranch).first();
+
+                let nextSeq = "01";
+                if (lastPo && lastPo.purchase_no) {
+                    const parts = lastPo.purchase_no.split("-");
+                    const lastNum = parseInt(parts[parts.length - 1], 10);
+                    if (!isNaN(lastNum)) {
+                        nextSeq = String(lastNum + 1).padStart(2, "0");
+                    }
+                }
+                const purchaseNo = `${prefix}-${nextSeq}`; // ရလဒ်: 061126-01
+
+                // ၂။ purchases ဇယားထဲသို့ စာရင်းသွင်းခြင်း
                 const purRes = await env.DB.prepare(`
                     INSERT INTO purchases (purchase_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 `).bind(
                     purchaseNo, targetBranch, String(body.supplier_name), 
-                    parseFloat(body.total_amount), String(body.payment_method), 
+                    parseFloat(body.total_amount), String(body.payment_method).toLowerCase(), 
                     body.bank_account_name || null, currentUserId
                 ).run();
 
@@ -666,7 +685,7 @@ export default {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `).bind(
                             np.sku || null, null, String(np.category), String(np.item_name),
-                            null, np.size || "ထည်", np.color || null,
+                            np.pattern || null, np.size || "ထည်", np.color || null,
                             parseFloat(item.unit_cost), parseFloat(item.retail_price), parseFloat(item.wholesale_price)
                         ).run();
 
@@ -694,16 +713,17 @@ export default {
                     );
                 }
 
-                if (body.payment_method !== "credit") {
+                // ၃။ အကြွေးမဟုတ်ပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (entry_date ပါဝင်စေခြင်း)
+                if (String(body.payment_method).toLowerCase() !== "credit") {
                     const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
                     batchStatements.push(
                         env.DB.prepare(`
-                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, created_by)
-                            VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?)
+                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?)
                         `).bind(
-                            targetBranch, newPurId, String(body.payment_method), 
+                            targetBranch, newPurId, String(body.payment_method).toLowerCase(), 
                             body.bank_account_name || null, parseFloat(body.total_amount), 
-                            desc, currentUserId
+                            desc, mmToday, currentUserId
                         )
                     );
                 }
@@ -732,6 +752,7 @@ export default {
                 const { results: oldItems } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const batch = [];
 
+                // ယခင် စတော့အရေအတွက်များ နုတ်ယူခြင်း
                 (oldItems || []).forEach(it => {
                     batch.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
@@ -766,22 +787,27 @@ export default {
                         .bind(supplierName, newTotalAmount, paymentMethod, bankAccountName, purId)
                 );
 
+                // Cashbook Entry အား အမှားအယွင်းမရှိစေရန် Re-sync ပြုလုပ်ခြင်း
+                batch.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
+
                 if (paymentMethod !== "credit") {
+                    const mmToday = getMyanmarTodayDate();
                     batch.push(
                         env.DB.prepare(`
-                            UPDATE cashbook_entries 
-                            SET amount = ?, payment_method = ?, bank_account_name = ?, description = ?
-                            WHERE purchase_id = ?
-                        `).bind(newTotalAmount, paymentMethod, bankAccountName, `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}`, purId)
+                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            Number(branchId), purId, paymentMethod, bankAccountName, newTotalAmount,
+                            `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}`, mmToday, currentUserId
+                        )
                     );
-                } else {
-                    batch.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
                 }
 
                 await env.DB.batch(batch);
                 return jsonResponse({ message: "အဝယ်စာရင်း ပြင်ဆင်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
             }
 
+            // 5.2. PURCHASES DELETE (အဝယ်စာရင်း ပယ်ဖျက်ခြင်း)
             if (path.startsWith("/api/purchases/") && method === "DELETE") {
                 const purId = Number(path.split("/").pop());
 

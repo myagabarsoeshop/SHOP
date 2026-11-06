@@ -122,9 +122,8 @@ function bindEvents() {
         });
     }
 
-    // ၈။ Statement ပရင့်ထုတ်ခြင်း
+    // ၈။ Statement ပရင့်ထုတ်ခြင်း (ကွင်းပိတ်အပိုအား ဖယ်ရှားပြီးဖြစ်သည်)
     document.getElementById("btn-print-ledger")?.addEventListener("click", printCustomerStatement);
-    });
 }
 
 async function loadCustomers() {
@@ -593,7 +592,7 @@ function printCustomerStatement() {
     // ဇယား အတန်းများ တည်ဆောက်ခြင်း
     let tableRows = "";
     if (activeCustomerLedger.length === 0) {
-        tableRows = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #888;">စာရင်းမှတ်တမ်း မရှိသေးပါ</td></tr>`;
+        tableRows = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #888;">စာရင်းမှတ်တမ်း မရှိသေးပါ</td></tr>`;
     } else {
         activeCustomerLedger.forEach((entry, idx) => {
             const isDebit = entry.type === "DEBIT";
@@ -754,4 +753,3 @@ function printCustomerStatement() {
     `);
     printWindow.document.close();
 }
-

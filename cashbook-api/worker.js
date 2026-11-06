@@ -598,7 +598,7 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN (VR NO: DDMMYY-01 STANDARD)
+            // 5. PURCHASES & STOCK IN (VR NO: DDMMYY-01 & REF NO STANDARD)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
@@ -609,6 +609,7 @@ export default {
                         p.id AS purchase_id,
                         p.purchase_no,
                         p.purchase_no AS vr_no,
+                        p.ref_no,
                         p.supplier_name,
                         p.payment_method,
                         p.bank_account_name,
@@ -661,13 +662,14 @@ export default {
                     }
                 }
                 const purchaseNo = `${prefix}-${nextSeq}`; // ရလဒ်: 061126-01
+                const refNo = body.ref_no ? String(body.ref_no).trim() : null;
 
-                // ၂။ purchases ဇယားထဲသို့ စာရင်းသွင်းခြင်း
+                // ၂။ purchases ဇယားထဲသို့ ref_no အပါအဝင် စာရင်းသွင်းခြင်း
                 const purRes = await env.DB.prepare(`
-                    INSERT INTO purchases (purchase_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO purchases (purchase_no, ref_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    purchaseNo, targetBranch, String(body.supplier_name), 
+                    purchaseNo, refNo, targetBranch, String(body.supplier_name), 
                     parseFloat(body.total_amount), String(body.payment_method).toLowerCase(), 
                     body.bank_account_name || null, currentUserId
                 ).run();
@@ -713,9 +715,9 @@ export default {
                     );
                 }
 
-                // ၃။ အကြွေးမဟုတ်ပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (entry_date ပါဝင်စေခြင်း)
+                // ၃။ အကြွေးမဟုတ်ပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (entry_date နှင့် ref_no ပါဝင်စေခြင်း)
                 if (String(body.payment_method).toLowerCase() !== "credit") {
-                    const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}`;
+                    const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ''}`;
                     batchStatements.push(
                         env.DB.prepare(`
                             INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
@@ -737,6 +739,7 @@ export default {
                 const purId = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
                 const supplierName = String(body.supplier_name || "").trim();
+                const refNo = body.ref_no ? String(body.ref_no).trim() : null;
                 const paymentMethod = String(body.payment_method || "cash").toLowerCase();
                 const bankAccountName = body.bank_account_name || null;
                 const items = body.items || [];
@@ -782,9 +785,10 @@ export default {
                     );
                 }
 
+                // ref_no အပါအဝင် purchases ကို Update လုပ်ခြင်း
                 batch.push(
-                    env.DB.prepare("UPDATE purchases SET supplier_name = ?, total_amount = ?, payment_method = ?, bank_account_name = ? WHERE id = ?")
-                        .bind(supplierName, newTotalAmount, paymentMethod, bankAccountName, purId)
+                    env.DB.prepare("UPDATE purchases SET supplier_name = ?, ref_no = ?, total_amount = ?, payment_method = ?, bank_account_name = ? WHERE id = ?")
+                        .bind(supplierName, refNo, newTotalAmount, paymentMethod, bankAccountName, purId)
                 );
 
                 // Cashbook Entry အား အမှားအယွင်းမရှိစေရန် Re-sync ပြုလုပ်ခြင်း
@@ -798,7 +802,7 @@ export default {
                             VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?)
                         `).bind(
                             Number(branchId), purId, paymentMethod, bankAccountName, newTotalAmount,
-                            `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}`, mmToday, currentUserId
+                            `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}${refNo ? ` (Ref: ${refNo})` : ''}`, mmToday, currentUserId
                         )
                     );
                 }
@@ -830,7 +834,6 @@ export default {
                 await env.DB.batch(batchRollback);
                 return jsonResponse({ message: "အဝယ်စာရင်း ဖျက်သိမ်းပြီး စတော့နှင့် ငွေစာရင်း ပြန်ညှိပြီးပါပြီ။" });
             }
-
             // =================================================================
             // 6. DAMAGE & WASTE LOGS
             // =================================================================

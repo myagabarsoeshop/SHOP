@@ -1,8 +1,8 @@
 -- =============================================================================
 -- DATABASE SCHEMA: MULTI-STORE GARMENT POS, INVENTORY & CASHBOOK SYSTEM
 -- Target Database: Cloudflare D1 (SQLite)
--- Version: 2.1.0
--- Architecture: Multi-Branch, Centralized Customer Ledger, Dual-Channel Cash/Bank
+-- Version: 2.2.0 (Updated: Purchases Ref, Difference & Supplier Liabilities)
+-- Architecture: Multi-Branch, Centralized Customer/Supplier Ledger, Dual-Channel Cash/Bank
 -- =============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -37,21 +37,24 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- -----------------------------------------------------------------------------
--- 3. CUSTOMERS & CENTRALIZED DEBT LEDGER (ဖောက်သည်နှင့် အကြွေးစာရင်း)
+-- 3. CUSTOMERS, SUPPLIERS & DEBT/LIABILITIES LEDGER (ဖောက်သည်နှင့် ပွဲရုံကြွေးမြီ)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     phone TEXT UNIQUE,
-    shop_name TEXT,                                  -- လက်ကားဆိုင် အမည် (optional)
+    shop_name TEXT,                                  -- လက်ကားဆိုင် သို့မဟုတ် ပွဲရုံအမည်
+    entity_type TEXT NOT NULL DEFAULT 'CUSTOMER' CHECK(entity_type IN ('CUSTOMER', 'SUPPLIER', 'BOTH')), -- ဖောက်သည် သို့ ပွဲရုံ
     customer_type TEXT NOT NULL DEFAULT 'retail' CHECK(customer_type IN ('retail', 'wholesale')),
     credit_limit REAL NOT NULL DEFAULT 0.0,          -- အများဆုံး ခွင့်ပြုထားသည့် အကြွေးပမာဏ
-    current_debt REAL NOT NULL DEFAULT 0.0,          -- ပေးရန်ကျန် လက်ရှိ စုစုပေါင်း အကြွေး
+    current_debt REAL NOT NULL DEFAULT 0.0,          -- ဖောက်သည်ထံမှ ရရန်ရှိငွေ (Receivables)
+    current_payable REAL NOT NULL DEFAULT 0.0,       -- ပွဲရုံသို့ ပေးရန်ကျန်ငွေ / စရန်ပိုငွေ (Payables)
     address TEXT,
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ဖောက်သည် အကြွေးစာရင်း (Customer Receivable Ledger)
 CREATE TABLE IF NOT EXISTS customer_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
@@ -63,6 +66,22 @@ CREATE TABLE IF NOT EXISTS customer_ledger (
     payment_method TEXT CHECK(payment_method IN ('cash', 'bank')),
     bank_account_name TEXT,                          -- e.g., 'KPay', 'CB Bank', 'KBZ Bank'
     reference_note TEXT,                             -- e.g., 'INV-SH1-202610-001 အကြွေးဆပ်'
+    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ပွဲရုံ/ကုန်ပေးသွင်းသူ အကြွေးမှတ်တမ်း (Supplier Payable Ledger)
+CREATE TABLE IF NOT EXISTS supplier_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+    purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
+    type TEXT NOT NULL CHECK(type IN ('PURCHASE_DEBT', 'PAYMENT', 'ADJUSTMENT')), -- PURCHASE_DEBT = အကြွေးဝယ်, PAYMENT = ပွဲရုံကြွေးဆပ်
+    amount REAL NOT NULL CHECK(amount > 0),
+    balance_after REAL NOT NULL,                     -- ပွဲရုံသို့ ပေးရန်ကျန်ငွေ လက်ကျန်
+    payment_method TEXT CHECK(payment_method IN ('cash', 'bank')),
+    bank_account_name TEXT,
+    reference_note TEXT,                             -- e.g., 'VR-061126-01 အဝယ်ကြွေးကျန်'
     created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -98,11 +117,11 @@ CREATE TABLE IF NOT EXISTS yarn_issues (
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sku TEXT UNIQUE,                                 -- အထည်ကုတ် (ဥပမာ - PS-KC-001) လက်နဲ့ရိုက်ရှာနိုင်သည်
-    barcode TEXT UNIQUE,                            -- Scanner ဖတ်မည့် Barcode / QR (မရှိသေးပါက NULL ထားနိုင်သည်)
-    category TEXT NOT NULL,                          -- အမျိုးအစား (ဥပမာ - ပုဆိုး၊ လုံချည်၊ အင်္ကျီ၊ ပိတ်စ)
-    item_name TEXT NOT NULL,                         -- ပစ္စည်းအမည် (ဥပမာ - ကချင်၊ မန္တလေးချည်ဖောက်) -> "ကချင် ပုဆိုး"
-    pattern TEXT,                                    -- အဆင်/ဒီဇိုင်း (ဥပမာ - အကွက်စိပ်၊ ပန်းဖောက်၊ ရေလှိုင်း)
+    sku TEXT UNIQUE,                                 -- အထည်ကုတ် (ဥပမာ - PS-KC-001)
+    barcode TEXT UNIQUE,                             -- Barcode / QR
+    category TEXT NOT NULL,                          -- အမျိုးအစား (ပုဆိုး၊ လုံချည်၊ အင်္ကျီ)
+    item_name TEXT NOT NULL,                         -- ပစ္စည်းအမည် (ကချင်၊ မန္တလေးချည်ဖောက်)
+    pattern TEXT,                                    -- အဆင်/ဒီဇိုင်း (အကွက်စိပ်၊ ပန်းဖောက်)
     size TEXT NOT NULL DEFAULT 'Free Size',          -- S, M, L, XL, Free Size
     color TEXT,                                      -- နက်ပြာ၊ အနီ၊ စိမ်း
     product_type TEXT NOT NULL DEFAULT 'manufactured' CHECK(product_type IN ('manufactured', 'trading')),
@@ -145,14 +164,18 @@ CREATE TABLE IF NOT EXISTS stock_transfer_items (
 );
 
 -- -----------------------------------------------------------------------------
--- 6. PURCHASES (ပြင်ပမှ ပစ္စည်းဝယ်ယူမှု - ဝယ်ရောင်းနှင့် ကုန်ကြမ်း)
+-- 6. PURCHASES (Ref No, Items Total, Paid & Difference ပါဝင်သော အဝယ်မှတ်တမ်း)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS purchases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    purchase_no TEXT NOT NULL UNIQUE,                -- e.g., 'PO-20261029-001'
+    purchase_no TEXT NOT NULL UNIQUE,                -- e.g., '061126-01' (VR NO)
+    ref_no TEXT,                                     -- ပြင်ပဆိုင်ဘောင်ချာနံပါတ် (ဥပမာ - INV-9021)
     branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
     supplier_name TEXT NOT NULL,
-    total_amount REAL NOT NULL CHECK(total_amount >= 0),
+    items_total REAL NOT NULL DEFAULT 0.0 CHECK(items_total >= 0),   -- ပစ္စည်းများ ပေါင်းလဒ်အစစ်
+    total_amount REAL NOT NULL CHECK(total_amount >= 0),             -- စုစုပေါင်း ကုန်ကျငွေ
+    paid_amount REAL NOT NULL DEFAULT 0.0 CHECK(paid_amount >= 0),   -- အမှန်တကယ် ပေးခဲ့ငွေ
+    diff_amount REAL NOT NULL DEFAULT 0.0,                           -- ပိုငွေ (+), လိုငွေ/အကြွေး (-)
     payment_method TEXT NOT NULL CHECK(payment_method IN ('cash', 'bank', 'credit')),
     bank_account_name TEXT,
     status TEXT NOT NULL DEFAULT 'completed' CHECK(status IN ('completed', 'cancelled')),
@@ -203,13 +226,13 @@ CREATE TABLE IF NOT EXISTS sale_items (
 );
 
 -- -----------------------------------------------------------------------------
--- 8. MULTI-STORE CASHBOOK (ဆိုင်ခွဲအလိုက် နေ့စဉ်ငွေစာရင်း)
+-- 8. MULTI-STORE CASHBOOK (Ref No, Diff Amount ပါဝင်သော နေ့စဉ်ငွေစာရင်း)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cash_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,                       -- ဥပမာ - အထည်အရောင်း၊ ရက်ကန်းခ၊ ဆိုင်လခ
+    name TEXT NOT NULL UNIQUE,                       -- အထည်အရောင်း၊ ရက်ကန်းခ၊ ဆိုင်လခ
     type TEXT NOT NULL CHECK(type IN ('INCOME', 'EXPENSE')),
-    is_system INTEGER NOT NULL DEFAULT 0 CHECK(is_system IN (0, 1)), -- 1 = POS / Debt မှ auto ဝင်ငွေ
+    is_system INTEGER NOT NULL DEFAULT 0 CHECK(is_system IN (0, 1)),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1))
 );
 
@@ -220,11 +243,14 @@ CREATE TABLE IF NOT EXISTS cashbook_entries (
     sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
     purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
     customer_ledger_id INTEGER REFERENCES customer_ledger(id) ON DELETE SET NULL,
+    supplier_ledger_id INTEGER REFERENCES supplier_ledger(id) ON DELETE SET NULL,
     entry_type TEXT NOT NULL CHECK(entry_type IN ('INCOME', 'EXPENSE')),
     payment_method TEXT NOT NULL CHECK(payment_method IN ('cash', 'bank')),
     bank_account_name TEXT,                          -- 'KPay', 'KBZ Pay', 'CB Bank'
-    amount REAL NOT NULL CHECK(amount > 0),
-    description TEXT,
+    amount REAL NOT NULL CHECK(amount > 0),          -- အမှန်ထွက်သွားသည့် Paid Amount
+    diff_amount REAL NOT NULL DEFAULT 0.0,           -- Surplus (+) သို့မဟုတ် Deficit (-)
+    ref_no TEXT,                                     -- Voucher / Invoice No (Ref)
+    description TEXT,                                -- ဆိုင်အမည် / အကြောင်းအရာ အတိုချုပ်
     entry_date DATE NOT NULL DEFAULT (CURRENT_DATE),
     created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -245,8 +271,8 @@ CREATE TABLE IF NOT EXISTS daily_closings (
     total_bank_in REAL NOT NULL DEFAULT 0.0,
     total_bank_out REAL NOT NULL DEFAULT 0.0,
     closing_bank REAL NOT NULL DEFAULT 0.0,
-    actual_cash_counted REAL NOT NULL DEFAULT 0.0,   -- အံဆွဲထဲ လက်တွေ့ရေတွက်ရရှိငွေ
-    cash_difference REAL NOT NULL DEFAULT 0.0,       -- ပိုငွေ / လိုငွေ
+    actual_cash_counted REAL NOT NULL DEFAULT 0.0,
+    cash_difference REAL NOT NULL DEFAULT 0.0,
     closed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     notes TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -254,7 +280,22 @@ CREATE TABLE IF NOT EXISTS daily_closings (
 );
 
 -- -----------------------------------------------------------------------------
--- 10. PERFORMANCE INDEXES (ရှာဖွေမှု အမြန်နှုန်းမြှင့်တင်ရေး Index များ)
+-- 10. WASTE & DAMAGE LOGS (အလေအလွင့်နှင့် ပျက်စီးဆုံးရှုံးမှု မှတ်တမ်း)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS waste_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_no TEXT NOT NULL UNIQUE,
+    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_cost REAL NOT NULL CHECK(unit_cost >= 0),
+    reason TEXT NOT NULL,
+    recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- -----------------------------------------------------------------------------
+-- 11. PERFORMANCE INDEXES (အမြန်နှုန်းမြှင့်တင်ရေး Index များ)
 -- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
@@ -264,15 +305,20 @@ CREATE INDEX IF NOT EXISTS idx_branch_inventory_lookup ON branch_inventory(branc
 CREATE INDEX IF NOT EXISTS idx_sales_branch_date ON sales(branch_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_invoice_no ON sales(invoice_no);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_branch_date ON purchases(branch_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_purchases_purchase_no ON purchases(purchase_no);
+CREATE INDEX IF NOT EXISTS idx_purchases_ref_no ON purchases(ref_no);
 CREATE INDEX IF NOT EXISTS idx_cashbook_branch_date ON cashbook_entries(branch_id, entry_date);
+CREATE INDEX IF NOT EXISTS idx_cashbook_ref_no ON cashbook_entries(ref_no);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customer_ledger_customer ON customer_ledger(customer_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_ledger_supplier ON supplier_ledger(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_stock_transfers_status ON stock_transfers(status);
+CREATE INDEX IF NOT EXISTS idx_waste_logs_branch_date ON waste_logs(branch_id, created_at);
 
 -- -----------------------------------------------------------------------------
--- 11. INITIAL SEED DATA (အခြေခံ ထည့်သွင်းရမည့် Data များ)
+-- 12. INITIAL SEED DATA
 -- -----------------------------------------------------------------------------
--- ဆိုင်ခွဲ (၅) ဆိုင်
 INSERT OR IGNORE INTO branches (id, code, name, type, phone, address) VALUES 
 (1, 'MAIN', 'Main Home Shop (အိမ်ဆိုင်/စက်ရုံ)', 'main_hub', '09111111111', 'မန္တလေး'),
 (2, 'SH1', 'Shop 1 (ဆိုင်ခွဲ ၁)', 'branch', '09222222222', 'မန္တလေး'),
@@ -280,7 +326,6 @@ INSERT OR IGNORE INTO branches (id, code, name, type, phone, address) VALUES
 (4, 'SH3', 'Shop 3 (ဆိုင်ခွဲ ၃)', 'branch', '09444444444', 'မန္တလေး'),
 (5, 'SH4', 'Shop 4 (ဆိုင်ခွဲ ၄)', 'branch', '09555555555', 'မန္တလေး');
 
--- အခြေခံ စနစ်သုံး Cash Categories
 INSERT OR IGNORE INTO cash_categories (id, name, type, is_system) VALUES 
 (1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1),
 (2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1),
@@ -293,7 +338,6 @@ INSERT OR IGNORE INTO cash_categories (id, name, type, is_system) VALUES
 (9, 'လျှပ်စစ်မီးဖိုးနှင့် အထွေထွေစရိတ် (Utilities)', 'EXPENSE', 0),
 (10, 'ပင်မဆိုင်သို့ ငွေလွှဲပေးပို့ခြင်း (Cash Transfer to Main)', 'EXPENSE', 0);
 
--- ပုံသေ အသုံးပြုသူများ (Admin, Finance, Branch Cashiers)
 INSERT OR IGNORE INTO users (id, branch_id, username, password_hash, full_name, role) VALUES 
 (1, NULL, 'admin', 'admin123_hash', 'စနစ်ပိုင်ရှင် (Admin)', 'admin'),
 (2, NULL, 'finance', 'finance123_hash', 'စာရင်းကိုင်/စာရင်းစစ် (Finance)', 'finance'),
@@ -302,22 +346,3 @@ INSERT OR IGNORE INTO users (id, branch_id, username, password_hash, full_name, 
 (5, 3, 'cashier_sh2', 'cashier_hash', 'Shop 2 Cashier', 'cashier'),
 (6, 4, 'cashier_sh3', 'cashier_hash', 'Shop 3 Cashier', 'cashier'),
 (7, 5, 'cashier_sh4', 'cashier_hash', 'Shop 4 Cashier', 'cashier');
-
--- -----------------------------------------------------------------------------
--- WASTE & DAMAGE LOGS (အလေအလွင့်နှင့် ပျက်စီးဆုံးရှုံးမှု မှတ်တမ်း)
--- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS waste_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    reference_no TEXT NOT NULL UNIQUE,             -- e.g., 'WST-SH1-202610-001'
-    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-    quantity INTEGER NOT NULL CHECK(quantity > 0), -- ပျက်စီး/ပျောက်ဆုံး အရေအတွက်
-    unit_cost REAL NOT NULL CHECK(unit_cost >= 0), -- ဆုံးရှုံးသွားသော အရင်းတန်ဖိုး (တွက်ချက်ရန်)
-    reason TEXT NOT NULL,                          -- e.g., 'ကြွက်ကိုက်', 'အရောင်စွန်း', 'ပျောက်ဆုံး'
-    recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- ပိုမိုမြန်ဆန်စွာ ရှာဖွေနိုင်ရန် Index ထည့်ခြင်း
-CREATE INDEX IF NOT EXISTS idx_waste_logs_branch_date ON waste_logs(branch_id, created_at);
-

@@ -1561,44 +1561,127 @@ export default {
             }
 
             // =================================================================
-            // 10. CUSTOMERS & DEBT LIABILITIES
+            // 10. CUSTOMERS & SUPPLIERS DEBT/LIABILITIES MANAGEMENT
             // =================================================================
+
+            // ၁၀.၁ CUSTOMERS & SUPPLIERS LIST GET
             if (path === "/api/customers" && method === "GET") {
-                const { results } = await env.DB.prepare(
-                    "SELECT *, current_debt AS outstanding_balance FROM customers WHERE is_active = 1 ORDER BY current_debt DESC, name ASC"
-                ).all();
+                // Table Columns စစ်ဆေးပြီး လိုအပ်ပါက အလိုအလျောက် ဖြည့်စွက်ခြင်း
+                const custInfo = await env.DB.prepare("PRAGMA table_info(customers)").all().catch(() => ({ results: [] }));
+                const cols = (custInfo.results || []).map(r => r.name.toLowerCase());
+                
+                if (!cols.includes("entity_type")) {
+                    await env.DB.prepare("ALTER TABLE customers ADD COLUMN entity_type TEXT DEFAULT 'CUSTOMER'").run().catch(() => {});
+                }
+                if (!cols.includes("current_payable")) {
+                    await env.DB.prepare("ALTER TABLE customers ADD COLUMN current_payable REAL DEFAULT 0").run().catch(() => {});
+                }
+
+                // supplier_ledger ဇယား မရှိသေးပါက အလိုအလျောက် တည်ဆောက်ပေးခြင်း
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS supplier_ledger (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        supplier_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+                        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                        purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
+                        type TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        balance_after REAL NOT NULL,
+                        payment_method TEXT,
+                        bank_account_name TEXT,
+                        reference_note TEXT,
+                        created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run().catch(() => {});
+
+                const { results } = await env.DB.prepare(`
+                    SELECT 
+                        id, name, phone, shop_name, address,
+                        COALESCE(entity_type, 'CUSTOMER') AS entity_type,
+                        COALESCE(customer_type, 'retail') AS customer_type,
+                        COALESCE(current_debt, 0) AS current_debt,
+                        COALESCE(current_debt, 0) AS outstanding_balance,
+                        COALESCE(current_payable, 0) AS current_payable,
+                        is_active, created_at
+                    FROM customers 
+                    WHERE is_active = 1 
+                    ORDER BY (COALESCE(current_debt, 0) + COALESCE(current_payable, 0)) DESC, name ASC
+                `).all();
+
                 return jsonResponse(results || []);
             }
 
+            // ၁၀.၂ CUSTOMER OR SUPPLIER POST (အသစ်မှတ်ပုံတင်ခြင်း)
             if (path === "/api/customers" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
-                if (!body.name) return errorResponse("ဖောက်သည်အမည် ထည့်သွင်းပေးပါ", 400);
+                if (!body.name) return errorResponse("အမည် ထည့်သွင်းပေးပါ", 400);
 
-                const initialDebt = parseFloat(body.initialDebt ?? body.current_debt) || 0;
+                const entityType = String(body.entityType || body.entity_type || "CUSTOMER").toUpperCase();
+                const openingBalance = parseFloat(body.initialDebt ?? body.initialPayable ?? body.current_debt ?? 0) || 0;
+                
+                const initialDebt = entityType === "CUSTOMER" ? openingBalance : 0;
+                const initialPayable = entityType === "SUPPLIER" ? openingBalance : 0;
 
                 const res = await env.DB.prepare(`
-                    INSERT INTO customers (name, phone, shop_name, customer_type, current_debt, address)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO customers (name, phone, shop_name, entity_type, customer_type, current_debt, current_payable, address)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
                     String(body.name).trim(),
                     body.phone ? String(body.phone).trim() : null,
                     body.shopName ? String(body.shopName).trim() : null,
-                    body.customerType || "retail",
+                    entityType,
+                    body.customerType || (entityType === "SUPPLIER" ? "wholesale" : "retail"),
                     initialDebt,
+                    initialPayable,
                     body.address ? String(body.address).trim() : null
                 ).run();
 
-                const newCustId = res.meta.last_row_id;
-                if (initialDebt > 0) {
+                const newId = res.meta.last_row_id;
+
+                // ကနဦး အကြွေးလက်ကျန် ရှိပါက သက်ဆိုင်ရာ Ledger ထဲသို့ စာရင်းဖွင့်မှတ်တမ်း ထည့်သွင်းခြင်း
+                if (entityType === "CUSTOMER" && initialDebt > 0) {
                     await env.DB.prepare(`
                         INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
                         VALUES (?, ?, 'DEBIT', ?, ?, 'cash', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', ?)
-                    `).bind(newCustId, userBranchId, initialDebt, initialDebt, currentUserId).run();
+                    `).bind(newId, userBranchId, initialDebt, initialDebt, currentUserId).run().catch(() => {});
+                } else if (entityType === "SUPPLIER" && initialPayable > 0) {
+                    await env.DB.prepare(`
+                        INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
+                        VALUES (?, ?, 'PURCHASE_DEBT', ?, ?, 'cash', 'ကနဦး ပေးရန်ကျန်ငွေ (Opening Payable)', ?)
+                    `).bind(newId, userBranchId, initialPayable, initialPayable, currentUserId).run().catch(() => {});
                 }
 
-                return jsonResponse({ id: newCustId, message: "ဖောက်သည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
+                return jsonResponse({ id: newId, message: `${entityType === 'SUPPLIER' ? 'ပွဲရုံ' : 'ဖောက်သည်'} အသစ် သိမ်းဆည်းပြီးပါပြီ` }, 201);
             }
 
+            // ၁၀.၃ CUSTOMER OR SUPPLIER PUT (အချက်အလက် ပြင်ဆင်ခြင်း)
+            if (path.startsWith("/api/customers/") && !path.endsWith("/ledger") && !path.endsWith("/repay") && method === "PUT") {
+                const id = Number(path.split("/").pop());
+                const body = await request.json().catch(() => ({}));
+                if (!id || !body.name) return errorResponse("အမည် အချက်အလက် လိုအပ်ပါသည်", 400);
+
+                await env.DB.prepare(`
+                    UPDATE customers SET 
+                        name = ?, 
+                        phone = ?, 
+                        shop_name = ?, 
+                        address = ?,
+                        customer_type = COALESCE(?, customer_type)
+                    WHERE id = ?
+                `).bind(
+                    String(body.name).trim(),
+                    body.phone ? String(body.phone).trim() : null,
+                    body.shopName ? String(body.shopName).trim() : null,
+                    body.address ? String(body.address).trim() : null,
+                    body.customerType || null,
+                    id
+                ).run();
+
+                return jsonResponse({ message: "အချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
+            }
+
+            // ၁၀.၄ UNIVERSAL DEBT REPAYMENT POST (ဖောက်သည်အကြွေးဆပ်ငွေ လက်ခံခြင်း / ပွဲရုံသို့ အကြွေးဆပ်ခြင်း)
             if (path === "/api/customers/repay" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
@@ -1607,60 +1690,126 @@ export default {
                 const repayAmt = parseFloat(amount) || 0;
                 if (!customerId || repayAmt <= 0) return errorResponse("ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
 
-                const cust = await env.DB.prepare("SELECT name, current_debt FROM customers WHERE id = ?").bind(Number(customerId)).first();
-                if (!cust) return errorResponse("ဖောက်သည် ရှာမတွေ့ပါ", 404);
+                const contact = await env.DB.prepare(
+                    "SELECT name, COALESCE(entity_type, 'CUSTOMER') AS entity_type, COALESCE(current_debt, 0) AS current_debt, COALESCE(current_payable, 0) AS current_payable FROM customers WHERE id = ?"
+                ).bind(Number(customerId)).first();
 
-                const newDebt = Math.max(0, Number(cust.current_debt || 0) - repayAmt);
+                if (!contact) return errorResponse("စာရင်း ရှာမတွေ့ပါ", 404);
+
+                const isSupplier = String(contact.entity_type).toUpperCase() === "SUPPLIER";
                 const today = entryDate || getMyanmarTodayDate();
+                const payMethod = String(paymentMethod).toLowerCase();
+                const methodLabel = payMethod === "bank" ? (bankAccountName || "Bank") : "ငွေသား";
 
-                await env.DB.batch([
-                    env.DB.prepare(`
-                        INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, created_by)
-                        VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?)
-                    `).bind(
-                        Number(customerId), targetBranch, repayAmt, newDebt,
-                        String(paymentMethod).toLowerCase(),
-                        note || `အကြွေးဆပ် (${paymentMethod === 'bank' ? (bankAccountName || 'Bank') : 'ငွေသား'})`,
-                        currentUserId
-                    ),
+                if (isSupplier) {
+                    // ပွဲရုံသို့ ဆိုင်က အကြွေးသွားဆပ်ခြင်း (PAYABLE DECREASE & CASHBOOK EXPENSE)
+                    const oldPayable = Number(contact.current_payable || 0);
+                    const newPayable = Math.max(0, oldPayable - repayAmt);
 
-                    env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId)),
+                    await env.DB.batch([
+                        env.DB.prepare(`
+                            INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, created_by)
+                            VALUES (?, ?, 'PAYMENT', ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            Number(customerId), targetBranch, repayAmt, newPayable,
+                            payMethod, bankAccountName || null,
+                            note || `ပွဲရုံသို့ အကြွေးဆပ်ငွေ (${methodLabel})`,
+                            currentUserId
+                        ),
 
-                    env.DB.prepare(`
-                        INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
-                        VALUES (?, 2, 'INCOME', ?, ?, ?, ?, ?, ?)
-                    `).bind(
-                        targetBranch, String(paymentMethod).toLowerCase(), bankAccountName || null,
-                        repayAmt, `${cust.name} အကြွေးဆပ် (${note || (paymentMethod === 'bank' ? bankAccountName : 'ငွေသား')})`,
-                        today, currentUserId
-                    )
-                ]);
+                        env.DB.prepare("UPDATE customers SET current_payable = ? WHERE id = ?").bind(newPayable, Number(customerId)),
 
-                return jsonResponse({ message: "အကြွေးဆပ်ငွေ လက်ခံပြီးပါပြီ", newDebt });
+                        // Cash Book တွင် အသုံးစရိတ် (EXPENSE) အဖြစ် မှတ်တမ်းတင်ခြင်း
+                        env.DB.prepare(`
+                            INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                            VALUES (?, 6, 'EXPENSE', ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            targetBranch, payMethod, bankAccountName || null,
+                            repayAmt, `${contact.name} ပွဲရုံကြွေးဆပ် (${note || methodLabel})`,
+                            today, currentUserId
+                        )
+                    ]);
+
+                    return jsonResponse({ message: "ပွဲရုံသို့ အကြွေးဆပ်ငွေ မှတ်တမ်းတင်ပြီးပါပြီ", newBalance: newPayable });
+                } else {
+                    // ဖောက်သည်က ဆိုင်သို့ အကြွေးပြန်ဆပ်ခြင်း (RECEIVABLE DECREASE & CASHBOOK INCOME)
+                    const oldDebt = Number(contact.current_debt || 0);
+                    const newDebt = Math.max(0, oldDebt - repayAmt);
+
+                    await env.DB.batch([
+                        env.DB.prepare(`
+                            INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, created_by)
+                            VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            Number(customerId), targetBranch, repayAmt, newDebt,
+                            payMethod, bankAccountName || null,
+                            note || `အကြွေးဆပ် (${methodLabel})`,
+                            currentUserId
+                        ),
+
+                        env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId)),
+
+                        // Cash Book တွင် ဝင်ငွေ (INCOME) အဖြစ် မှတ်တမ်းတင်ခြင်း
+                        env.DB.prepare(`
+                            INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
+                            VALUES (?, 2, 'INCOME', ?, ?, ?, ?, ?, ?)
+                        `).bind(
+                            targetBranch, payMethod, bankAccountName || null,
+                            repayAmt, `${contact.name} အကြွေးဆပ် (${note || methodLabel})`,
+                            today, currentUserId
+                        )
+                    ]);
+
+                    return jsonResponse({ message: "အကြွေးဆပ်ငွေ လက်ခံပြီးပါပြီ", newBalance: newDebt });
+                }
             }
 
+            // ၁၀.၅ STATEMENT LEDGER GET (Customer Statement သို့မဟုတ် Supplier Statement)
             if (path.startsWith("/api/customers/") && path.endsWith("/ledger") && method === "GET") {
                 const parts = path.split("/");
                 const customerId = Number(parts[3]);
-                if (!customerId) return errorResponse("Customer ID မမှန်ကန်ပါ", 400);
+                if (!customerId) return errorResponse("ID မမှန်ကန်ပါ", 400);
 
-                const sql = `
-                    SELECT 
-                        cl.id, cl.customer_id, cl.branch_id, cl.sale_id,
-                        cl.type, cl.amount, cl.balance_after, cl.payment_method,
-                        cl.reference_note, cl.created_at,
-                        s.invoice_no,
-                        COALESCE(u.full_name, 'Admin') AS created_by_name
-                    FROM customer_ledger cl
-                    LEFT JOIN sales s ON cl.sale_id = s.id
-                    LEFT JOIN users u ON cl.created_by = u.id
-                    WHERE cl.customer_id = ?
-                    ORDER BY cl.id DESC LIMIT 300
-                `;
-                const { results } = await env.DB.prepare(sql).bind(customerId).all();
-                return jsonResponse(results || []);
+                const contact = await env.DB.prepare(
+                    "SELECT COALESCE(entity_type, 'CUSTOMER') AS entity_type FROM customers WHERE id = ?"
+                ).bind(customerId).first();
+
+                const isSupplier = contact && String(contact.entity_type).toUpperCase() === "SUPPLIER";
+
+                if (isSupplier) {
+                    const sql = `
+                        SELECT 
+                            sl.id, sl.supplier_id AS customer_id, sl.branch_id, sl.purchase_id,
+                            sl.type, sl.amount, sl.balance_after, sl.payment_method,
+                            sl.reference_note, sl.created_at,
+                            p.purchase_no AS invoice_no,
+                            COALESCE(u.full_name, 'Admin') AS created_by_name
+                        FROM supplier_ledger sl
+                        LEFT JOIN purchases p ON sl.purchase_id = p.id
+                        LEFT JOIN users u ON sl.created_by = u.id
+                        WHERE sl.supplier_id = ?
+                        ORDER BY sl.id DESC LIMIT 300
+                    `;
+                    const { results } = await env.DB.prepare(sql).bind(customerId).all();
+                    return jsonResponse(results || []);
+                } else {
+                    const sql = `
+                        SELECT 
+                            cl.id, cl.customer_id, cl.branch_id, cl.sale_id,
+                            cl.type, cl.amount, cl.balance_after, cl.payment_method,
+                            cl.reference_note, cl.created_at,
+                            s.invoice_no,
+                            COALESCE(u.full_name, 'Admin') AS created_by_name
+                        FROM customer_ledger cl
+                        LEFT JOIN sales s ON cl.sale_id = s.id
+                        LEFT JOIN users u ON cl.created_by = u.id
+                        WHERE cl.customer_id = ?
+                        ORDER BY cl.id DESC LIMIT 300
+                    `;
+                    const { results } = await env.DB.prepare(sql).bind(customerId).all();
+                    return jsonResponse(results || []);
+                }
             }
-
             // =================================================================
             // 11. INTER-BRANCH STOCK TRANSFERS
             // =================================================================

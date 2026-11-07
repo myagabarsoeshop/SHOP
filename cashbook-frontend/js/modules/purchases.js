@@ -202,7 +202,7 @@ async function loadPurchases() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="16" class="p-16 text-center text-slate-400">
+                <td colspan="17" class="p-16 text-center text-slate-400">
                     <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                     <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                 </td>
@@ -225,7 +225,9 @@ async function loadPurchases() {
         purchasesList.forEach(p => {
             const lineAmt = Number(p.subtotal || (Number(p.quantity || 0) * Number(p.unit_cost || 0)));
             const method = String(p.payment_method || "cash").toLowerCase();
-            if (method === "credit") {
+            const paidAmt = Number(p.paid_amount !== undefined ? p.paid_amount : p.total_amount);
+
+            if (method === "credit" || paidAmt === 0) {
                 creditPurchasesTotal += lineAmt;
             } else {
                 cashPurchasesTotal += lineAmt;
@@ -241,7 +243,7 @@ async function loadPurchases() {
         renderPurchasesTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="16" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="17" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -260,7 +262,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (Compact One-Line View: မျဉ်းတားဖြုတ်ထားသော Flat Row စံနှုန်း)
+ * Purchases History Table Rendering (REF & SURPLUS/DEFICIT ပါဝင်သော One-Line View)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -270,7 +272,7 @@ function renderPurchasesTable() {
     if (currentFilteredPurchases.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="16" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="17" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-cart-flatbed text-3xl mb-3 opacity-30"></i>
                     <div>အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</div>
                 </td>
@@ -290,21 +292,40 @@ function renderPurchasesTable() {
         const refNo = pur.ref_no || "-";
 
         const rawMethod = String(pur.payment_method || "cash").toLowerCase();
-        let methodStr = "CASH";
-        if (rawMethod === "bank") {
-            methodStr = "BANK";
-        } else if (rawMethod === "credit") {
-            methodStr = "-";
+        const paidAmount = Number(pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount);
+        const totalAmount = Number(pur.items_total || pur.total_amount || 0);
+
+        // 1. METHOD သတ်မှတ်ခြင်း (CASH / BANK / -)
+        let methodStr = "-";
+        if (paidAmount > 0) {
+            methodStr = rawMethod === "bank" ? "BANK" : "CASH";
         }
 
-        const isCredit = rawMethod === "credit";
-        const typeStr = isCredit ? "CREDIT" : "CASH";
+        // 2. TYPE သတ်မှတ်ခြင်း (PAID / CREDIT / PARTIAL)
+        let typeStr = "PAID";
+        let typeColorClass = "text-emerald-600 dark:text-emerald-400";
+        if (paidAmount === 0 || rawMethod === "credit") {
+            typeStr = "CREDIT";
+            typeColorClass = "text-rose-500";
+        } else if (paidAmount > 0 && paidAmount < totalAmount) {
+            typeStr = "PARTIAL";
+            typeColorClass = "text-amber-500";
+        }
 
         const unitCost = Number(pur.unit_cost || 0);
         const qty = Number(pur.quantity || 0);
         const amount = Number(pur.subtotal || (unitCost * qty));
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
+
+        // 3. SURPLUS & DEFICIT (ပိုငွေ / လိုငွေ တွက်ချက်ပြသခြင်း)
+        const diff = Number(pur.diff_amount || 0);
+        let diffBadge = `<span class="text-slate-400 font-mono text-xs">-</span>`;
+        if (diff > 0) {
+            diffBadge = `<span class="text-amber-500 font-mono font-bold text-xs" title="ပွဲရုံထံ ပိုပေးငွေ / ပြန်ရရန်">+${diff.toLocaleString()}</span>`;
+        } else if (diff < 0) {
+            diffBadge = `<span class="text-rose-500 font-mono font-bold text-xs" title="ပေးရန်ကျန် အကြွေး">${diff.toLocaleString()}</span>`;
+        }
 
         const actionButtons = `
             <div class="flex items-center justify-center gap-1.5">
@@ -319,7 +340,6 @@ function renderPurchasesTable() {
             </div>
         `;
 
-        // border-b ဖြုတ်ထားပြီး Customers & Debt အတိုင်း Flat Row အဖြစ် ပြင်ဆင်ထားပါသည်
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         row.innerHTML = `
@@ -351,10 +371,10 @@ function renderPurchasesTable() {
             <td class="py-2 px-4 text-right font-mono text-base font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
             
             <!-- 10. METHOD -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-24">${methodStr}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${methodStr}</td>
             
             <!-- 11. TYPE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold w-24 ${isCredit ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">${typeStr}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold w-20 ${typeColorClass}">${typeStr}</td>
             
             <!-- 12. WHOLESALE -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
@@ -368,7 +388,12 @@ function renderPurchasesTable() {
             <!-- 15. REF (Supplier Invoice No) -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(refNo)}">${ui.escapeHtml(refNo)}</td>
 
-            <!-- 16. ACTION (Sticky Right) -->
+            <!-- 16. SURPLUS & DEFICIT -->
+            <td class="py-2 px-3 text-center font-mono text-xs w-28">
+                ${diffBadge}
+            </td>
+
+            <!-- 17. ACTION (Sticky Right) -->
             <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
@@ -447,8 +472,8 @@ function openPurchaseModal(pur = null) {
                 subtotal: Number(p.subtotal || (p.quantity * p.unit_cost))
             }));
 
-        const totalAmt = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
-        document.getElementById("pur-actual-paid").value = totalAmt;
+        const paidAmt = pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount;
+        document.getElementById("pur-actual-paid").value = paidAmt;
 
     } else {
         title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
@@ -929,7 +954,20 @@ async function submitPurchase() {
     }
 
     const branchId = state.currentBranch?.id || 1;
-    const totalAmount = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+    const itemsTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+    
+    // အမှန်ပေးငွေ နှင့် ကွာခြားချက် တွက်ချက်ခြင်း
+    const paidInputVal = document.getElementById("pur-actual-paid")?.value;
+    let paidAmount = 0;
+    if (paymentMethod === "credit") {
+        paidAmount = 0;
+    } else if (paidInputVal !== undefined && paidInputVal !== null && paidInputVal !== "") {
+        paidAmount = parseAnyNumber(paidInputVal);
+    } else {
+        paidAmount = itemsTotal;
+    }
+
+    const diffAmount = paidAmount - itemsTotal;
 
     const formattedItems = selectedOrderItems.map(it => {
         if (it.is_new) {
@@ -969,9 +1007,12 @@ async function submitPurchase() {
         branch_id: branchId,
         supplier_name: supplier,
         ref_no: refNo,
+        items_total: itemsTotal,
+        total_amount: itemsTotal,
+        paid_amount: paidAmount,
+        diff_amount: diffAmount,
         payment_method: paymentMethod,
         bank_account_name: paymentMethod === "bank" ? bankName : null,
-        total_amount: totalAmount,
         items: formattedItems
     };
 
@@ -1017,7 +1058,7 @@ async function deletePurchase(id) {
 }
 
 /**
- * Purchases စာရင်းအား REF ကော်လံပါဝင်သော ၁၆ ကော်လံစနစ်အတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
+ * Purchases စာရင်းအား REF နှင့် SURPLUS & DEFICIT ကော်လံပါဝင်သော စံနှုန်းအတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
  */
 function exportPurchasesToCSV() {
     const listToExport = currentFilteredPurchases.length > 0 ? currentFilteredPurchases : purchasesList;
@@ -1026,7 +1067,7 @@ function exportPurchasesToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် အဝယ်စာရင်း မရှိသေးပါ။");
     }
 
-    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER,REF\n";
+    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER,REF,SURPLUS_DEFICIT\n";
 
     listToExport.forEach((pur, idx) => {
         const no = idx + 1;
@@ -1040,15 +1081,21 @@ function exportPurchasesToCSV() {
         const amount = Number(pur.subtotal || (unitCost * Number(pur.quantity || 0)));
 
         const rawMethod = String(pur.payment_method || "cash").toLowerCase();
-        let methodStr = "CASH";
-        if (rawMethod === "bank") methodStr = "BANK";
-        else if (rawMethod === "credit") methodStr = "-";
+        const paidAmount = Number(pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount);
+        const totalAmount = Number(pur.items_total || pur.total_amount || 0);
 
-        const typeStr = rawMethod === "credit" ? "CREDIT" : "CASH";
+        let methodStr = "-";
+        if (paidAmount > 0) methodStr = rawMethod === "bank" ? "BANK" : "CASH";
+
+        let typeStr = "PAID";
+        if (paidAmount === 0 || rawMethod === "credit") typeStr = "CREDIT";
+        else if (paidAmount > 0 && paidAmount < totalAmount) typeStr = "PARTIAL";
+
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
         const supplierName = pur.supplier_name || "-";
         const refNo = pur.ref_no || "-";
+        const diffAmount = Number(pur.diff_amount || 0);
 
         const row = [
             no,
@@ -1065,7 +1112,8 @@ function exportPurchasesToCSV() {
             wholesalePrice,
             retailPrice,
             ui.escapeCsv(supplierName),
-            ui.escapeCsv(refNo)
+            ui.escapeCsv(refNo),
+            diffAmount
         ];
         csvContent += row.join(",") + "\n";
     });

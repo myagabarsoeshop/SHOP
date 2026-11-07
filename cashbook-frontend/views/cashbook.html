@@ -8,7 +8,7 @@
         <div class="flex items-center gap-3 flex-1 min-w-0">
             <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                <input type="text" id="cb-search" placeholder="ခေါင်းစဉ် သို့မဟုတ် အကြောင်းအရာ ရှာရန်..."
+                <input type="text" id="cb-search" placeholder="ခေါင်းစဉ်၊ ဆိုင်အမည် သို့မဟုတ် REF ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
 
@@ -41,20 +41,21 @@
         </div>
     </div>
 
-    <!-- Entries Table Container -->
+    <!-- Entries Table Container (REF နှင့် SURPLUS & DEFICIT ပါဝင်သော ၁၁ ကော်လံစနစ်) -->
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
-        <table class="w-full text-left border-collapse min-w-[1100px]">
-            <!-- Table Head (METHOD -> QTY -> PRICE -> AMOUNT အစဉ်လိုက် Standard) -->
+        <table class="w-full text-left border-collapse min-w-[1300px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-12">
-                    <th class="py-3 px-3 w-14 text-center">NO</th>
+                    <th class="py-3 px-3 w-12 text-center">NO</th>
                     <th class="py-3 px-3 w-28 text-center">DATE</th>
                     <th class="py-3 px-4 w-44">CATEGORY</th>
-                    <th class="py-3 px-4 min-w-[240px]">DESCRIPTION</th>
-                    <th class="py-3 px-3 w-24 text-center">METHOD</th>
-                    <th class="py-3 px-3 w-20 text-center">QTY</th>
-                    <th class="py-3 px-4 w-32 text-right">PRICE</th>
-                    <th class="py-3 px-4 w-36 text-right">AMOUNT</th>
+                    <th class="py-3 px-4 min-w-[200px]">DESCRIPTION</th>
+                    <th class="py-3 px-3 w-20 text-center">METHOD</th>
+                    <th class="py-3 px-3 w-16 text-center">QTY</th>
+                    <th class="py-3 px-4 w-24 text-right">PRICE</th>
+                    <th class="py-3 px-4 w-32 text-right">AMOUNT</th>
+                    <th class="py-3 px-3 w-28 text-center">REF</th>
+                    <th class="py-3 px-3 w-28 text-center">SURPLUS & DEFICIT</th>
                     <!-- Sticky Right Action Column Header -->
                     <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
@@ -62,9 +63,10 @@
                 </tr>
             </thead>
             
-            <tbody id="cashbook-table-body" class="divide-y divide-slate-200 dark:divide-slate-800/80">
+            <!-- divide-y ဖယ်ရှားထားသော သန့်ရှင်းသည့် tbody -->
+            <tbody id="cashbook-table-body">
                 <tr>
-                    <td colspan="9" class="p-16 text-center text-slate-400">
+                    <td colspan="11" class="p-16 text-center text-slate-400">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                         <div class="font-bold text-xs">ငွေစာရင်းများ ဆွဲယူနေပါသည်...</div>
                     </td>
@@ -78,7 +80,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Consolidated Cashbook Entry Modal                                    -->
+<!-- Consolidated Cashbook Entry Modal                                     -->
 <!-- ===================================================================== -->
 <div id="entry-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col scale-100 transition-all">
@@ -147,10 +149,10 @@
                 </div>
             </div>
 
-            <!-- Description (မဖြစ်မနေ လိုအပ်သော Validation စံနှုန်း) -->
+            <!-- Description -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ (Description) *</label>
-                <textarea id="entry-desc" rows="3" required placeholder="မှတ်ချက် သို့မဟုတ် အကြောင်းအရာ မဖြစ်မနေ ရေးသားပါ..." 
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ / ဆိုင်အမည် (Description) *</label>
+                <textarea id="entry-desc" rows="3" required placeholder="ဆိုင်အမည် သို့မဟုတ် အကြောင်းအရာ အတိုချုပ် ရေးသားပါ..." 
                     class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-normal"></textarea>
             </div>
 

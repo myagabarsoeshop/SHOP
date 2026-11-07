@@ -598,7 +598,7 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN (VR NO: DDMMYY-01 & REF NO STANDARD)
+            // 5. PURCHASES & STOCK IN (ITEMS TOTAL, PAID, DIFF & CASHBOOK SYNC)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
@@ -611,9 +611,12 @@ export default {
                         p.purchase_no AS vr_no,
                         p.ref_no,
                         p.supplier_name,
+                        COALESCE(p.items_total, p.total_amount, 0) AS items_total,
+                        p.total_amount,
+                        COALESCE(p.paid_amount, p.total_amount, 0) AS paid_amount,
+                        COALESCE(p.diff_amount, 0) AS diff_amount,
                         p.payment_method,
                         p.bank_account_name,
-                        p.total_amount,
                         p.status,
                         p.created_at,
                         pi.product_id,
@@ -646,9 +649,8 @@ export default {
                 // ၁။ VR NO အား DDMMYY-01 ပုံစံဖြင့် နေ့စဉ် Auto Sequence ထုတ်ယူခြင်း
                 const mmToday = getMyanmarTodayDate(); // YYYY-MM-DD
                 const [yyyy, mth, day] = mmToday.split("-");
-                const prefix = `${day}${mth}${yyyy.slice(-2)}`; // ဥပမာ - 061126
+                const prefix = `${day}${mth}${yyyy.slice(-2)}`;
 
-                // ယနေ့အတွက် ထွက်ထားသော နောက်ဆုံး VR NO ကို ရှာဖွေပြီး နံပါတ်စဉ် (၀၁၊ ၀၂...) တိုးခြင်း
                 const lastPo = await env.DB.prepare(
                     "SELECT purchase_no FROM purchases WHERE purchase_no LIKE ? AND branch_id = ? ORDER BY id DESC LIMIT 1"
                 ).bind(`${prefix}-%`, targetBranch).first();
@@ -661,23 +663,46 @@ export default {
                         nextSeq = String(lastNum + 1).padStart(2, "0");
                     }
                 }
-                const purchaseNo = `${prefix}-${nextSeq}`; // ရလဒ်: 061126-01
+                const purchaseNo = `${prefix}-${nextSeq}`;
                 const refNo = body.ref_no ? String(body.ref_no).trim() : null;
 
-                // ၂။ purchases ဇယားထဲသို့ ref_no အပါအဝင် စာရင်းသွင်းခြင်း
+                // ၂။ ပစ္စည်းပေါင်းလဒ် (items_total)၊ အမှန်ပေးငွေ (paid_amount) နှင့် ကွာခြားချက် (diff_amount) တွက်ချက်ခြင်း
+                const itemsList = body.items || [];
+                const itemsTotal = itemsList.reduce((acc, it) => acc + (parseFloat(it.subtotal) || (parseFloat(it.quantity || 0) * parseFloat(it.unit_cost || 0))), 0);
+                
+                const rawMethod = String(body.payment_method || "cash").toLowerCase();
+                let paidAmount = 0;
+                if (rawMethod === "credit") {
+                    paidAmount = 0;
+                } else if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                    paidAmount = parseFloat(body.paid_amount);
+                } else {
+                    paidAmount = parseFloat(body.total_amount || itemsTotal);
+                }
+
+                const diffAmount = body.diff_amount !== undefined && body.diff_amount !== null && body.diff_amount !== "" 
+                    ? parseFloat(body.diff_amount) 
+                    : (paidAmount - itemsTotal);
+
+                const finalPaymentMethod = paidAmount === 0 ? "credit" : rawMethod;
+
+                // ၃။ purchases ဇယားထဲသို့ စာရင်းသွင်းခြင်း
                 const purRes = await env.DB.prepare(`
-                    INSERT INTO purchases (purchase_no, ref_no, branch_id, supplier_name, total_amount, payment_method, bank_account_name, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO purchases (
+                        purchase_no, ref_no, branch_id, supplier_name, 
+                        items_total, total_amount, paid_amount, diff_amount, 
+                        payment_method, bank_account_name, created_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    purchaseNo, refNo, targetBranch, String(body.supplier_name), 
-                    parseFloat(body.total_amount), String(body.payment_method).toLowerCase(), 
-                    body.bank_account_name || null, currentUserId
+                    purchaseNo, refNo, targetBranch, String(body.supplier_name).trim(),
+                    itemsTotal, itemsTotal, paidAmount, diffAmount,
+                    finalPaymentMethod, body.bank_account_name || null, currentUserId
                 ).run();
 
                 const newPurId = purRes.meta.last_row_id;
                 const batchStatements = [];
 
-                for (const item of (body.items || [])) {
+                for (const item of itemsList) {
                     let targetProductId = item.product_id;
 
                     if (item.is_new && item.new_product) {
@@ -700,9 +725,13 @@ export default {
                         );
                     }
 
+                    const q = parseFloat(item.quantity) || 0;
+                    const c = parseFloat(item.unit_cost) || 0;
+                    const sub = q * c;
+
                     batchStatements.push(
                         env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
-                        .bind(newPurId, Number(targetProductId), parseFloat(item.quantity), parseFloat(item.unit_cost), parseFloat(item.subtotal))
+                        .bind(newPurId, Number(targetProductId), q, c, sub)
                     );
 
                     batchStatements.push(
@@ -711,21 +740,27 @@ export default {
                             VALUES (?, ?, ?)
                             ON CONFLICT(branch_id, product_id) DO UPDATE SET 
                             quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                        `).bind(targetBranch, Number(targetProductId), parseFloat(item.quantity))
+                        `).bind(targetBranch, Number(targetProductId), q)
                     );
                 }
 
-                // ၃။ အကြွေးမဟုတ်ပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (entry_date နှင့် ref_no ပါဝင်စေခြင်း)
-                if (String(body.payment_method).toLowerCase() !== "credit") {
-                    const desc = `${body.supplier_name} ထံမှ အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ''}`;
+                // ၄။ အမှန်တကယ် ငွေပေးခဲ့ရပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (Actual Paid Amount & Supplier Name Only)
+                if (paidAmount > 0) {
+                    const cbRefNo = refNo || purchaseNo;
+                    // Description တွင် ပစ္စည်းစာရင်းရှည်များ မထည့်တော့ဘဲ ပွဲရုံ/ဆိုင်အမည် သာ လိုရင်းတိုရှင်း ထည့်သွင်းခြင်း
+                    const cbDesc = String(body.supplier_name).trim();
+
                     batchStatements.push(
                         env.DB.prepare(`
-                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
-                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?)
+                            INSERT INTO cashbook_entries (
+                                branch_id, category_id, purchase_id, entry_type, 
+                                payment_method, bank_account_name, amount, diff_amount, 
+                                ref_no, description, entry_date, created_by
+                            ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, ?)
                         `).bind(
-                            targetBranch, newPurId, String(body.payment_method).toLowerCase(), 
-                            body.bank_account_name || null, parseFloat(body.total_amount), 
-                            desc, mmToday, currentUserId
+                            targetBranch, newPurId, finalPaymentMethod,
+                            body.bank_account_name || null, paidAmount, diffAmount,
+                            cbRefNo, cbDesc, mmToday, currentUserId
                         )
                     );
                 }
@@ -734,17 +769,15 @@ export default {
                 return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
             }
 
-            // 5.1. PURCHASES UPDATE (အဝယ်စာရင်း ပြင်ဆင်ခြင်းနှင့် စတော့အလိုအလျောက် ပြန်ညှိခြင်း)
+            // 5.1. PURCHASES UPDATE (အဝယ်စာရင်း ပြင်ဆင်ခြင်းနှင့် စတော့၊ Cashbook အလိုအလျောက် ပြန်ညှိခြင်း)
             if (path.startsWith("/api/purchases/") && method === "PUT") {
                 const purId = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
                 const supplierName = String(body.supplier_name || "").trim();
                 const refNo = body.ref_no ? String(body.ref_no).trim() : null;
-                const paymentMethod = String(body.payment_method || "cash").toLowerCase();
-                const bankAccountName = body.bank_account_name || null;
-                const items = body.items || [];
+                const itemsList = body.items || [];
 
-                if (!purId || items.length === 0) {
+                if (!purId || itemsList.length === 0) {
                     return errorResponse("အဝယ်မှတ်တမ်း ID နှင့် ပစ္စည်းများ လိုအပ်ပါသည်", 400);
                 }
 
@@ -755,7 +788,7 @@ export default {
                 const { results: oldItems } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const batch = [];
 
-                // ယခင် စတော့အရေအတွက်များ နုတ်ယူခြင်း
+                // ယခင် စတော့အရေအတွက်များ ပြန်လည်နုတ်ယူခြင်း
                 (oldItems || []).forEach(it => {
                     batch.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
@@ -765,12 +798,12 @@ export default {
 
                 batch.push(env.DB.prepare("DELETE FROM purchase_items WHERE purchase_id = ?").bind(purId));
 
-                let newTotalAmount = 0;
-                for (const it of items) {
+                let newItemsTotal = 0;
+                for (const it of itemsList) {
                     const q = parseFloat(it.quantity) || 0;
                     const c = parseFloat(it.unit_cost) || 0;
                     const sub = q * c;
-                    newTotalAmount += sub;
+                    newItemsTotal += sub;
 
                     batch.push(
                         env.DB.prepare("INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)")
@@ -785,24 +818,54 @@ export default {
                     );
                 }
 
-                // ref_no အပါအဝင် purchases ကို Update လုပ်ခြင်း
+                const rawMethod = String(body.payment_method || "cash").toLowerCase();
+                let newPaidAmount = 0;
+                if (rawMethod === "credit") {
+                    newPaidAmount = 0;
+                } else if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                    newPaidAmount = parseFloat(body.paid_amount);
+                } else {
+                    newPaidAmount = parseFloat(body.total_amount || newItemsTotal);
+                }
+
+                const newDiffAmount = body.diff_amount !== undefined && body.diff_amount !== null && body.diff_amount !== ""
+                    ? parseFloat(body.diff_amount)
+                    : (newPaidAmount - newItemsTotal);
+
+                const finalPaymentMethod = newPaidAmount === 0 ? "credit" : rawMethod;
+
                 batch.push(
-                    env.DB.prepare("UPDATE purchases SET supplier_name = ?, ref_no = ?, total_amount = ?, payment_method = ?, bank_account_name = ? WHERE id = ?")
-                        .bind(supplierName, refNo, newTotalAmount, paymentMethod, bankAccountName, purId)
+                    env.DB.prepare(`
+                        UPDATE purchases SET 
+                            supplier_name = ?, ref_no = ?, items_total = ?, total_amount = ?, 
+                            paid_amount = ?, diff_amount = ?, payment_method = ?, bank_account_name = ? 
+                        WHERE id = ?
+                    `).bind(
+                        supplierName, refNo, newItemsTotal, newItemsTotal, 
+                        newPaidAmount, newDiffAmount, finalPaymentMethod, 
+                        body.bank_account_name || null, purId
+                    )
                 );
 
-                // Cashbook Entry အား အမှားအယွင်းမရှိစေရန် Re-sync ပြုလုပ်ခြင်း
+                // Cashbook Entry အား အလိုအလျောက် ပြန်လည်ညှိနှိုင်းခြင်း
                 batch.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
 
-                if (paymentMethod !== "credit") {
+                if (newPaidAmount > 0) {
                     const mmToday = getMyanmarTodayDate();
+                    const cbRefNo = refNo || oldPur.purchase_no;
+                    const cbDesc = supplierName;
+
                     batch.push(
                         env.DB.prepare(`
-                            INSERT INTO cashbook_entries (branch_id, category_id, purchase_id, entry_type, payment_method, bank_account_name, amount, description, entry_date, created_by)
-                            VALUES (?, 4, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?)
+                            INSERT INTO cashbook_entries (
+                                branch_id, category_id, purchase_id, entry_type, 
+                                payment_method, bank_account_name, amount, diff_amount, 
+                                ref_no, description, entry_date, created_by
+                            ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, ?)
                         `).bind(
-                            Number(branchId), purId, paymentMethod, bankAccountName, newTotalAmount,
-                            `${supplierName} ထံမှ အဝယ်ဘောင်ချာ ${oldPur.purchase_no}${refNo ? ` (Ref: ${refNo})` : ''}`, mmToday, currentUserId
+                            Number(branchId), purId, finalPaymentMethod, 
+                            body.bank_account_name || null, newPaidAmount, newDiffAmount, 
+                            cbRefNo, cbDesc, mmToday, currentUserId
                         )
                     );
                 }
@@ -946,12 +1009,11 @@ export default {
             }
 
             // =================================================================
-            // 7. CASHBOOK CATEGORIES & ENTRIES (WITH DYNAMIC UNIT PRICE & COLOR)
+            // 7. CASHBOOK CATEGORIES & ENTRIES (REF NO & SURPLUS/DEFICIT STANDARD)
             // =================================================================
 
             // 7.1 CATEGORIES GET
             if (path === "/api/cashbook/categories" && method === "GET") {
-                // "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" Category မရှိသေးပါက အလိုအလျောက် ထည့်သွင်းပေးခြင်း
                 await env.DB.prepare(`
                     INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) 
                     VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1)
@@ -969,69 +1031,7 @@ export default {
                 const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
                 const endDate = url.searchParams.get("end_date") || startDate;
 
-                // ၁။ products, sale_items, purchase_items ဇယားများရှိ Column အမည်များကို Dynamic စစ်ဆေးခြင်း (no such column error လုံးဝမတက်စေရန်)
-                const [prodInfo, saleItemInfo, purchItemInfo] = await Promise.all([
-                    env.DB.prepare("PRAGMA table_info(products)").all().catch(() => ({ results: [] })),
-                    env.DB.prepare("PRAGMA table_info(sale_items)").all().catch(() => ({ results: [] })),
-                    env.DB.prepare("PRAGMA table_info(purchase_items)").all().catch(() => ({ results: [] }))
-                ]);
-
-                const pCols = (prodInfo.results || []).map(r => r.name.toLowerCase());
-                const siCols = (saleItemInfo.results || []).map(r => r.name.toLowerCase());
-                const piCols = (purchItemInfo.results || []).map(r => r.name.toLowerCase());
-
-                const nameCol = ["product_name", "item_name", "name", "title"].find(c => pCols.includes(c));
-                const catCol = ["category", "category_name", "cat_name"].find(c => pCols.includes(c));
-                const colorCol = ["color", "colour"].find(c => pCols.includes(c));
-
-                const siPriceCol = ["unit_price", "price", "sale_price"].find(c => siCols.includes(c));
-                const piPriceCol = ["unit_price", "price", "cost_price", "purchase_price"].find(c => piCols.includes(c));
-
-                let saleDescExpr = "ce.description";
-                let purchaseDescExpr = "ce.description";
-
-                if (nameCol) {
-                    const namePart = `p.${nameCol}`;
-                    const catPart = catCol ? `p.${catCol}` : "NULL";
-                    const colorPart = colorCol ? `p.${colorCol}` : "NULL";
-
-                    const formatExpr = `
-                        CASE 
-                            WHEN (${catPart} IS NOT NULL AND ${catPart} != '') AND (${colorPart} IS NOT NULL AND ${colorPart} != '')
-                            THEN ${catPart} || ' - ' || ${namePart} || ' (' || ${colorPart} || ')'
-                            WHEN (${catPart} IS NOT NULL AND ${catPart} != '')
-                            THEN ${catPart} || ' - ' || ${namePart}
-                            WHEN (${colorPart} IS NOT NULL AND ${colorPart} != '')
-                            THEN ${namePart} || ' (' || ${colorPart} || ')'
-                            ELSE ${namePart}
-                        END
-                    `;
-
-                    saleDescExpr = `(
-                        SELECT GROUP_CONCAT(${formatExpr}, ', ')
-                        FROM sale_items si
-                        LEFT JOIN products p ON si.product_id = p.id
-                        WHERE si.sale_id = ce.sale_id
-                    )`;
-
-                    purchaseDescExpr = `(
-                        SELECT GROUP_CONCAT(${formatExpr}, ', ')
-                        FROM purchase_items pi
-                        LEFT JOIN products p ON pi.product_id = p.id
-                        WHERE pi.purchase_id = ce.purchase_id
-                    )`;
-                }
-
-                // Price Expression (Database တွင်ရှိသော ဈေးနှုန်း သို့မဟုတ် Total Amount / Qty ဖြင့် အလိုအလျောက် တွက်ချက်ခြင်း)
-                const salePriceExpr = siPriceCol 
-                    ? `(SELECT ROUND(AVG(si.${siPriceCol})) FROM sale_items si WHERE si.sale_id = ce.sale_id)`
-                    : `NULL`;
-
-                const purchasePriceExpr = piPriceCol 
-                    ? `(SELECT ROUND(AVG(pi.${piPriceCol})) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)`
-                    : `NULL`;
-
-                // ၂။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
+                // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း (Ref No, Surplus/Deficit နှင့် တိုတိုတုတ်တုတ် Description စံနှုန်း)
                 let sql = `
                     SELECT 
                         ce.id, 
@@ -1042,39 +1042,44 @@ export default {
                         ce.entry_type, 
                         ce.payment_method, 
                         ce.amount, 
+                        -- Surplus (+) သို့မဟုတ် Deficit (-) ကွာခြားချက်ငွေ
+                        COALESCE(ce.diff_amount, p.diff_amount, 0) AS diff_amount,
+                        -- Ref No: ဆိုင်ဘောင်ချာနံပါတ် သို့မဟုတ် VR NO
+                        COALESCE(ce.ref_no, p.ref_no, s.invoice_no, p.purchase_no, 'VR-CB-' || printf('%05d', ce.id)) AS ref_no,
+                        COALESCE(s.invoice_no, p.purchase_no, 'VR-CB-' || printf('%05d', ce.id)) AS reference_no,
                         ce.entry_date,
                         ce.sale_id, 
                         ce.customer_ledger_id, 
                         ce.purchase_id,
                         COALESCE(u.full_name, 'System') AS created_by_name,
-                        COALESCE(s.invoice_no, p.purchase_no, 'VR-CB-' || printf('%05d', ce.id)) AS reference_no,
                         COALESCE(
                             (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
                             (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id),
                             NULL
                         ) AS total_quantity,
-                        -- Price (တစ်ယူနစ် ရောင်းဈေး/ဝယ်ဈေး)
-                        COALESCE(
-                            ${salePriceExpr},
-                            ${purchasePriceExpr},
-                            CASE 
-                                WHEN COALESCE(
-                                    (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
-                                    (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
-                                ) > 0 
-                                THEN ROUND(ce.amount / COALESCE(
-                                    (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
-                                    (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
-                                ))
-                                ELSE NULL 
-                            END
-                        ) AS unit_price,
-                        -- Description: Category - Item Name (Color) အလိုအလျောက် သတ်မှတ်ခြင်း
-                        COALESCE(${saleDescExpr}, ${purchaseDescExpr}, ce.description) AS description
+                        -- Unit Price
+                        CASE 
+                            WHEN COALESCE(
+                                (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
+                                (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
+                            ) > 0 
+                            THEN ROUND(ce.amount / COALESCE(
+                                (SELECT SUM(si.quantity) FROM sale_items si WHERE si.sale_id = ce.sale_id),
+                                (SELECT SUM(pi.quantity) FROM purchase_items pi WHERE pi.purchase_id = ce.purchase_id)
+                            ))
+                            ELSE NULL 
+                        END AS unit_price,
+                        -- Description: ပစ္စည်းအသေးစိတ်များ မထည့်တော့ဘဲ ပွဲရုံအမည် သို့မဟုတ် ဖောက်သည်အမည်ကိုသာ လိုရင်းတိုရှင်း ဖော်ပြခြင်း
+                        CASE 
+                            WHEN ce.purchase_id IS NOT NULL THEN COALESCE(p.supplier_name, ce.description, 'ကုန်ပစ္စည်းဝယ်ယူမှု')
+                            WHEN ce.sale_id IS NOT NULL THEN COALESCE(c.shop_name, c.name, ce.description, 'အရောင်းရငွေ')
+                            ELSE ce.description 
+                        END AS description
                     FROM cashbook_entries ce
                     LEFT JOIN branches b ON ce.branch_id = b.id
                     LEFT JOIN cash_categories cc ON ce.category_id = cc.id
                     LEFT JOIN sales s ON ce.sale_id = s.id
+                    LEFT JOIN customers c ON s.customer_id = c.id
                     LEFT JOIN purchases p ON ce.purchase_id = p.id
                     LEFT JOIN users u ON ce.created_by = u.id
                     WHERE date(ce.entry_date) BETWEEN ? AND ?
@@ -1087,7 +1092,7 @@ export default {
                 sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
                 const { results } = await env.DB.prepare(sql).bind(...bindings).all();
 
-                // ၃။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance)
+                // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance)
                 let balanceSql = `
                     SELECT 
                         COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -1104,7 +1109,7 @@ export default {
                 }
                 const balanceRow = await env.DB.prepare(balanceSql).bind(...balanceBindings).first();
 
-                // ၄။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
+                // ၃။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
                 let summarySql = `
                     SELECT 
                         COALESCE(SUM(CASE WHEN ce.entry_type = 'EXPENSE' AND (cc.name LIKE '%ပိုင်ရှင်%' OR cc.name LIKE '%အပ်ငွေ%' OR cc.name LIKE '%လွှဲ%' OR ce.category_id = 10) THEN ce.amount ELSE 0 END), 0) AS today_remittance,
@@ -1133,11 +1138,11 @@ export default {
                 });
             }
 
-            // 7.3 CASHBOOK ENTRY POST (စာရင်းအသစ်ထည့်သွင်းခြင်း)
+            // 7.3 CASHBOOK ENTRY POST (စာရင်းအသစ်ထည့်သွင်းခြင်း - Ref No & Diff Amount ပါဝင်ခြင်း)
             if (path === "/api/cashbook/entries" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
-                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
+                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate, refNo = null, diffAmount = 0 } = body;
 
                 const cleanDesc = String(description || "").trim();
                 if (!cleanDesc) {
@@ -1156,14 +1161,16 @@ export default {
                 }
 
                 const res = await env.DB.prepare(`
-                    INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, description, entry_date, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO cashbook_entries (branch_id, category_id, entry_type, payment_method, amount, diff_amount, ref_no, description, entry_date, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
                     targetBranch, 
                     Number(categoryId), 
                     String(entryType || "EXPENSE").toUpperCase(),
                     String(paymentMethod).toLowerCase(), 
                     parseFloat(amount), 
+                    parseFloat(diffAmount || 0),
+                    refNo ? String(refNo).trim() : null,
                     cleanDesc,
                     entryDate || getMyanmarTodayDate(), 
                     currentUserId
@@ -1172,11 +1179,11 @@ export default {
                 return jsonResponse({ message: "စာရင်းသွင်းပြီးပါပြီ", id: res.meta.last_row_id }, 201);
             }
 
-            // 7.4 CASHBOOK ENTRY PUT (စာရင်းပြင်ဆင်ခြင်း)
+            // 7.4 CASHBOOK ENTRY PUT (စာရင်းပြင်ဆင်ခြင်း - Ref No & Diff Amount ပါဝင်ခြင်း)
             if (path.startsWith("/api/cashbook/entries/") && method === "PUT") {
                 const id = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
-                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate } = body;
+                const { categoryId, entryType, paymentMethod = "cash", amount, description = "", entryDate, refNo = null, diffAmount = 0 } = body;
 
                 const cleanDesc = String(description || "").trim();
                 if (!cleanDesc) {
@@ -1200,6 +1207,8 @@ export default {
                         entry_type = ?,
                         payment_method = ?,
                         amount = ?,
+                        diff_amount = ?,
+                        ref_no = ?,
                         description = ?,
                         entry_date = COALESCE(?, entry_date)
                     WHERE id = ?
@@ -1208,6 +1217,8 @@ export default {
                     String(entryType || "EXPENSE").toUpperCase(),
                     String(paymentMethod).toLowerCase(),
                     parseFloat(amount),
+                    parseFloat(diffAmount || 0),
+                    refNo ? String(refNo).trim() : null,
                     cleanDesc,
                     entryDate || null,
                     id

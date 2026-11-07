@@ -39,9 +39,9 @@
         </div>
     </div>
 
-    <!-- Purchases History Table Container (Compact One-Line View: REF ပါဝင်သော ၁၆ ကော်လံ) -->
+    <!-- Purchases History Table Container (Compact One-Line View: REF & SURPLUS/DEFICIT ပါဝင်သော ၁၇ ကော်လံစနစ်) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
-        <table class="w-full text-left border-collapse min-w-[1700px]">
+        <table class="w-full text-left border-collapse min-w-[1800px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-11">
                     <th class="py-2.5 px-3 w-12 text-center">NO</th>
@@ -53,12 +53,13 @@
                     <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
                     <th class="py-2.5 px-4 w-28 text-right">UNIT PRICE</th>
                     <th class="py-2.5 px-4 w-32 text-right">AMOUNT</th>
-                    <th class="py-2.5 px-3 w-24 text-left">METHOD</th>
-                    <th class="py-2.5 px-3 w-24 text-left">TYPE</th>
+                    <th class="py-2.5 px-3 w-20 text-left">METHOD</th>
+                    <th class="py-2.5 px-3 w-20 text-left">TYPE</th>
                     <th class="py-2.5 px-4 w-28 text-right">WHOLESALE</th>
                     <th class="py-2.5 px-4 w-28 text-right">RETAIL</th>
                     <th class="py-2.5 px-4 min-w-[160px] text-left">SUPPLIER</th>
                     <th class="py-2.5 px-3 w-28 text-left">REF</th>
+                    <th class="py-2.5 px-3 w-28 text-center">SURPLUS & DEFICIT</th>
                     <!-- Sticky Right Action Column Header -->
                     <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
@@ -69,7 +70,7 @@
             <!-- divide-y ဖယ်ရှားထားသော သန့်ရှင်းသည့် tbody -->
             <tbody id="pur-table-body">
                 <tr>
-                    <td colspan="16" class="p-16 text-center text-slate-400">
+                    <td colspan="17" class="p-16 text-center text-slate-400">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                         <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                     </td>

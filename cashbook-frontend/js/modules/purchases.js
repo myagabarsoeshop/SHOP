@@ -146,6 +146,19 @@ function bindEvents() {
     document.getElementById("sub-cat")?.addEventListener("input", (e) => {
         document.getElementById("sub-sku").value = generateAutoSKU(e.target.value.trim());
     });
+
+    // Dedicated Quick New Supplier Sub-Modal Events
+    document.getElementById("btn-open-new-supplier-modal")?.addEventListener("click", () => {
+        document.getElementById("quick-supplier-form")?.reset();
+        document.getElementById("quick-supplier-modal")?.classList.remove("hidden");
+        document.getElementById("quick-supp-name")?.focus();
+    });
+
+    document.getElementById("btn-close-quick-supp-modal")?.addEventListener("click", () => {
+        document.getElementById("quick-supplier-modal")?.classList.add("hidden");
+    });
+
+    document.getElementById("quick-supplier-form")?.addEventListener("submit", submitQuickSupplierForm);
 }
 
 async function loadMasterProducts() {
@@ -163,7 +176,8 @@ async function loadSuppliers() {
     try {
         const res = await api.get("/customers");
         const list = res.data || [];
-        supplierList = [...new Set(list.map(c => (c.shop_name || c.name || "").trim()).filter(Boolean))];
+        // Supplier များသာမက ဖောက်သည်ဆိုင်အမည်များပါ ပါဝင်အောင် စစ်ထုတ်ယူခြင်း
+        supplierList = [...new Set(list.map(c => (c.name || c.shop_name || "").trim()).filter(Boolean))];
         
         const datalist = document.getElementById("pur-supplier-datalist");
         if (datalist) {
@@ -174,6 +188,45 @@ async function loadSuppliers() {
         }
     } catch (err) {
         console.error("Suppliers စာရင်း ရယူ၍ မရပါ:", err);
+    }
+}
+
+async function submitQuickSupplierForm(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-submit-quick-supp");
+    const name = document.getElementById("quick-supp-name")?.value.trim();
+    const phone = document.getElementById("quick-supp-phone")?.value.trim() || null;
+    const shop = document.getElementById("quick-supp-shop")?.value.trim() || null;
+    const address = document.getElementById("quick-supp-address")?.value.trim() || null;
+
+    if (!name) return ui.toast.warning("ပွဲရုံအမည် ထည့်သွင်းပေးပါ။");
+
+    if (btn) btn.disabled = true;
+
+    try {
+        await api.post("/customers", {
+            name,
+            phone,
+            shopName: shop,
+            address,
+            entityType: "SUPPLIER",
+            customerType: "wholesale",
+            initialDebt: 0,
+            initialPayable: 0
+        });
+
+        ui.toast.success(`ပွဲရုံ "${name}" အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`);
+        
+        // Modal ပိတ်ပြီး Purchase ဖောင်တွင် နာမည် အလိုအလျောက် ရွေးပေးခြင်း
+        document.getElementById("quick-supplier-modal")?.classList.add("hidden");
+        const suppInput = document.getElementById("pur-supplier");
+        if (suppInput) suppInput.value = name;
+
+        await loadSuppliers();
+    } catch (err) {
+        ui.toast.error("ပွဲရုံမှတ်ပုံတင်၍ မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -295,13 +348,11 @@ function renderPurchasesTable() {
         const paidAmount = Number(pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount);
         const totalAmount = Number(pur.items_total || pur.total_amount || 0);
 
-        // 1. METHOD သတ်မှတ်ခြင်း (CASH / BANK / -)
         let methodStr = "-";
         if (paidAmount > 0) {
             methodStr = rawMethod === "bank" ? "BANK" : "CASH";
         }
 
-        // 2. TYPE သတ်မှတ်ခြင်း (PAID / CREDIT / PARTIAL)
         let typeStr = "PAID";
         let typeColorClass = "text-emerald-600 dark:text-emerald-400";
         if (paidAmount === 0 || rawMethod === "credit") {
@@ -318,7 +369,6 @@ function renderPurchasesTable() {
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
 
-        // 3. SURPLUS & DEFICIT (ပိုငွေ / လိုငွေ တွက်ချက်ပြသခြင်း)
         const diff = Number(pur.diff_amount || 0);
         let diffBadge = `<span class="text-slate-400 font-mono text-xs">-</span>`;
         if (diff > 0) {
@@ -385,7 +435,7 @@ function renderPurchasesTable() {
             <!-- 14. SUPPLIER -->
             <td class="py-2 px-4 text-left text-base font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
             
-            <!-- 15. REF (Supplier Invoice No) -->
+            <!-- 15. REF -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(refNo)}">${ui.escapeHtml(refNo)}</td>
 
             <!-- 16. SURPLUS & DEFICIT -->
@@ -428,7 +478,7 @@ function generateAutoSKU(categoryName = "") {
 }
 
 // =========================================================================
-// --- MODAL WORKSPACE LOGIC (Compact One-Line Pro View) --------------------
+// --- MODAL WORKSPACE LOGIC -----------------------------------------------
 // =========================================================================
 
 function openPurchaseModal(pur = null) {
@@ -601,7 +651,7 @@ function addOrderItem(prod, isNew = false) {
 }
 
 /**
- * Compact One-Line Order Items Table Rendering (စာကြောင်းမကျိုးသော Standard Layout)
+ * Compact One-Line Order Items Table Rendering
  */
 function renderOrderItemsTable() {
     const tbody = document.getElementById("pur-items-container");
@@ -634,7 +684,7 @@ function renderOrderItemsTable() {
             <!-- 1. စဉ် -->
             <td class="py-1 px-2.5 text-center text-slate-400 font-mono text-xs">${index + 1}</td>
             
-            <!-- 2. ပစ္စည်းအချက်အလက် (One-Line Truncate) -->
+            <!-- 2. ပစ္စည်းအချက်အလက် -->
             <td class="py-1 px-3">
                 <div class="font-extrabold text-slate-900 dark:text-white text-xs truncate max-w-[220px]" title="${ui.escapeHtml(item.item_name)}">${ui.escapeHtml(item.item_name)}</div>
                 <div class="text-[10px] text-slate-400 font-mono truncate max-w-[220px]">
@@ -654,7 +704,7 @@ function renderOrderItemsTable() {
                     class="item-cost w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
             </td>
 
-            <!-- 5. လက်လီရောင်းဈေး / % (ဘေးချင်းကပ် One-Line Layout) -->
+            <!-- 5. လက်လီရောင်းဈေး / % -->
             <td class="py-1 px-2.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                     <input type="text" inputmode="numeric" value="${item.retail_price}" data-idx="${index}" placeholder="ရောင်းဈေး"
@@ -667,7 +717,7 @@ function renderOrderItemsTable() {
                 </div>
             </td>
 
-            <!-- 6. လက်ကားရောင်းဈေး / % (ဘေးချင်းကပ် One-Line Layout) -->
+            <!-- 6. လက်ကားရောင်းဈေး / % -->
             <td class="py-1 px-2.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                     <input type="text" inputmode="numeric" value="${item.wholesale_price}" data-idx="${index}" placeholder="လက်ကား"
@@ -703,7 +753,6 @@ function attachRowEvents() {
     const tbody = document.getElementById("pur-items-container");
     if (!tbody) return;
 
-    // ၁။ အရေအတွက် Input Event (Auto-Normalize Myanmar Digits)
     tbody.querySelectorAll(".item-qty").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -720,7 +769,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၂။ ဝယ်ရင်းဈေး Input Event
     tbody.querySelectorAll(".item-cost").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -748,7 +796,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၃။ လက်လီရောင်းဈေး Input Event
     tbody.querySelectorAll(".item-retail").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -767,7 +814,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၄။ လက်လီ Margin % Input Event
     tbody.querySelectorAll(".item-retail-pct").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -783,7 +829,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၅။ လက်ကားရောင်းဈေး Input Event
     tbody.querySelectorAll(".item-wholesale").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -802,7 +847,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၆။ လက်ကား Margin % Input Event
     tbody.querySelectorAll(".item-wholesale-pct").forEach(input => {
         input.oninput = (e) => {
             const normalized = normalizeDigits(e.target.value);
@@ -818,7 +862,6 @@ function attachRowEvents() {
         };
     });
 
-    // ၇။ ဖျက်သိမ်းခြင်း Button Event
     tbody.querySelectorAll(".btn-remove-item").forEach(btn => {
         btn.onclick = (e) => {
             const idx = Number(e.currentTarget.dataset.idx);
@@ -828,9 +871,6 @@ function attachRowEvents() {
     });
 }
 
-/**
- * စုစုပေါင်းတန်ဖိုးများနှင့် အမှန်ပေးငွေ / ကွာခြားချက် Auto Calculator
- */
 function updateOrderSummary() {
     const totalQty = selectedOrderItems.reduce((acc, it) => acc + Number(it.quantity || 0), 0);
     const grandTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
@@ -956,7 +996,6 @@ async function submitPurchase() {
     const branchId = state.currentBranch?.id || 1;
     const itemsTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
     
-    // အမှန်ပေးငွေ နှင့် ကွာခြားချက် တွက်ချက်ခြင်း
     const paidInputVal = document.getElementById("pur-actual-paid")?.value;
     let paidAmount = 0;
     if (paymentMethod === "credit") {
@@ -1058,7 +1097,7 @@ async function deletePurchase(id) {
 }
 
 /**
- * Purchases စာရင်းအား REF နှင့် SURPLUS & DEFICIT ကော်လံပါဝင်သော စံနှုန်းအတိုင်း CSV Export ထုတ်ယူပေးသည့် Function
+ * Purchases စာရင်းအား CSV Export ထုတ်ယူခြင်း
  */
 function exportPurchasesToCSV() {
     const listToExport = currentFilteredPurchases.length > 0 ? currentFilteredPurchases : purchasesList;

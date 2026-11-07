@@ -598,7 +598,7 @@ export default {
             }
 
             // =================================================================
-            // 5. PURCHASES & STOCK IN (ITEMS TOTAL, PAID, DIFF & CASHBOOK SYNC)
+            // 5. PURCHASES & STOCK IN (AUTO SUPPLIER REGISTRATION & PAYABLES SYNC)
             // =================================================================
             if (path === "/api/purchases" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
@@ -645,8 +645,11 @@ export default {
             if (path === "/api/purchases" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const targetBranch = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
+                const supplierName = String(body.supplier_name || "").trim();
 
-                // ၁။ VR NO အား DDMMYY-01 ပုံစံဖြင့် နေ့စဉ် Auto Sequence ထုတ်ယူခြင်း
+                if (!supplierName) return errorResponse("ပေးသွင်းသူ (ပွဲရုံ) အမည် လိုအပ်ပါသည်", 400);
+
+                // ၁။ VR NO အား DDMMYY-01 ပုံစံဖြင့် Auto Sequence ထုတ်ယူခြင်း
                 const mmToday = getMyanmarTodayDate(); // YYYY-MM-DD
                 const [yyyy, mth, day] = mmToday.split("-");
                 const prefix = `${day}${mth}${yyyy.slice(-2)}`;
@@ -666,7 +669,7 @@ export default {
                 const purchaseNo = `${prefix}-${nextSeq}`;
                 const refNo = body.ref_no ? String(body.ref_no).trim() : null;
 
-                // ၂။ ပစ္စည်းပေါင်းလဒ် (items_total)၊ အမှန်ပေးငွေ (paid_amount) နှင့် ကွာခြားချက် (diff_amount) တွက်ချက်ခြင်း
+                // ၂။ ပစ္စည်းပေါင်းလဒ်၊ အမှန်ပေးငွေ နှင့် ကွာခြားချက် တွက်ချက်ခြင်း
                 const itemsList = body.items || [];
                 const itemsTotal = itemsList.reduce((acc, it) => acc + (parseFloat(it.subtotal) || (parseFloat(it.quantity || 0) * parseFloat(it.unit_cost || 0))), 0);
                 
@@ -686,7 +689,28 @@ export default {
 
                 const finalPaymentMethod = paidAmount === 0 ? "credit" : rawMethod;
 
-                // ၃။ purchases ဇယားထဲသို့ စာရင်းသွင်းခြင်း
+                // ၃။ ပွဲရုံအမည်အား customers ဇယားတွင် ရှိ/မရှိ စစ်ဆေးပြီး မရှိပါက Auto-Register ပြုလုပ်ပေးခြင်း
+                let supplierRecord = await env.DB.prepare(
+                    "SELECT id, current_payable FROM customers WHERE name = ? OR shop_name = ? LIMIT 1"
+                ).bind(supplierName, supplierName).first();
+
+                let supplierId = supplierRecord?.id;
+                const payableToAdd = diffAmount < 0 ? Math.abs(diffAmount) : (finalPaymentMethod === "credit" ? itemsTotal : 0);
+
+                if (!supplierRecord) {
+                    const suppInsertRes = await env.DB.prepare(`
+                        INSERT INTO customers (name, shop_name, entity_type, customer_type, current_debt, current_payable)
+                        VALUES (?, ?, 'SUPPLIER', 'wholesale', 0, ?)
+                    `).bind(supplierName, supplierName, payableToAdd).run().catch(() => null);
+
+                    supplierId = suppInsertRes?.meta?.last_row_id;
+                } else if (payableToAdd > 0) {
+                    await env.DB.prepare(
+                        "UPDATE customers SET current_payable = COALESCE(current_payable, 0) + ? WHERE id = ?"
+                    ).bind(payableToAdd, supplierId).run().catch(() => {});
+                }
+
+                // ၄။ purchases ဇယားထဲသို့ မှတ်တမ်းတင်ခြင်း
                 const purRes = await env.DB.prepare(`
                     INSERT INTO purchases (
                         purchase_no, ref_no, branch_id, supplier_name, 
@@ -694,7 +718,7 @@ export default {
                         payment_method, bank_account_name, created_by
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    purchaseNo, refNo, targetBranch, String(body.supplier_name).trim(),
+                    purchaseNo, refNo, targetBranch, supplierName,
                     itemsTotal, itemsTotal, paidAmount, diffAmount,
                     finalPaymentMethod, body.bank_account_name || null, currentUserId
                 ).run();
@@ -702,6 +726,20 @@ export default {
                 const newPurId = purRes.meta.last_row_id;
                 const batchStatements = [];
 
+                // ၅။ ပေးရန်ကျန်ငွေရှိပါက supplier_ledger သို့ စာရင်းသွင်းခြင်း
+                if (payableToAdd > 0 && supplierId) {
+                    batchStatements.push(
+                        env.DB.prepare(`
+                            INSERT INTO supplier_ledger (supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, reference_note, created_by)
+                            VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, ?)
+                        `).bind(
+                            supplierId, targetBranch, newPurId, payableToAdd, supplierId,
+                            finalPaymentMethod, `အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ''}`, currentUserId
+                        )
+                    );
+                }
+
+                // ၆။ ပစ္စည်းများနှင့် စတော့ အဝင်မှတ်တမ်းတင်ခြင်း
                 for (const item of itemsList) {
                     let targetProductId = item.product_id;
 
@@ -744,11 +782,10 @@ export default {
                     );
                 }
 
-                // ၄။ အမှန်တကယ် ငွေပေးခဲ့ရပါက Cash Book တွင် စာရင်းထည့်သွင်းခြင်း (Actual Paid Amount & Supplier Name Only)
+                // ၇။ အမှန်တကယ် ပေးခဲ့သော ငွေရှိပါက Cash Book တွင် စာရင်းသွင်းခြင်း
                 if (paidAmount > 0) {
                     const cbRefNo = refNo || purchaseNo;
-                    // Description တွင် ပစ္စည်းစာရင်းရှည်များ မထည့်တော့ဘဲ ပွဲရုံ/ဆိုင်အမည် သာ လိုရင်းတိုရှင်း ထည့်သွင်းခြင်း
-                    const cbDesc = String(body.supplier_name).trim();
+                    const cbDesc = supplierName;
 
                     batchStatements.push(
                         env.DB.prepare(`
@@ -765,11 +802,14 @@ export default {
                     );
                 }
 
-                await env.DB.batch(batchStatements);
+                if (batchStatements.length > 0) {
+                    await env.DB.batch(batchStatements);
+                }
+
                 return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
             }
 
-            // 5.1. PURCHASES UPDATE (အဝယ်စာရင်း ပြင်ဆင်ခြင်းနှင့် စတော့၊ Cashbook အလိုအလျောက် ပြန်ညှိခြင်း)
+            // 5.1. PURCHASES UPDATE
             if (path.startsWith("/api/purchases/") && method === "PUT") {
                 const purId = Number(path.split("/").pop());
                 const body = await request.json().catch(() => ({}));
@@ -788,7 +828,6 @@ export default {
                 const { results: oldItems } = await env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId).all();
                 const batch = [];
 
-                // ယခင် စတော့အရေအတွက်များ ပြန်လည်နုတ်ယူခြင်း
                 (oldItems || []).forEach(it => {
                     batch.push(
                         env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ? WHERE branch_id = ? AND product_id = ?")
@@ -847,7 +886,6 @@ export default {
                     )
                 );
 
-                // Cashbook Entry အား အလိုအလျောက် ပြန်လည်ညှိနှိုင်းခြင်း
                 batch.push(env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId));
 
                 if (newPaidAmount > 0) {
@@ -874,7 +912,7 @@ export default {
                 return jsonResponse({ message: "အဝယ်စာရင်း ပြင်ဆင်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
             }
 
-            // 5.2. PURCHASES DELETE (အဝယ်စာရင်း ပယ်ဖျက်ခြင်း)
+            // 5.2. PURCHASES DELETE
             if (path.startsWith("/api/purchases/") && method === "DELETE") {
                 const purId = Number(path.split("/").pop());
 
@@ -897,6 +935,7 @@ export default {
                 await env.DB.batch(batchRollback);
                 return jsonResponse({ message: "အဝယ်စာရင်း ဖျက်သိမ်းပြီး စတော့နှင့် ငွေစာရင်း ပြန်ညှိပြီးပါပြီ။" });
             }
+            
             // =================================================================
             // 6. DAMAGE & WASTE LOGS
             // =================================================================

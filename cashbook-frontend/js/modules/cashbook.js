@@ -16,7 +16,7 @@ const FALLBACK_CATEGORIES = [
     { id: 3, name: "အခြားဝင်ငွေ", type: "INCOME" },
     { id: 4, name: "ချည်ဝယ်ယူစရိတ်", type: "EXPENSE" },
     { id: 5, name: "ရက်ကန်းလက်ခ / လုပ်အားခ", type: "EXPENSE" },
-    { id: 6, name: "ဆိုင်အသုံးစရိတ် / မီးဖိုချောင်", type: "EXPENSE" },
+    { id: 6, name: "ဝယ်ရောင်းအထည်ဝယ်ယူစရိတ်", type: "EXPENSE" },
     { id: 7, name: "သယ်ယူပို့ဆောင်ခ / ကားခ", type: "EXPENSE" },
     { id: 8, name: "ဝန်ထမ်းလစာ / ကြိုထုတ်ငွေ", type: "EXPENSE" },
     { id: 10, name: "ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ", type: "EXPENSE" }
@@ -32,7 +32,7 @@ const pagination = new PaginationController({
  * မြန်မာဂဏန်း (၀၁၂၃၄၅၆၇၈၉) မှ အင်္ဂလိပ်ဂဏန်း (0123456789) သို့ အလိုအလျောက် ပြောင်းလဲပေးသည့် Helper
  */
 function parseAnyNumber(val) {
-    if (!val) return 0;
+    if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
     let cleanStr = String(val).replace(/,/g, "").trim();
     myanmarDigits.forEach((d, idx) => {
@@ -87,14 +87,14 @@ function bindEvents() {
         loadEntries();
     });
 
-    // 6. Search Filter
+    // 6. Search Filter (Ref No, Surplus/Deficit အပါအဝင် ရှာဖွေနိုင်ခြင်း)
     document.getElementById("cb-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
         currentFilteredEntries = entries.filter(r => {
             const cat = (r.category_name || r.category || "").toLowerCase();
             const desc = (r.description || "").toLowerCase();
             const method = (r.payment_method || "").toLowerCase();
-            const ref = (r.reference_no || r.invoice_no || r.purchase_no || `VR-CB-${String(r.id).padStart(5, "0")}`).toLowerCase();
+            const ref = (r.ref_no || r.reference_no || r.invoice_no || r.purchase_no || "").toLowerCase();
             return cat.includes(kw) || desc.includes(kw) || method.includes(kw) || ref.includes(kw);
         });
         pagination.reset();
@@ -138,7 +138,7 @@ async function loadEntries() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="9" class="p-16 text-center text-slate-400">
+                <td colspan="11" class="p-16 text-center text-slate-400">
                     <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                     <div class="font-bold text-xs">ငွေစာရင်းများ ဆွဲယူနေပါသည်...</div>
                 </td>
@@ -191,11 +191,14 @@ async function loadEntries() {
     } catch (err) {
         console.error("Load entries error:", err);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍ မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍ မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
 
+/**
+ * Cash Book Table Rendering (AMOUNT နောက်တွင် REF နှင့် SURPLUS & DEFICIT ပါဝင်သော ၁၁ ကော်လံစနစ်)
+ */
 function renderTable() {
     const tbody = document.getElementById("cashbook-table-body");
     if (!tbody) return;
@@ -204,7 +207,7 @@ function renderTable() {
     if (currentFilteredEntries.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="9" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="11" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-book-open text-3xl mb-3 opacity-30"></i>
                     <div>ရွေးချယ်ထားသော ရက်စွဲအတွက် မှတ်တမ်း မရှိသေးပါ</div>
                 </td>
@@ -222,7 +225,7 @@ function renderTable() {
         const isIncome = entryType === "INCOME";
         const sign = isIncome ? "+" : "-";
 
-        // ၁။ Category Format
+        // ၁။ Category Format & Color
         const catName = item.category_name || item.category || "General";
         const isRemittance = catName.includes("ပိုင်ရှင်") || catName.includes("အပ်ငွေ") || catName.includes("လွှဲ") || item.category_id === 10;
 
@@ -243,18 +246,18 @@ function renderTable() {
             amountColorClass = "text-rose-600 dark:text-rose-400";
         }
 
-        // ၂။ Description စာသား
+        // ၂။ Description စာသား (ဆိုင်အမည် / ပွဲရုံအမည် သို့မဟုတ် အကြောင်းအရာ အတိုချုပ်)
         let desc = String(item.description || "-");
 
         // ၃။ Method (CASH / BANK)
         const method = String(item.payment_method || "cash").toUpperCase();
 
-        // ၄။ Qty (အရေအတွက်) Format
+        // ၄။ Qty (အရေအတွက်)
         const qtyVal = item.total_quantity || item.quantity;
         const hasQty = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0;
         const qtyStr = hasQty ? Number(qtyVal).toLocaleString() : "-";
 
-        // ၅။ Price (တစ်ယူနစ် ရောင်းဈေး / ဝယ်ဈေး တွက်ချက်ခြင်း)
+        // ၅။ Price (နှုန်း)
         let priceVal = item.unit_price;
         if ((priceVal === undefined || priceVal === null) && hasQty && Number(item.amount) > 0) {
             priceVal = Math.round(Number(item.amount) / Number(qtyVal));
@@ -263,51 +266,73 @@ function renderTable() {
             ? Number(priceVal).toLocaleString()
             : "-";
 
-        // ၆။ Sticky Right Action Buttons
+        // ၆။ REF (Voucher No / Invoice No / Ref No)
+        const refNo = item.ref_no || item.reference_no || item.invoice_no || item.purchase_no || "-";
+
+        // ၇။ SURPLUS & DEFICIT (ပိုငွေ / လိုငွေ ကွာခြားချက်)
+        const diff = Number(item.diff_amount || 0);
+        let diffBadge = `<span class="text-slate-400 font-mono text-xs">-</span>`;
+        if (diff > 0) {
+            diffBadge = `<span class="text-amber-500 font-mono font-bold text-xs" title="ပွဲရုံထံ ပိုပေးထားငွေ / ပြန်ရရန်">+${diff.toLocaleString()}</span>`;
+        } else if (diff < 0) {
+            diffBadge = `<span class="text-rose-500 font-mono font-bold text-xs" title="ပေးရန်ကျန် အကြွေး">${diff.toLocaleString()}</span>`;
+        }
+
+        // ၈။ Sticky Right Action Buttons
         const actionButtons = `
-            <div class="flex items-center justify-center gap-2">
+            <div class="flex items-center justify-center gap-1.5">
                 <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" 
-                    class="btn-edit-entry w-7 h-7 flex items-center justify-center text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition cursor-pointer shadow-sm active:scale-95">
+                    class="btn-edit-entry w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
                 <button type="button" data-id="${item.id}" title="ဖျက်မည်" 
-                    class="btn-delete-entry w-7 h-7 flex items-center justify-center text-rose-500 hover:text-white hover:bg-rose-600 rounded-lg transition cursor-pointer shadow-sm active:scale-95">
+                    class="btn-delete-entry w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
         `;
 
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-14";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         row.innerHTML = `
             <!-- 1. NO -->
-            <td class="py-3 px-3 text-center font-mono text-xs text-slate-400">${startIdx + idx + 1}</td>
+            <td class="py-2.5 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
             <!-- 2. DATE -->
-            <td class="py-3 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">${ui.escapeHtml(item.entry_date || item.date)}</td>
+            <td class="py-2.5 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${ui.escapeHtml(item.entry_date || item.date)}</td>
             
             <!-- 3. CATEGORY -->
-            <td class="py-3 px-4 text-base ${catColor} truncate max-w-[170px]">${ui.escapeHtml(catName)}</td>
+            <td class="py-2.5 px-4 text-base ${catColor} truncate max-w-[170px]" title="${ui.escapeHtml(catName)}">${ui.escapeHtml(catName)}</td>
             
-            <!-- 4. DESCRIPTION -->
-            <td class="py-3 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[240px] max-w-md truncate leading-snug" title="${ui.escapeHtml(desc)}">
+            <!-- 4. DESCRIPTION (ဆိုင်အမည် / ပွဲရုံအမည် တိုတိုတုတ်တုတ်) -->
+            <td class="py-2.5 px-4 text-base font-semibold text-slate-900 dark:text-slate-100 min-w-[200px] max-w-sm truncate" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc || "-")}
             </td>
             
-            <!-- 5. METHOD (ဘယ်ဘက်သို့ ရွှေ့ထားသည်) -->
-            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">${method}</td>
+            <!-- 5. METHOD -->
+            <td class="py-2.5 px-3 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${method}</td>
             
             <!-- 6. QTY -->
-            <td class="py-3 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${qtyStr}</td>
+            <td class="py-2.5 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300 w-16">${qtyStr}</td>
             
-            <!-- 7. PRICE (ရောင်းဈေး / နှုန်း) -->
-            <td class="py-3 px-4 text-right font-mono text-xs font-bold text-slate-700 dark:text-slate-300">${priceStr}</td>
+            <!-- 7. PRICE -->
+            <td class="py-2.5 px-4 text-right font-mono text-xs font-bold text-slate-700 dark:text-slate-300 w-24">${priceStr}</td>
             
             <!-- 8. AMOUNT -->
-            <td class="py-3 px-4 text-right font-black font-mono text-base ${amountColorClass}">${sign}${Number(item.amount || 0).toLocaleString()}</td>
+            <td class="py-2.5 px-4 text-right font-black font-mono text-base ${amountColorClass} w-32">${sign}${Number(item.amount || 0).toLocaleString()}</td>
             
-            <!-- 9. ACTION (Sticky Right) -->
-            <td class="py-3 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+            <!-- 9. REF (AMOUNT နောက်ကပ်လျက် REF ကော်လံ) -->
+            <td class="py-2.5 px-3 text-center font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28 truncate" title="${ui.escapeHtml(refNo)}">
+                ${ui.escapeHtml(refNo)}
+            </td>
+
+            <!-- 10. SURPLUS & DEFICIT (ပိုငွေ / လိုငွေ) -->
+            <td class="py-2.5 px-3 text-center font-mono text-xs w-28">
+                ${diffBadge}
+            </td>
+
+            <!-- 11. ACTION (Sticky Right) -->
+            <td class="py-2.5 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
         `;
@@ -426,14 +451,12 @@ async function submitEntry(e) {
     const amount = parseAnyNumber(document.getElementById("entry-amount")?.value);
     const description = document.getElementById("entry-desc")?.value.trim();
 
-    // ၁။ အကြောင်းအရာ (Description) မပါမဖြစ် စစ်ဆေးခြင်း
     if (!description) {
         ui.toast.warning("အသေးစိတ် အကြောင်းအရာ (Description) မဖြစ်မနေ ထည့်သွင်းပေးပါ။");
         document.getElementById("entry-desc")?.focus();
         return;
     }
 
-    // ၂။ ခေါင်းစဉ်နှင့် ငွေပမာဏ စစ်ဆေးခြင်း
     if (!categoryId || isNaN(amount) || amount <= 0) {
         ui.toast.warning("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ။");
         document.getElementById("entry-amount")?.focus();
@@ -493,7 +516,7 @@ async function deleteEntry(id) {
 
 /**
  * UI Table Header အသစ်အတိုင်း ထုတ်ယူပေးသော CSV Export စနစ်
- * Columns: NO, DATE, CATEGORY, DESCRIPTION, METHOD, QTY, PRICE, AMOUNT, REF
+ * Columns: NO, DATE, CATEGORY, DESCRIPTION, METHOD, QTY, PRICE, AMOUNT, REF, SURPLUS_DEFICIT
  */
 function exportCSV() {
     const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
@@ -502,7 +525,7 @@ function exportCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
     
-    let csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,QTY,PRICE,AMOUNT,REF\n";
+    let csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,QTY,PRICE,AMOUNT,REF,SURPLUS_DEFICIT\n";
 
     listToExport.forEach((item, idx) => {
         const no = idx + 1;
@@ -513,7 +536,8 @@ function exportCSV() {
 
         const catName = item.category_name || item.category || "General";
         let desc = String(item.description || "-");
-        let refNo = item.reference_no || item.invoice_no || item.purchase_no || `VR-CB-${String(item.id).padStart(5, "0")}`;
+        let refNo = item.ref_no || item.reference_no || item.invoice_no || item.purchase_no || "-";
+        let diffAmount = Number(item.diff_amount || 0);
 
         const method = String(item.payment_method || "cash").toUpperCase();
 
@@ -529,7 +553,7 @@ function exportCSV() {
 
         const amountStr = `${sign}${Number(item.amount || 0)}`;
 
-        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(priceStr)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)}\n`;
+        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(priceStr)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)},${diffAmount}\n`;
     });
     
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });

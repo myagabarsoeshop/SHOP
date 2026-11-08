@@ -1849,6 +1849,22 @@ export default {
             if (path === "/api/transfers" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id");
 
+                // stock_transfers ဇယား မရှိသေးပါက အလိုအလျောက် တည်ဆောက်ပေးမည်
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS stock_transfers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        transfer_no TEXT NOT NULL UNIQUE,
+                        from_branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                        to_branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                        quantity REAL NOT NULL,
+                        status TEXT DEFAULT 'COMPLETED',
+                        notes TEXT,
+                        created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run().catch(() => {});
+
                 let sql = `
                     SELECT 
                         t.id, t.transfer_no, t.from_branch_id, t.to_branch_id, t.product_id, t.quantity, t.status, t.notes, t.created_at,
@@ -1869,7 +1885,7 @@ export default {
                 }
                 sql += ` ORDER BY t.id DESC LIMIT 300 `;
 
-                const { results } = await env.DB.prepare(sql).bind(...bindings).all();
+                const { results } = await env.DB.prepare(sql).bind(...bindings).all().catch(() => ({ results: [] }));
                 return jsonResponse(results || []);
             }
 

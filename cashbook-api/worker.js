@@ -941,6 +941,22 @@ export default {
             // =================================================================
             if (path === "/api/waste" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
+
+                // ဇယားမရှိသေးပါက အလိုအလျောက် တည်ဆောက်ပေးမည်
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS waste_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        reference_no TEXT NOT NULL UNIQUE,
+                        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                        quantity REAL NOT NULL,
+                        unit_cost REAL NOT NULL DEFAULT 0,
+                        reason TEXT,
+                        recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run().catch(() => {});
+
                 const sql = `
                     SELECT 
                         w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
@@ -952,7 +968,7 @@ export default {
                     WHERE w.branch_id = ?
                     ORDER BY w.id DESC LIMIT 300
                 `;
-                const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all();
+                const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all().catch(() => ({ results: [] }));
                 return jsonResponse(results || []);
             }
 
@@ -970,7 +986,7 @@ export default {
 
                 const inv = await env.DB.prepare(`
                     SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
-                `).bind(branchId, productId).first();
+                `).bind(branchId, productId).first().catch(() => null);
 
                 const currentStock = Number(inv?.quantity || 0);
                 if (currentStock < quantity) {
@@ -993,8 +1009,12 @@ export default {
                     `).bind(quantity, branchId, productId)
                 ];
 
-                await env.DB.batch(batchStatements);
-                return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
+                try {
+                    await env.DB.batch(batchStatements);
+                    return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
+                } catch (e) {
+                    return errorResponse("ဒေတာသိမ်းဆည်းရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့ပါသည်: " + e.message, 500);
+                }
             }
 
             if (path.startsWith("/api/waste/") && method === "PUT") {
@@ -1008,13 +1028,15 @@ export default {
                     return errorResponse("မှန်ကန်သော အရေအတွက်/ပမာဏ ထည့်သွင်းပါ", 400);
                 }
 
-                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity, unit_cost FROM waste_logs WHERE id = ?").bind(id).first();
+                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity, unit_cost FROM waste_logs WHERE id = ?").bind(id).first().catch(() => null);
                 if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
 
                 const diff = Math.round((Number(oldLog.quantity) - newQty) * 1000) / 1000;
+                
+                // အရေအတွက် ပိုတိုးလာပါက (စတော့ထဲမှ ထပ်နှုတ်ရမည်ဖြစ်သဖြင့် စတော့အလုံအလောက်ရှိမရှိ စစ်ဆေးခြင်း)
                 if (diff < 0) {
                     const inv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
-                        .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first();
+                        .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first().catch(() => null);
                     const currentStock = Number(inv?.quantity || 0);
                     if (currentStock + diff < 0) {
                         return errorResponse(`လက်ကျန်စတော့ မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
@@ -1023,28 +1045,38 @@ export default {
 
                 const finalUnitCost = unitCost !== null ? unitCost : Number(oldLog.unit_cost || 0);
 
-                await env.DB.batch([
+                const batchStatements = [
                     env.DB.prepare("UPDATE waste_logs SET quantity = ?, unit_cost = ?, reason = ? WHERE id = ?")
                         .bind(newQty, finalUnitCost, reason, id),
                     env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
                         .bind(diff, Number(oldLog.branch_id), Number(oldLog.product_id))
-                ]);
+                ];
 
-                return jsonResponse({ message: "အလေအလွင့်စာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်ညှိပြီးပါပြီ။" });
+                try {
+                    await env.DB.batch(batchStatements);
+                    return jsonResponse({ message: "အလေအလွင့်စာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်ညှိပြီးပါပြီ။" });
+                } catch (e) {
+                    return errorResponse("ပြင်ဆင်ခြင်း မအောင်မြင်ပါ: " + e.message, 500);
+                }
             }
 
             if (path.startsWith("/api/waste/") && method === "DELETE") {
                 const id = Number(path.split("/").pop());
-                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
+                const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first().catch(() => null);
                 if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
 
-                await env.DB.batch([
+                const batchStatements = [
                     env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
                         .bind(Number(oldLog.quantity), Number(oldLog.branch_id), Number(oldLog.product_id)),
                     env.DB.prepare("DELETE FROM waste_logs WHERE id = ?").bind(id)
-                ]);
+                ];
 
-                return jsonResponse({ message: "မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲသို့ အပြည့်အဝ ပြန်လည် ထည့်သွင်းပြီးပါပြီ။" });
+                try {
+                    await env.DB.batch(batchStatements);
+                    return jsonResponse({ message: "မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲသို့ အပြည့်အဝ ပြန်လည် ထည့်သွင်းပြီးပါပြီ။" });
+                } catch (e) {
+                    return errorResponse("ပယ်ဖျက်ခြင်း မအောင်မြင်ပါ: " + e.message, 500);
+                }
             }
 
             // =================================================================

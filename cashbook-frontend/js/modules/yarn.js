@@ -1,14 +1,14 @@
-// cashbook-frontend/js/modules/yarn.js
+// cashbook-frontend/js/modules/waste.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
 import { setKPI } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
-let yarnList = [];
-let currentFilteredYarns = [];
+let wasteLogs = [];
+let currentFilteredWaste = [];
+let availableProducts = [];
 
-// ချည်စာရင်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable()
@@ -28,94 +28,75 @@ function escapeCsv(val) {
     return `"${str.replace(/"/g, '""')}"`;
 }
 
-/**
- * ချည်ယူနစ် Free Size ဖြစ်နေပါက ပေါင် ဟု အလိုအလျောက် ပြောင်းလဲသတ်မှတ်ခြင်း
- */
-function getYarnUnit(item) {
-    const sz = String(item.size || "").trim();
-    if (!sz || sz.toLowerCase() === "free size" || sz.toLowerCase() === "free") {
-        return "ပေါင်";
-    }
-    return sz;
-}
-
-export async function initYarn() {
+export async function initWaste() {
     bindEvents();
-    await loadYarnInventory();
+    await loadProductsForWaste();
+    await loadWasteLogs();
 }
 
 function bindEvents() {
-    // Search Box & Category Filter
-    document.getElementById("yarn-search")?.addEventListener("input", filterAndRender);
-    document.getElementById("yarn-category-filter")?.addEventListener("change", filterAndRender);
-
-    // Export CSV
-    document.getElementById("btn-export-yarn-csv")?.addEventListener("click", exportYarnToCSV);
+    // Search & Filter
+    document.getElementById("waste-search")?.addEventListener("input", filterAndRender);
+    document.getElementById("waste-category-filter")?.addEventListener("change", filterAndRender);
     
-    // Import CSV (if admin)
-    document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
-
+    // Export CSV
+    document.getElementById("btn-export-waste-csv")?.addEventListener("click", exportWasteToCSV);
+    
     // Refresh Button
-    const refreshBtn = document.getElementById("btn-refresh-yarn");
+    const refreshBtn = document.getElementById("btn-refresh-waste");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
-            await loadYarnInventory();
+            await loadProductsForWaste();
+            await loadWasteLogs();
             setTimeout(() => icon?.classList.remove("fa-spin"), 500);
-            ui.toast.info("ချည်လက်ကျန် စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
+            ui.toast.info("အလေအလွင့် မှတ်တမ်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
         });
     }
 
-    // Issue/Add Modal Events
-    document.getElementById("btn-open-issue-modal")?.addEventListener("click", () => openIssueModal());
-    document.getElementById("btn-close-yarn-issue-modal")?.addEventListener("click", () => {
-        document.getElementById("yarn-issue-modal")?.classList.add("hidden");
+    // Create Modal Events
+    document.getElementById("btn-open-create-waste")?.addEventListener("click", () => openCreateWasteModal());
+    document.getElementById("btn-close-create-waste")?.addEventListener("click", () => {
+        document.getElementById("create-waste-modal")?.classList.add("hidden");
     });
-    document.getElementById("yarn-issue-form")?.addEventListener("submit", submitYarnIssue);
-
-    // Issue Select Change (Stock Hint Update)
-    document.getElementById("issue-yarn-id")?.addEventListener("change", (e) => {
-        updateIssueStockHint(Number(e.target.value));
+    document.getElementById("create-waste-form")?.addEventListener("submit", submitCreateWaste);
+    document.getElementById("create-waste-prod-id")?.addEventListener("change", (e) => {
+        updateCreateWasteStockHint(Number(e.target.value));
     });
 
     // Edit Modal Events
-    document.getElementById("btn-close-yarn-edit-modal")?.addEventListener("click", () => {
-        document.getElementById("yarn-edit-modal")?.classList.add("hidden");
+    document.getElementById("btn-close-waste-edit-modal")?.addEventListener("click", () => {
+        document.getElementById("waste-edit-modal")?.classList.add("hidden");
     });
-    document.getElementById("yarn-edit-form")?.addEventListener("submit", submitEditYarn);
-    
-    if (!state.isAdmin()) {
-        document.getElementById("btn-import-csv")?.classList.add("hidden");
+    document.getElementById("waste-edit-form")?.addEventListener("submit", submitEditWaste);
+}
+
+async function loadProductsForWaste() {
+    try {
+        const branchId = state.currentBranch?.id || 1;
+        const res = await api.get("/products", { branch_id: branchId });
+        availableProducts = (res.data || []).filter(p => Number(p.current_stock || 0) > 0);
+    } catch (err) {
+        console.error("Products ရယူ၍မရပါ:", err);
     }
 }
 
-async function loadYarnInventory() {
-    const tbody = document.getElementById("yarn-table-body");
+async function loadWasteLogs() {
+    const tbody = document.getElementById("waste-table-body");
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">ချည်စာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-amber-500 text-2xl mb-3"></i><div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
-        const res = await api.get("/products", { branch_id: branchId });
-        const allProducts = res.data || [];
-        
-        yarnList = allProducts.filter(p => {
-            const cat = (p.category || "").trim().toLowerCase();
-            const name = (p.item_name || "").toLowerCase();
+        const res = await api.get("/waste", { branch_id: branchId });
+        wasteLogs = res.data || [];
+        currentFilteredWaste = [...wasteLogs];
 
-            if (cat.includes("ပုဆိုး") || cat.includes("လုံချည်") || cat.includes("အင်္ကျီ") || 
-                name.includes("ပုဆိုး") || name.includes("လုံချည်") || name.includes("အင်္ကျီ")) {
-                return false;
-            }
-            return cat === "ချည်" || cat === "yarn" || cat.startsWith("ချည်");
-        });
-
-        currentFilteredYarns = [...yarnList];
         populateCategoryFilter();
-        updateYarnKPIs();
+        updateWasteKPIs();
         pagination.reset();
         renderTable();
     } catch (err) {
@@ -126,11 +107,12 @@ async function loadYarnInventory() {
 }
 
 function populateCategoryFilter() {
-    const select = document.getElementById("yarn-category-filter");
+    const select = document.getElementById("waste-category-filter");
     if (!select) return;
     const current = select.value;
-    const cats = [...new Set(yarnList.map(p => p.category).filter(Boolean))];
-    select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${yarnList.length})</option>`;
+    const cats = [...new Set(wasteLogs.map(w => w.category).filter(Boolean))];
+    
+    select.innerHTML = `<option value="">All Categories</option>`;
     cats.forEach(c => {
         const opt = document.createElement("option");
         opt.value = c;
@@ -140,26 +122,26 @@ function populateCategoryFilter() {
     if (cats.includes(current)) select.value = current;
 }
 
-function updateYarnKPIs() {
-    const totalTypes = yarnList.length;
-    const totalStock = yarnList.reduce((sum, y) => sum + Number(y.current_stock || 0), 0);
-    const totalStockValue = yarnList.reduce((sum, y) => sum + (Number(y.current_stock || 0) * Number(y.cost_price || 0)), 0);
-    const lowStockCount = yarnList.filter(y => Number(y.current_stock || 0) <= Number(y.alert_quantity || 10)).length;
+function updateWasteKPIs() {
+    const totalWasteValue = wasteLogs.reduce((sum, w) => sum + (Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
+    const uniqueCategories = new Set(wasteLogs.map(w => w.category).filter(Boolean)).size;
+    const totalItems = wasteLogs.reduce((sum, w) => sum + Number(w.quantity || 0), 0);
+    const totalEntries = wasteLogs.length;
 
-    setKPI(1, "ချည်အမျိုးအစားပေါင်း", totalTypes, "fa-tags", "blue");
-    setKPI(2, "စုစုပေါင်း ချည်လက်ကျန်", totalStock, "fa-scroll", "emerald");
-    setKPI(3, "ချည်တန်ဖိုး စုစုပေါင်း", totalStockValue, "fa-vault", "amber");
-    setKPI(4, "လက်ကျန်နည်း ချည်အမျိုးအစား", lowStockCount, "fa-triangle-exclamation", "rose");
+    setKPI(1, "Total Waste Value", totalWasteValue, "fa-vault", "rose");
+    setKPI(2, "Total Category", uniqueCategories, "fa-tags", "blue");
+    setKPI(3, "Total Items", totalItems, "fa-shirt", "amber");
+    setKPI(4, "Total Entries", totalEntries, "fa-clipboard-list", "emerald");
 }
 
 function filterAndRender() {
-    const cat = document.getElementById("yarn-category-filter")?.value || "";
-    const kw = (document.getElementById("yarn-search")?.value || "").trim().toLowerCase();
+    const cat = document.getElementById("waste-category-filter")?.value || "";
+    const kw = (document.getElementById("waste-search")?.value || "").trim().toLowerCase();
 
-    currentFilteredYarns = yarnList.filter(y => {
-        if (cat && y.category !== cat) return false;
+    currentFilteredWaste = wasteLogs.filter(w => {
+        if (cat && w.category !== cat) return false;
         if (!kw) return true;
-        const hay = `${y.sku || ""} ${y.barcode || ""} ${y.item_name || ""} ${y.color || ""} ${y.size || ""}`.toLowerCase();
+        const hay = `${w.reference_no || ""} ${w.sku || ""} ${w.barcode || ""} ${w.category || ""} ${w.item_name || ""} ${w.pattern || ""} ${w.color || ""} ${w.reason || ""} ${w.recorded_by_name || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
@@ -168,57 +150,43 @@ function filterAndRender() {
 }
 
 /**
- * Yarn Table Rendering (၁၃ ကော်လံစနစ် - Stock Balances နှင့် တစ်ထပ်တည်း မျဉ်းတားမဲ့ Flat Row)
+ * Waste Table Rendering (13 Columns - Ref No moved to end, REASON only)
  */
 function renderTable() {
-    const tbody = document.getElementById("yarn-table-body");
+    const tbody = document.getElementById("waste-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (currentFilteredYarns.length === 0) {
+    if (currentFilteredWaste.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="13" class="p-16 text-center text-slate-400 text-xs font-bold">
-                    <i class="fa-solid fa-scroll text-3xl mb-3 opacity-30"></i>
-                    <div>ချည်လက်ကျန်စာရင်း မရှိသေးပါ</div>
+                    <i class="fa-solid fa-box-open text-3xl mb-3 opacity-30"></i>
+                    <div>ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</div>
                 </td>
             </tr>
         `;
-        pagination.renderControls("yarn-pagination");
+        pagination.renderControls("waste-pagination");
         return;
     }
 
-    const pageItems = pagination.getPageItems(currentFilteredYarns);
+    const pageItems = pagination.getPageItems(currentFilteredWaste);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
-    pageItems.forEach((item, idx) => {
-        const stock = Number(item.current_stock || 0);
-        const isLow = stock <= Number(item.alert_quantity || 10);
-        const unit = getYarnUnit(item);
+    pageItems.forEach((w, idx) => {
+        const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
+        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
 
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" 
-                    class="btn-issue-row w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-hand-holding-hand text-xs"></i>
-                </button>
-                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
-                    class="btn-edit-yarn w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${w.id}" title="Edit" class="btn-edit-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" 
-                    class="btn-delete-yarn w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${w.id}" title="Delete (Return to Stock)" class="btn-delete-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
-        ` : `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" 
-                    class="btn-issue-row w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-hand-holding-hand text-xs"></i>
-                </button>
-            </div>
-        `;
+        ` : `<span class="text-xs text-slate-400 font-mono">-</span>`;
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
@@ -226,197 +194,175 @@ function renderTable() {
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
-            <!-- 2. BARCODE -->
-            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
+            <!-- 2. DATE -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
-            <!-- 3. CATEGORY -->
-            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
+            <!-- 3. BARCODE -->
+            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(w.barcode || w.sku || "-")}">${escapeHtml(w.barcode || w.sku || "-")}</td>
             
-            <!-- 4. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
+            <!-- 4. CATEGORY -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(w.category || "-")}">${escapeHtml(w.category || "-")}</td>
             
-            <!-- 5. DESIGN -->
-            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.pattern || "-")}">${escapeHtml(item.pattern || "-")}</td>
+            <!-- 5. ITEM NAME -->
+            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(w.item_name || "-")}">${escapeHtml(w.item_name || "-")}</td>
             
             <!-- 6. COLOR -->
-            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(w.color || "-")}">${escapeHtml(w.color || "-")}</td>
             
-            <!-- 7. UNIT -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
+            <!-- 7. SIZE -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(w.size || "ထည်")}</td>
             
-            <!-- 8. PURCHASE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
-            
-            <!-- 9. WHOLESALE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
-            
-            <!-- 10. RETAIL -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
-            
-            <!-- 11. TOTAL STOCK (ယူနစ်စာသားမပါဘဲ ဂဏန်းသီးသန့်) -->
-            <td class="py-2 px-4 text-right font-mono text-base font-black ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'} w-32">
-                ${stock.toLocaleString()}
+            <!-- 8. DEMIT QTY -->
+            <td class="py-2 px-4 text-center font-mono font-black text-base text-rose-600 dark:text-rose-400 w-32">
+                -${Number(w.quantity || 0).toLocaleString()}
             </td>
 
-            <!-- 12. STATUS -->
-            <td class="py-2 px-3 text-center font-mono text-xs font-bold w-24 ${isLow ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">
-                ${isLow ? 'စတော့နည်း' : 'ပုံမှန်'}
+            <!-- 9. PURCHASE -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">
+                ${Number(w.unit_cost || 0).toLocaleString()}
+            </td>
+            
+            <!-- 10. WASTE VALUE -->
+            <td class="py-2 px-4 text-right font-mono font-black text-base text-rose-600 dark:text-rose-400 w-32">
+                ${subtotal.toLocaleString()}
+            </td>
+            
+            <!-- 11. REASON -->
+            <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(w.reason || '')}">
+                ${escapeHtml(w.reason || "-")}
             </td>
 
-            <!-- 13. ACTION (Sticky Right) -->
-            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-28">
+            <!-- 12. REF NO (Moved to right end) -->
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate">
+                ${escapeHtml(w.reference_no || "-")}
+            </td>
+            
+            <!-- 13. ACTION -->
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
         `;
         tbody.appendChild(tr);
     });
 
-    tbody.querySelectorAll(".btn-issue-row").forEach(btn => {
-        btn.onclick = () => {
-            const item = yarnList.find(y => y.id === Number(btn.dataset.id));
-            if (item) openIssueModal(item.id);
-        };
-    });
-
     if (state.isAdmin()) {
-        tbody.querySelectorAll(".btn-edit-yarn").forEach(btn => {
+        tbody.querySelectorAll(".btn-edit-waste").forEach(btn => {
             btn.onclick = () => {
-                const item = yarnList.find(y => y.id === Number(btn.dataset.id));
-                if (item) openEditYarnModal(item);
+                const log = wasteLogs.find(w => w.id === Number(btn.dataset.id));
+                if (log) openEditWasteModal(log);
             };
         });
 
-        tbody.querySelectorAll(".btn-delete-yarn").forEach(btn => {
-            btn.onclick = () => deleteYarn(Number(btn.dataset.id));
+        tbody.querySelectorAll(".btn-delete-waste").forEach(btn => {
+            btn.onclick = () => deleteWasteLog(Number(btn.dataset.id));
         });
     }
 
-    pagination.renderControls("yarn-pagination");
+    pagination.renderControls("waste-pagination");
 }
 
-// --- ရက်ကန်းသို့ ချည်ထုတ်ပေးခြင်း Modal Logic ---
-function openIssueModal(selectedYarnId = null) {
-    const modal = document.getElementById("yarn-issue-modal");
-    const select = document.getElementById("issue-yarn-id");
-    document.getElementById("yarn-issue-form")?.reset();
+function openCreateWasteModal() {
+    const modal = document.getElementById("create-waste-modal");
+    const prodSelect = document.getElementById("create-waste-prod-id");
+    document.getElementById("create-waste-form")?.reset();
 
-    if (!select) return;
-    select.innerHTML = `<option value="">-- ချည်အမျိုးအစား ရွေးချယ်ပါ --</option>`;
+    if (prodSelect) {
+        prodSelect.innerHTML = `<option value="">-- ပစ္စည်း ရွေးချယ်ပါ --</option>`;
+        availableProducts.forEach(p => {
+            prodSelect.innerHTML += `<option value="${p.id}" data-stock="${p.current_stock || 0}" data-cost="${p.cost_price || 0}">
+                ${escapeHtml(p.item_name)} (${escapeHtml(p.sku || "-")}) - လက်ကျန်: ${Number(p.current_stock || 0).toLocaleString()} ${escapeHtml(p.size || "ထည်")}
+            </option>`;
+        });
+    }
 
-    yarnList.forEach(y => {
-        const isSel = selectedYarnId && selectedYarnId === y.id ? "selected" : "";
-        const unit = getYarnUnit(y);
-        select.innerHTML += `<option value="${y.id}" ${isSel} data-stock="${y.current_stock || 0}">
-            ${escapeHtml(y.item_name)} (${escapeHtml(y.sku || "-")}) - လက်ကျန်: ${Number(y.current_stock || 0).toLocaleString()} ${escapeHtml(unit)}
-        </option>`;
-    });
-
-    const activeId = selectedYarnId || Number(select.value);
-    updateIssueStockHint(activeId);
-
+    updateCreateWasteStockHint(Number(prodSelect?.value));
     modal?.classList.remove("hidden");
-    document.getElementById("issue-weaver-name")?.focus();
+    prodSelect?.focus();
 }
 
-function updateIssueStockHint(yarnId) {
-    const hint = document.getElementById("issue-stock-hint");
-    const qtyInput = document.getElementById("issue-quantity");
-    const item = yarnList.find(y => y.id === yarnId);
+function updateCreateWasteStockHint(productId) {
+    const hint = document.getElementById("create-waste-stock-hint");
+    const qtyInput = document.getElementById("create-waste-qty");
+    const prod = availableProducts.find(p => p.id === productId);
 
-    if (item && hint) {
-        const stock = Number(item.current_stock || 0);
-        const unit = getYarnUnit(item);
-        hint.textContent = `လက်ရှိစတိုလက်ကျန်: ${stock.toLocaleString()} ${unit}`;
+    if (prod && hint) {
+        const stock = Number(prod.current_stock || 0);
+        hint.textContent = `လက်ရှိဆိုင် လက်ကျန်စတော့: ${stock.toLocaleString()} ${prod.size || "ထည်"}`;
         if (qtyInput) qtyInput.max = stock;
     } else if (hint) {
         hint.textContent = "";
     }
 }
 
-async function submitYarnIssue(e) {
+async function submitCreateWaste(e) {
     e.preventDefault();
-    const btn = document.getElementById("btn-submit-yarn-issue");
-    const yarnId = parseInt(document.getElementById("issue-yarn-id")?.value, 10);
-    const weaverName = document.getElementById("issue-weaver-name")?.value.trim();
-    const qty = parseFloat(document.getElementById("issue-quantity")?.value) || 0;
-    const notes = document.getElementById("issue-notes")?.value.trim();
+    const btn = document.getElementById("btn-submit-create-waste");
+    const prodId = Number(document.getElementById("create-waste-prod-id")?.value);
+    const qty = parseFloat(document.getElementById("create-waste-qty")?.value) || 0;
+    const reason = document.getElementById("create-waste-reason")?.value.trim();
     const branchId = state.currentBranch?.id || 1;
 
-    if (!yarnId || !weaverName || qty <= 0) {
+    if (!prodId || qty <= 0 || !reason) {
         return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
     }
 
-    const item = yarnList.find(y => y.id === yarnId);
-    if (item && qty > Number(item.current_stock || 0)) {
-        const unit = getYarnUnit(item);
-        return ui.toast.warning(`လက်ကျန်ချည်ပမာဏ (${item.current_stock} ${unit}) ထက် ပိုမို၍ ထုတ်ပေး၍မရပါ။`);
+    const prod = availableProducts.find(p => p.id === prodId);
+    if (prod && qty > Number(prod.current_stock || 0)) {
+        return ui.toast.warning(`လက်ရှိဆိုင်တွင် လက်ကျန်ပစ္စည်း (${prod.current_stock}) ထက် ပိုမို၍ နှုတ်၍ မရပါ။`);
     }
 
     if (btn) btn.disabled = true;
 
     const payload = {
-        branchId: branchId,
-        yarnId: yarnId,
-        weaverName: weaverName,
+        branch_id: branchId,
+        product_id: prodId,
         quantity: qty,
-        notes: notes,
-        createdBy: state.user?.id || 1
+        unit_cost: prod ? Number(prod.cost_price || 0) : 0,
+        reason: reason
     };
 
     try {
-        await api.post("/yarns/issue", payload);
-        document.getElementById("yarn-issue-modal")?.classList.add("hidden");
-        ui.toast.success("အောင်မြင်စွာ စာရင်းသွင်းပြီးပါပြီ။");
-        await loadYarnInventory();
+        await api.post("/waste", payload);
+        document.getElementById("create-waste-modal")?.classList.add("hidden");
+        ui.toast.success("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
+        await loadProductsForWaste();
+        await loadWasteLogs();
     } catch (err) {
-        ui.toast.error("လုပ်ဆောင်၍မရပါ: " + err.message);
+        ui.toast.error("စာရင်းသွင်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
-// --- ချည်အချက်အလက် ပြင်ဆင်ခြင်း Modal Logic (Admin) ---
-function openEditYarnModal(item) {
-    const unit = getYarnUnit(item);
-    document.getElementById("edit-yarn-id").value = item.id;
-    document.getElementById("edit-yarn-sku").value = item.sku || "";
-    document.getElementById("edit-yarn-name").value = item.item_name || "";
-    document.getElementById("edit-yarn-color").value = item.color || "";
-    document.getElementById("edit-yarn-unit").value = unit;
-    document.getElementById("edit-yarn-cost").value = item.cost_price || 0;
-    document.getElementById("edit-yarn-retail").value = item.retail_price || 0;
-    document.getElementById("edit-yarn-wholesale").value = item.wholesale_price || 0;
+function openEditWasteModal(log) {
+    document.getElementById("edit-waste-id").value = log.id;
+    document.getElementById("edit-waste-name").value = `${log.item_name} (${log.sku || "-"})`;
+    document.getElementById("edit-waste-qty").value = log.quantity;
+    document.getElementById("edit-waste-reason").value = log.reason || "";
 
-    document.getElementById("yarn-edit-modal")?.classList.remove("hidden");
-    document.getElementById("edit-yarn-name")?.focus();
+    document.getElementById("waste-edit-modal")?.classList.remove("hidden");
+    document.getElementById("edit-waste-qty")?.focus();
 }
 
-async function submitEditYarn(e) {
+async function submitEditWaste(e) {
     e.preventDefault();
-    const btn = document.getElementById("btn-save-yarn-edit");
-    const id = document.getElementById("edit-yarn-id")?.value;
+    const btn = document.getElementById("btn-save-waste-edit");
+    const id = document.getElementById("edit-waste-id")?.value;
+    const qty = parseInt(document.getElementById("edit-waste-qty")?.value, 10);
+    const reason = document.getElementById("edit-waste-reason")?.value.trim();
 
-    const payload = {
-        sku: document.getElementById("edit-yarn-sku")?.value.trim() || null,
-        itemName: document.getElementById("edit-yarn-name")?.value.trim(),
-        color: document.getElementById("edit-yarn-color")?.value.trim() || null,
-        size: document.getElementById("edit-yarn-unit")?.value.trim() || "ပေါင်",
-        costPrice: parseFloat(document.getElementById("edit-yarn-cost")?.value) || 0,
-        retailPrice: parseFloat(document.getElementById("edit-yarn-retail")?.value) || 0,
-        wholesalePrice: parseFloat(document.getElementById("edit-yarn-wholesale")?.value) || 0
-    };
-
-    if (!payload.itemName) {
-        return ui.toast.warning("ချည်အမည် ထည့်သွင်းပေးပါ။");
+    if (!qty || qty <= 0) {
+        return ui.toast.warning("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ။");
     }
 
     if (btn) btn.disabled = true;
 
     try {
-        await api.put(`/products/${id}`, payload);
-        document.getElementById("yarn-edit-modal")?.classList.add("hidden");
-        ui.toast.success("ချည်အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
-        await loadYarnInventory();
+        await api.put(`/waste/${id}`, { quantity: qty, reason });
+        document.getElementById("waste-edit-modal")?.classList.add("hidden");
+        ui.toast.success("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        await loadProductsForWaste();
+        await loadWasteLogs();
     } catch (err) {
         ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
     } finally {
@@ -424,46 +370,46 @@ async function submitEditYarn(e) {
     }
 }
 
-async function deleteYarn(id) {
-    const confirmed = await ui.confirm("ဤချည်စာရင်းကို အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?", "error");
+async function deleteWasteLog(id) {
+    const confirmed = await ui.confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)", "error");
     if (!confirmed) return;
 
     try {
-        await api.delete(`/products/${id}`);
-        ui.toast.success("ချည်စာရင်းမှ ဖျက်သိမ်းပြီးပါပြီ။");
-        await loadYarnInventory();
+        await api.delete(`/waste/${id}`);
+        ui.toast.success("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
+        await loadProductsForWaste();
+        await loadWasteLogs();
     } catch (err) {
         ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }
 
-function exportYarnToCSV() {
-    const dataToExport = currentFilteredYarns.length > 0 ? currentFilteredYarns : yarnList;
+function exportWasteToCSV() {
+    const dataToExport = currentFilteredWaste.length > 0 ? currentFilteredWaste : wasteLogs;
     if (dataToExport.length === 0) {
-        return ui.toast.warning("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
+        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
     }
     const currentYear = new Date().getFullYear();
-    let csvContent = "NO,BARCODE,CATEGORY,ITEM NAME,DESIGN,COLOR,UNIT,PURCHASE,WHOLESALE,RETAIL,TOTAL STOCK,STATUS\n";
+    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,SIZE,DEMIT QTY,PURCHASE,WASTE VALUE,REASON,REF NO\n";
 
-    dataToExport.forEach((y, idx) => {
+    dataToExport.forEach((w, idx) => {
         const no = idx + 1;
-        const unit = getYarnUnit(y);
-        const stock = Number(y.current_stock || 0);
-        const status = stock <= Number(y.alert_quantity || 10) ? "စတော့နည်း" : "ပုံမှန်";
+        const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
+        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
 
         const row = [
             no,
-            escapeCsv(y.barcode || y.sku),
-            escapeCsv(y.category),
-            escapeCsv(y.item_name),
-            escapeCsv(y.pattern),
-            escapeCsv(y.color),
-            escapeCsv(unit),
-            y.cost_price || 0,
-            y.wholesale_price || 0,
-            y.retail_price || 0,
-            stock,
-            escapeCsv(status)
+            escapeCsv(dateStr),
+            escapeCsv(w.barcode || w.sku),
+            escapeCsv(w.category),
+            escapeCsv(w.item_name),
+            escapeCsv(w.color),
+            escapeCsv(w.size || 'ထည်'),
+            w.quantity || 0,
+            w.unit_cost || 0,
+            subtotal,
+            escapeCsv(w.reason),
+            escapeCsv(w.reference_no)
         ];
         csvContent += row.join(",") + "\n";
     });
@@ -472,67 +418,8 @@ function exportYarnToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Yarn_Balances_FY${currentYear}.csv`);
+    link.setAttribute("download", `Damage_Waste_Logs_FY${currentYear}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-}
-
-// --- CSV Import Logic (Admin Only) ---
-function triggerImport() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    input.onchange = async e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const text = event.target.result;
-            await processImport(text);
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-}
-
-async function processImport(csvText) {
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
-    if (lines.length <= 1) {
-        return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
-    }
-    
-    let successCount = 0;
-    const branchId = state.currentBranch?.id || 1;
-    
-    for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || lines[i].split(',');
-        if (row.length < 4) continue; 
-        
-        const payload = {
-            sku: row[0] || null,
-            barcode: row[1] || null,
-            category: row[2] || "ချည်",
-            itemName: row[3] || "Imported Yarn",
-            pattern: row[4] || null,
-            color: row[5] || null,
-            size: row[6] || "ပေါင်",
-            costPrice: parseFloat(row[7]) || 0,
-            retailPrice: parseFloat(row[8]) || 0,
-            wholesalePrice: parseFloat(row[9]) || 0,
-            initialStock: parseInt(row[10], 10) || 0,
-            quantity: parseInt(row[10], 10) || 0,
-            targetBranchId: branchId,
-            branchId: branchId
-        };
-        
-        try {
-            await api.post("/products", payload);
-            successCount++;
-        } catch (e) {
-            console.error("Import error line " + i, e);
-        }
-    }
-    ui.toast.success(`အချက်အလက် အသစ် ${successCount} ခု အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
-    await loadYarnInventory();
 }

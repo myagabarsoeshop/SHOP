@@ -87,7 +87,7 @@ async function loadWasteLogs() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="12" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-amber-500 text-2xl mb-3"></i><div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-amber-500 text-2xl mb-3"></i><div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
@@ -101,7 +101,7 @@ async function loadWasteLogs() {
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="12" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -150,7 +150,7 @@ function filterAndRender() {
 }
 
 /**
- * Waste Table (12 Columns - Flat Design, Plain Number for Demit Qty)
+ * Waste Table Rendering (13 Columns - Ref No moved to end, REASON only)
  */
 function renderTable() {
     const tbody = document.getElementById("waste-table-body");
@@ -160,7 +160,7 @@ function renderTable() {
     if (currentFilteredWaste.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="12" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="13" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-box-open text-3xl mb-3 opacity-30"></i>
                     <div>ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</div>
                 </td>
@@ -194,11 +194,8 @@ function renderTable() {
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
-            <!-- 2. DATE (Ref No + Date) -->
-            <td class="py-2 px-3 text-left w-36">
-                <div class="font-mono text-xs font-bold text-amber-600 dark:text-amber-400">${escapeHtml(w.reference_no || "-")}</div>
-                <div class="font-mono text-xs font-medium text-slate-500 dark:text-slate-400">${dateStr}</div>
-            </td>
+            <!-- 2. DATE -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
             <!-- 3. BARCODE -->
             <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(w.barcode || w.sku || "-")}">${escapeHtml(w.barcode || w.sku || "-")}</td>
@@ -215,12 +212,12 @@ function renderTable() {
             <!-- 7. SIZE -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(w.size || "ထည်")}</td>
             
-            <!-- 8. DEMIT QTY (Plain text number without size/unit) -->
+            <!-- 8. DEMIT QTY -->
             <td class="py-2 px-4 text-center font-mono font-black text-base text-rose-600 dark:text-rose-400 w-32">
                 -${Number(w.quantity || 0).toLocaleString()}
             </td>
 
-            <!-- 9. PURCHASE (Unit Cost) -->
+            <!-- 9. PURCHASE -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">
                 ${Number(w.unit_cost || 0).toLocaleString()}
             </td>
@@ -230,12 +227,17 @@ function renderTable() {
                 ${subtotal.toLocaleString()}
             </td>
             
-            <!-- 11. REASON / REMARK -->
-            <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[200px] truncate" title="${escapeHtml(w.reason || '')}">
+            <!-- 11. REASON -->
+            <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(w.reason || '')}">
                 ${escapeHtml(w.reason || "-")}
             </td>
+
+            <!-- 12. REF NO (Moved to right end) -->
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate">
+                ${escapeHtml(w.reference_no || "-")}
+            </td>
             
-            <!-- 12. ACTION -->
+            <!-- 13. ACTION -->
             <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
@@ -388,7 +390,7 @@ function exportWasteToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
     }
     const currentYear = new Date().getFullYear();
-    let csvContent = "NO,DATE,REF NO,BARCODE,CATEGORY,ITEM NAME,COLOR,SIZE,DEMIT QTY,PURCHASE,WASTE VALUE,REASON/REMARK,RECORDED BY\n";
+    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,SIZE,DEMIT QTY,PURCHASE,WASTE VALUE,REASON,REF NO\n";
 
     dataToExport.forEach((w, idx) => {
         const no = idx + 1;
@@ -398,7 +400,6 @@ function exportWasteToCSV() {
         const row = [
             no,
             escapeCsv(dateStr),
-            escapeCsv(w.reference_no),
             escapeCsv(w.barcode || w.sku),
             escapeCsv(w.category),
             escapeCsv(w.item_name),
@@ -408,7 +409,7 @@ function exportWasteToCSV() {
             w.unit_cost || 0,
             subtotal,
             escapeCsv(w.reason),
-            escapeCsv(w.recorded_by_name || 'Admin')
+            escapeCsv(w.reference_no)
         ];
         csvContent += row.join(",") + "\n";
     });

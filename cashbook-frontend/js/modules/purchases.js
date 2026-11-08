@@ -85,20 +85,32 @@ function bindEvents() {
     // Export CSV Button
     document.getElementById("btn-export-purchases-csv")?.addEventListener("click", exportPurchasesToCSV);
 
-    // Payment Method Change
+    // Payment Method Change (Dynamic 4-Col vs 5-Col Grid)
     document.getElementById("pur-payment-method")?.addEventListener("change", (e) => {
         const bankContainer = document.getElementById("pur-bank-container");
+        const infoGrid = document.getElementById("pur-info-grid");
+        const paidInput = document.getElementById("pur-actual-paid");
+
         if (e.target.value === "bank") {
             bankContainer?.classList.remove("hidden");
+            infoGrid?.classList.remove("md:grid-cols-4");
+            infoGrid?.classList.add("md:grid-cols-5");
             document.getElementById("pur-bank-name")?.focus();
         } else {
             bankContainer?.classList.add("hidden");
+            infoGrid?.classList.remove("md:grid-cols-5");
+            infoGrid?.classList.add("md:grid-cols-4");
             const bankInput = document.getElementById("pur-bank-name");
             if (bankInput) bankInput.value = "";
         }
+
+        if (e.target.value === "credit" && paidInput) {
+            paidInput.value = "0";
+            updateDifference();
+        }
     });
 
-    // Actual Paid Input Event (Auto-Difference Calculation & Number Normalization)
+    // Actual Paid Input Event
     const paidInput = document.getElementById("pur-actual-paid");
     if (paidInput) {
         paidInput.addEventListener("input", (e) => {
@@ -150,8 +162,12 @@ function bindEvents() {
     // Dedicated Quick New Supplier Sub-Modal Events
     document.getElementById("btn-open-new-supplier-modal")?.addEventListener("click", () => {
         document.getElementById("quick-supplier-form")?.reset();
+        const typedVal = document.getElementById("pur-supplier")?.value.trim() || "";
+        const nameInput = document.getElementById("quick-supp-name");
+        if (nameInput && typedVal) nameInput.value = typedVal;
+
         document.getElementById("quick-supplier-modal")?.classList.remove("hidden");
-        document.getElementById("quick-supp-name")?.focus();
+        setTimeout(() => nameInput?.focus(), 50);
     });
 
     document.getElementById("btn-close-quick-supp-modal")?.addEventListener("click", () => {
@@ -176,7 +192,6 @@ async function loadSuppliers() {
     try {
         const res = await api.get("/customers");
         const list = res.data || [];
-        // Supplier များသာမက ဖောက်သည်ဆိုင်အမည်များပါ ပါဝင်အောင် စစ်ထုတ်ယူခြင်း
         supplierList = [...new Set(list.map(c => (c.name || c.shop_name || "").trim()).filter(Boolean))];
         
         const datalist = document.getElementById("pur-supplier-datalist");
@@ -217,7 +232,6 @@ async function submitQuickSupplierForm(e) {
 
         ui.toast.success(`ပွဲရုံ "${name}" အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`);
         
-        // Modal ပိတ်ပြီး Purchase ဖောင်တွင် နာမည် အလိုအလျောက် ရွေးပေးခြင်း
         document.getElementById("quick-supplier-modal")?.classList.add("hidden");
         const suppInput = document.getElementById("pur-supplier");
         if (suppInput) suppInput.value = name;
@@ -315,7 +329,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (REF & SURPLUS/DEFICIT ပါဝင်သော One-Line View)
+ * Purchases History Table Rendering (၁၇ ကော်လံစနစ်)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -485,6 +499,7 @@ function openPurchaseModal(pur = null) {
     const modal = document.getElementById("purchase-modal");
     const editIdInput = document.getElementById("pur-edit-id");
     const title = document.getElementById("purchase-modal-title");
+    const infoGrid = document.getElementById("pur-info-grid");
 
     if (pur) {
         title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
@@ -493,11 +508,17 @@ function openPurchaseModal(pur = null) {
         document.getElementById("pur-ref-no").value = pur.ref_no || "";
         document.getElementById("pur-payment-method").value = pur.payment_method || "cash";
         document.getElementById("pur-bank-name").value = pur.bank_account_name || "";
+        
         if (pur.payment_method === "bank") {
             document.getElementById("pur-bank-container")?.classList.remove("hidden");
+            infoGrid?.classList.remove("md:grid-cols-4");
+            infoGrid?.classList.add("md:grid-cols-5");
         } else {
             document.getElementById("pur-bank-container")?.classList.add("hidden");
+            infoGrid?.classList.remove("md:grid-cols-5");
+            infoGrid?.classList.add("md:grid-cols-4");
         }
+
         if (pur.created_at) {
             document.getElementById("pur-date").value = pur.created_at.split("T")[0];
         }
@@ -533,6 +554,8 @@ function openPurchaseModal(pur = null) {
         document.getElementById("pur-payment-method").value = "cash";
         document.getElementById("pur-bank-name").value = "";
         document.getElementById("pur-bank-container")?.classList.add("hidden");
+        infoGrid?.classList.remove("md:grid-cols-5");
+        infoGrid?.classList.add("md:grid-cols-4");
 
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
@@ -894,8 +917,8 @@ function updateDifference() {
 
     const actualPaid = parseAnyNumber(paidInput.value);
     
-    if (!paidInput.value) {
-        diffLabel.textContent = "Balance (ညီမျှ)";
+    if (paidInput.value === "") {
+        diffLabel.textContent = "Surplus / Deficit";
         diffAmount.textContent = "0 Ks";
         diffAmount.className = "text-sm font-black font-mono text-slate-400";
         return;
@@ -904,15 +927,15 @@ function updateDifference() {
     const diff = actualPaid - grandTotal;
 
     if (diff === 0) {
-        diffLabel.textContent = "Balance (အပြေအကျေ)";
+        diffLabel.textContent = "Balanced (အပြေအကျေ)";
         diffAmount.textContent = "0 Ks";
-        diffAmount.className = "text-sm font-black font-mono text-slate-400";
+        diffAmount.className = "text-sm font-black font-mono text-emerald-500";
     } else if (diff > 0) {
-        diffLabel.textContent = "Overpaid (ပိုပေးငွေ / ပြန်ရရန်)";
+        diffLabel.textContent = "Surplus (ပိုပေးငွေ)";
         diffAmount.textContent = `+${diff.toLocaleString()} Ks`;
         diffAmount.className = "text-sm font-black font-mono text-amber-500";
     } else {
-        diffLabel.textContent = "Debt / Balance (ပေးရန်ကျန်)";
+        diffLabel.textContent = "Deficit (အကြွေးကျန်)";
         diffAmount.textContent = `${diff.toLocaleString()} Ks`;
         diffAmount.className = "text-sm font-black font-mono text-rose-500";
     }

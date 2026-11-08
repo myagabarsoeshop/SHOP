@@ -21,7 +21,7 @@
             </div>
         </div>
 
-        <!-- ညာဘက်ခြမ်း: Refresh, Export, Add New -->
+        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV, Add New -->
         <div class="flex items-center gap-2 shrink-0">
             <button type="button" id="btn-refresh-waste" title="အလေအလွင့် မှတ်တမ်းများ ပြန်လည်ဆွဲယူမည်" 
                 class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
@@ -42,7 +42,7 @@
         </div>
     </div>
 
-    <!-- Table (12 Columns - Flat Design) -->
+    <!-- Table (13 Columns - Ref No moved to end, Reason only) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
         <table class="w-full text-left border-collapse min-w-[1300px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
@@ -57,7 +57,8 @@
                     <th class="py-2.5 px-4 w-32 text-center">DEMIT QTY</th>
                     <th class="py-2.5 px-4 w-28 text-right">PURCHASE</th>
                     <th class="py-2.5 px-4 w-32 text-right">WASTE VALUE</th>
-                    <th class="py-2.5 px-4 min-w-[200px] text-left">REASON/REMARK</th>
+                    <th class="py-2.5 px-4 min-w-[160px] text-left">REASON</th>
+                    <th class="py-2.5 px-4 w-40 text-left">REF NO</th>
                     <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
@@ -66,7 +67,7 @@
             
             <tbody id="waste-table-body">
                 <tr>
-                    <td colspan="12" class="p-16 text-center text-slate-400">
+                    <td colspan="13" class="p-16 text-center text-slate-400">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-amber-500"></i>
                         <div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div>
                     </td>

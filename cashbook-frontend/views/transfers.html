@@ -1,19 +1,27 @@
 <!-- cashbook-frontend/views/transfers.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Action Toolbar (Standardized layout) -->
+    <!-- Top Action Toolbar -->
     <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- ဘယ်ဘက်ခြမ်း: Search Box (Stock Balances ၏ အကျယ်အတိုင်း) -->
+        <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown + Search Box -->
         <div class="flex items-center gap-3 flex-1 min-w-[280px]">
-            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
+            <div class="relative w-44 md:w-48 shrink-0">
+                <i class="fa-solid fa-layer-group text-purple-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="trf-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer appearance-none shadow-sm">
+                    <option value="">All Categories</option>
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+
+            <div class="relative flex-1 max-w-md">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="trf-search" placeholder="လွှဲပြောင်းကုတ် / ပစ္စည်းအမည် / ဆိုင်ခွဲ ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
         </div>
 
-        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV နှင့် Add New Button -->
+        <!-- ညာဘက်ခြမ်း: Refresh, Export, Add New -->
         <div class="flex items-center gap-2 shrink-0">
             <button type="button" id="btn-refresh-transfers" title="လွှဲပြောင်းမှုမှတ်တမ်းများ ပြန်လည်ဆွဲယူမည်" 
                 class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
@@ -34,33 +42,32 @@
         </div>
     </div>
 
-    <!-- Transfers History Table (Flat One-Line Design - 12 Columns) -->
+    <!-- Transfers History Table (13 Columns - Flat Design) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
         <table class="w-full text-left border-collapse min-w-[1500px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-11">
                     <th class="py-2.5 px-3 w-12 text-center">NO</th>
-                    <th class="py-2.5 px-3 w-28 text-left">TRANSFER DATE</th>
+                    <th class="py-2.5 px-3 w-28 text-left">DATE</th>
                     <th class="py-2.5 px-3 w-28 text-left">BARCODE</th>
                     <th class="py-2.5 px-4 w-32 text-left">CATEGORY</th>
                     <th class="py-2.5 px-4 min-w-[180px] text-left">ITEM NAME</th>
                     <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
                     <th class="py-2.5 px-3 w-20 text-left">UNIT</th>
-                    <th class="py-2.5 px-4 w-32 text-center">TRANSFER QTY</th>
-                    <th class="py-2.5 px-4 w-36 text-left">FROM SHOP</th>
-                    <th class="py-2.5 px-4 w-36 text-left">TO SHOP</th>
+                    <th class="py-2.5 px-4 w-28 text-right">QTY</th>
+                    <th class="py-2.5 px-4 w-32 text-left">FROM SHOP</th>
+                    <th class="py-2.5 px-4 w-32 text-left">TO SHOP</th>
                     <th class="py-2.5 px-4 min-w-[160px] text-left">REMARK</th>
-                    <!-- Sticky Right Action Column Header -->
+                    <th class="py-2.5 px-4 w-40 text-left">TRF NO</th>
                     <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
                 </tr>
             </thead>
             
-            <!-- divide-y ဖြုတ်ထားသော Flat tbody -->
             <tbody id="trf-table-body">
                 <tr>
-                    <td colspan="12" class="p-16 text-center text-slate-400">
+                    <td colspan="13" class="p-16 text-center text-slate-400">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                         <div class="font-bold text-xs">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div>
                     </td>
@@ -74,7 +81,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Modal 1: Create New Stock Transfer Modal (Pro Form Standard)          -->
+<!-- Modal 1: Create New Stock Transfer Modal                              -->
 <!-- ===================================================================== -->
 <div id="create-trf-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
@@ -93,7 +100,7 @@
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">လွှဲပြောင်းမည့် ပစ္စည်း ရွေးချယ်ပါ *</label>
                 <div class="relative">
                     <select id="create-trf-prod-id" required class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer appearance-none">
-                        <!-- Dynamic Product List with Current Stock -->
+                        <!-- Dynamic Product List -->
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                 </div>
@@ -138,7 +145,7 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Modal 2: Edit Stock Transfer Modal (Pro Form Standard - Admin)        -->
+<!-- Modal 2: Edit Stock Transfer Modal (Admin)                            -->
 <!-- ===================================================================== -->
 <div id="edit-trf-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">

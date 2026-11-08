@@ -1,11 +1,11 @@
 <!-- cashbook-frontend/views/inventory.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar (Purchases စံနှုန်းအတိုင်း ညီညာစေခြင်း) -->
-    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <!-- Top Filter & Action Toolbar (Purchases စံနှုန်းအတိုင်း တစ်ထပ်တည်း ညီညာစေခြင်း) -->
+    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- ဘယ်ဘက်ခြမ်း: Category Filter နှင့် Search Box -->
-        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+        <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown နှင့် Search Box (Purchases ၏ Search Box အကျယ်အတိုင်း ညီညာစေခြင်း) -->
+        <div class="flex items-center gap-3 flex-1 min-w-0">
             <div class="relative w-44 md:w-48 shrink-0">
                 <i class="fa-solid fa-layer-group text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                 <select id="inv-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none shadow-sm">
@@ -13,16 +13,22 @@
                 </select>
                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             </div>
-            
-            <div class="relative flex-1 max-w-md">
+
+            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="inv-search" placeholder="ကုတ် / Barcode / အထည်အမည် / အဆင် ရှာဖွေရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
         </div>
 
-        <!-- ညာဘက်ခြမ်း: Export CSV, Import CSV နှင့် Add New Button -->
+        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV, Import CSV နှင့် Add New Button -->
         <div class="flex items-center gap-2 shrink-0">
+            <!-- Refresh Button (Purchases ကဲ့သို့ ထည့်သွင်းခြင်း) -->
+            <button type="button" id="btn-refresh-inventory" title="စတော့စာရင်းများ ပြန်လည်ဆွဲယူမည်" 
+                class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
+                <i class="fa-solid fa-arrows-rotate text-xs"></i>
+            </button>
+
             <button type="button" id="btn-export-csv" title="စတော့စာရင်းကို CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-file-export text-emerald-500 text-xs"></i>
                 <span class="hidden sm:inline">Export CSV</span>
@@ -59,7 +65,6 @@
                     <th class="py-2.5 px-4 w-28 text-right">RETAIL</th>
                     <th class="py-2.5 px-4 w-32 text-right">TOTAL STOCK</th>
                     <th class="py-2.5 px-3 w-24 text-center">STATUS</th>
-                    <!-- Sticky Right Action Column Header -->
                     <th class="py-2.5 px-3 w-28 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>

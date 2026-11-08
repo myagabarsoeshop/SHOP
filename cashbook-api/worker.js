@@ -1482,6 +1482,8 @@ export default {
             // =================================================================
             // 9. YARN BALANCES & PRODUCTION ISSUE
             // =================================================================
+            
+            // ၉.၁ ချည်စာရင်း သီးသန့် ရယူခြင်း (Frontend တွင် /products ဖြင့်လည်း ယူနိုင်သော်လည်း သီးသန့် Endpoint ထားပေးထားသည်)
             if (path === "/api/yarns" && method === "GET") {
                 const branchId = url.searchParams.get("branch_id") || userBranchId;
                 const search = url.searchParams.get("search")?.trim() || "";
@@ -1508,45 +1510,15 @@ export default {
                 }
 
                 sql += ` ORDER BY p.id DESC LIMIT 500`;
-                const { results } = await env.DB.prepare(sql).bind(...bindings).all();
+                const { results } = await env.DB.prepare(sql).bind(...bindings).all().catch(() => ({ results: [] }));
                 return jsonResponse(results || []);
             }
 
-            if (path === "/api/yarns" && method === "POST") {
-                const body = await request.json().catch(() => ({}));
-                const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
-                const code = body.code || body.sku;
-                const name = body.name || body.itemName || body.item_name;
+            // (မှတ်ချက်: POST /api/yarns နှင့် PUT /api/yarns/:id များကို ဖယ်ရှားလိုက်ပါသည်။ အဘယ်ကြောင့်ဆိုသော်
+            // Frontend မှ ချည်အသစ်သွင်းခြင်းနှင့် ပြင်ဆင်ခြင်းများကို ယခုအခါ POST/PUT /api/products မှတစ်ဆင့်သာ တိုက်ရိုက်လုပ်ဆောင်သောကြောင့်ဖြစ်သည်)
 
-                if (!name) return errorResponse("ချည်အမည် ထည့်သွင်းပေးပါ", 400);
 
-                const sku = code ? String(code).trim().toUpperCase() : `YARN-${Math.floor(1000 + Math.random() * 9000)}`;
-                const unit = String(body.unit || body.size || "ပေါင်").trim();
-                const costPrice = parseFloat(body.costPrice ?? body.cost_price) || 0;
-                const retailPrice = parseFloat(body.retailPrice ?? body.retail_price) || 0;
-                const wholesalePrice = parseFloat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice) || 0;
-                const initialStock = parseFloat(body.currentStock ?? body.quantity ?? 0) || 0;
-
-                const res = await env.DB.prepare(`
-                    INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
-                    VALUES (?, ?, 'ချည်', ?, ?, ?, ?, ?, ?, ?)
-                `).bind(
-                    sku, body.barcode || null, String(name).trim(),
-                    body.pattern || null, unit, body.color || null,
-                    costPrice, retailPrice, wholesalePrice
-                ).run();
-
-                const newProductId = res.meta.last_row_id;
-                if (initialStock > 0) {
-                    await env.DB.prepare(`
-                        INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                        ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity
-                    `).bind(branchId, newProductId, initialStock).run();
-                }
-
-                return jsonResponse({ id: newProductId, sku, message: "ချည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
-            }
-
+            // ၉.၂ ရက်ကန်းသို့ ချည်ထုတ်ပေးခြင်း (Yarn Issue)
             if (path === "/api/yarns/issue" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
@@ -1559,6 +1531,22 @@ export default {
                     return errorResponse("ချည်အမျိုးအစား၊ ရက်ကန်းသမားအမည်နှင့် ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
                 }
 
+                // yarn_issues ဇယား မရှိသေးပါက အလိုအလျောက် တည်ဆောက်ပေးမည်
+                await env.DB.prepare(`
+                    CREATE TABLE IF NOT EXISTS yarn_issues (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        yarn_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                        weaver_name TEXT NOT NULL,
+                        quantity REAL NOT NULL,
+                        issue_date TEXT NOT NULL,
+                        notes TEXT,
+                        created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).run().catch(() => {});
+
+                // လက်ရှိ စတော့လက်ကျန်အား စစ်ဆေးခြင်း
                 const inv = await env.DB.prepare(`
                     SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?
                 `).bind(branchId, yarnId).first();
@@ -1568,11 +1556,13 @@ export default {
                     return errorResponse(`ချည်လက်ကျန် မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
                 }
 
+                const today = getMyanmarTodayDate();
+
                 await env.DB.batch([
                     env.DB.prepare(`
-                        INSERT INTO yarn_issues (yarn_id, weaver_name, quantity, issue_date, notes, created_by) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    `).bind(yarnId, weaverName, qty, getMyanmarTodayDate(), notes, currentUserId),
+                        INSERT INTO yarn_issues (yarn_id, branch_id, weaver_name, quantity, issue_date, notes, created_by) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `).bind(yarnId, branchId, weaverName, qty, today, notes, currentUserId),
 
                     env.DB.prepare(`
                         UPDATE branch_inventory 
@@ -1584,7 +1574,10 @@ export default {
                 return jsonResponse({ message: "ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နှုတ်ပြီးပါပြီ။" });
             }
 
+            // ၉.၃ ရက်ကန်းထုတ်ပေးမှု မှတ်တမ်းများ ရယူခြင်း (Issue Logs)
             if (path === "/api/yarns/issues" && method === "GET") {
+                const branchId = url.searchParams.get("branch_id") || userBranchId;
+
                 const sql = `
                     SELECT 
                         yi.id, yi.weaver_name, yi.quantity, yi.issue_date, yi.notes, yi.created_at,
@@ -1593,9 +1586,10 @@ export default {
                     FROM yarn_issues yi
                     INNER JOIN products p ON yi.yarn_id = p.id
                     LEFT JOIN users u ON yi.created_by = u.id
+                    WHERE yi.branch_id = ?
                     ORDER BY yi.id DESC LIMIT 300
                 `;
-                const { results } = await env.DB.prepare(sql).all();
+                const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all().catch(() => ({ results: [] }));
                 return jsonResponse(results || []);
             }
 

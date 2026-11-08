@@ -24,7 +24,6 @@ function escapeHtml(str) {
 
 function escapeCsv(val) {
     let str = String(val ?? "").trim();
-    // Excel Formula Injection ကာကွယ်ရန်
     if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
 }
@@ -46,11 +45,23 @@ export async function initYarn() {
 }
 
 function bindEvents() {
-    // Search Box (စာရင်းရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
+    // Search Box
     document.getElementById("yarn-search")?.addEventListener("input", filterAndRender);
 
     // Export CSV
     document.getElementById("btn-export-yarn-csv")?.addEventListener("click", exportYarnToCSV);
+
+    // Refresh Button (Stock Balances ကဲ့သို့ ထည့်သွင်းခြင်း)
+    const refreshBtn = document.getElementById("btn-refresh-yarn");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            icon?.classList.add("fa-spin");
+            await loadYarnInventory();
+            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            ui.toast.info("ချည်လက်ကျန် စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
+        });
+    }
 
     // Issue Modal Events
     document.getElementById("btn-open-issue-modal")?.addEventListener("click", () => openIssueModal());
@@ -76,11 +87,11 @@ async function loadYarnInventory() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">ချည်စာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
-        const res = await api.get("/yarns", { branch_id: branchId }).catch(() => api.get("/products", { branch_id: branchId }));
+        const res = await api.get("/products", { branch_id: branchId });
         const allProducts = res.data || [];
         
         // Category ကို အဓိကထား စစ်ဆေးပြီး အထည်အမည်များကို ဖယ်ထုတ်ခြင်း
@@ -103,7 +114,7 @@ async function loadYarnInventory() {
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="9" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -133,78 +144,104 @@ function filterAndRender() {
     renderTable();
 }
 
+/**
+ * Yarn Table Rendering (Stock Balances နှင့် တစ်ထပ်တည်း မျဉ်းတားမဲ့ Flat Row, ၁၂ ကော်လံ)
+ */
 function renderTable() {
     const tbody = document.getElementById("yarn-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (currentFilteredYarns.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-slate-400 font-bold text-base">ချည်လက်ကျန်စာရင်း မရှိသေးပါ</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="12" class="p-16 text-center text-slate-400 text-xs font-bold">
+                    <i class="fa-solid fa-scroll text-3xl mb-3 opacity-30"></i>
+                    <div>ချည်လက်ကျန်စာရင်း မရှိသေးပါ</div>
+                </td>
+            </tr>
+        `;
         pagination.renderControls("yarn-pagination");
         return;
     }
 
     const pageItems = pagination.getPageItems(currentFilteredYarns);
+    const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
-    pageItems.forEach(item => {
+    pageItems.forEach((item, idx) => {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 10);
         const unit = getYarnUnit(item);
 
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" class="btn-issue-row w-8 h-8 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-white rounded-lg text-amber-600 dark:text-amber-400 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" 
+                    class="btn-issue-row w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-hand-holding-hand text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" class="btn-edit-yarn w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
+                    class="btn-edit-yarn w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" class="btn-delete-yarn w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" 
+                    class="btn-delete-yarn w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
         ` : `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" class="btn-issue-row px-3 py-1 bg-amber-500/10 hover:bg-amber-500 hover:text-white rounded-lg text-amber-600 dark:text-amber-400 font-bold text-xs transition cursor-pointer">
-                    <i class="fa-solid fa-hand-holding-hand mr-1"></i> ရက်ကန်းထုတ်
+                <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" 
+                    class="btn-issue-row w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-hand-holding-hand text-xs"></i>
                 </button>
             </div>
         `;
 
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         tr.innerHTML = `
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(item.sku || "-")}</div>
-                <div class="text-xs">${escapeHtml(item.barcode || "")}</div>
+            <!-- 1. NO -->
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
+            
+            <!-- 2. BARCODE -->
+            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
+            
+            <!-- 3. CATEGORY -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
+            
+            <!-- 4. ITEM NAME -->
+            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
+            
+            <!-- 5. DESIGN -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.pattern || "-")}">${escapeHtml(item.pattern || "-")}</td>
+            
+            <!-- 6. COLOR -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
+            
+            <!-- 7. UNIT -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
+            
+            <!-- 8. PURCHASE -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
+            
+            <!-- 9. WHOLESALE -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
+            
+            <!-- 10. RETAIL -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
+            
+            <!-- 11. TOTAL STOCK (ယူနစ်စာသားမပါဘဲ ဂဏန်းသီးသန့်) -->
+            <td class="py-2 px-4 text-right font-mono text-base font-black ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'} w-32">
+                ${stock.toLocaleString()}
             </td>
-            <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(item.item_name)}</div>
-                <div class="text-xs text-slate-400">${escapeHtml(item.pattern || "-")}</div>
+
+            <!-- 12. STATUS -->
+            <td class="py-2 px-3 text-center font-mono text-xs font-bold w-24 ${isLow ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">
+                ${isLow ? 'စတော့နည်း' : 'ပုံမှန်'}
             </td>
-            <td class="p-4 text-sm font-bold text-slate-700 dark:text-slate-300">
-                ${escapeHtml(item.color || "-")}
-            </td>
-            <td class="p-4 text-center font-bold text-xs">
-                <span class="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold border border-emerald-500/20">
-                    ${escapeHtml(unit)}
-                </span>
-            </td>
-            <td class="p-4 text-right font-mono text-base text-slate-500">
-                ${Number(item.cost_price || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                ${Number(item.retail_price || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">
-                ${Number(item.wholesale_price || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base ${isLow ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}">
-                    ${stock.toLocaleString()} <span class="text-xs font-sans font-bold">${escapeHtml(unit)}</span>
-                </span>
-            </td>
-            <td class="p-4 text-center">
+
+            <!-- 13. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-28">
                 ${actionButtons}
             </td>
         `;
@@ -383,19 +420,21 @@ function exportYarnToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
     }
     const currentYear = new Date().getFullYear();
-    let csvContent = "Yarn SKU,Barcode,Item Name,Color,Unit,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
+    let csvContent = "Yarn SKU,Barcode,Category,Item Name,Design,Color,Unit,Cost Price,Wholesale Price,Retail Price,Current Stock\n";
 
     dataToExport.forEach(y => {
         const unit = getYarnUnit(y);
         const row = [
             escapeCsv(y.sku),
             escapeCsv(y.barcode),
+            escapeCsv(y.category),
             escapeCsv(y.item_name),
+            escapeCsv(y.pattern),
             escapeCsv(y.color),
             escapeCsv(unit),
             y.cost_price || 0,
-            y.retail_price || 0,
             y.wholesale_price || 0,
+            y.retail_price || 0,
             y.current_stock || 0
         ];
         csvContent += row.join(",") + "\n";

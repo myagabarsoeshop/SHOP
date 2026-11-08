@@ -10,7 +10,6 @@ let currentFilteredTransfers = [];
 let branchesList = [];
 let availableProducts = [];
 
-// စတော့လွှဲပြောင်းမှုအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable()
@@ -26,7 +25,6 @@ function escapeHtml(str) {
 
 function escapeCsv(val) {
     let str = String(val ?? "").trim();
-    // Excel Formula Injection ကာကွယ်ရန်
     if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
 }
@@ -66,7 +64,6 @@ function bindEvents() {
     });
     document.getElementById("create-trf-form")?.addEventListener("submit", submitCreateTransfer);
 
-    // Create Modal Product Change Event (Stock Hint & Max Limit Update)
     document.getElementById("create-trf-prod-id")?.addEventListener("change", (e) => {
         updateCreateTransferStockHint(Number(e.target.value));
     });
@@ -102,7 +99,7 @@ async function loadTransfers() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="12" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-purple-500 text-2xl mb-3"></i><div class="font-bold text-xs">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-purple-500 text-2xl mb-3"></i><div class="font-bold text-xs">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
@@ -116,7 +113,7 @@ async function loadTransfers() {
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="12" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -149,7 +146,6 @@ function updateTransferKPIs() {
         .filter(t => Number(t.to_branch_id) === currentBranchId)
         .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
 
-    // အင်္ဂလိပ်စာသားဖြင့် KPI ဖော်ပြခြင်း
     setKPI(1, "Total Transfers", totalCount, "fa-right-left", "blue");
     setKPI(2, "Total Items Qty", totalQty, "fa-boxes-stacked", "emerald");
     setKPI(3, "Outbound Stock", outboundQty, "fa-truck-arrow-right", "amber");
@@ -172,7 +168,7 @@ function filterAndRender() {
 }
 
 /**
- * Transfers Table (12 Columns - Flat Design)
+ * Transfers Table (13 Columns - TRF NO moved to end, Removed background colors)
  */
 function renderTable() {
     const tbody = document.getElementById("trf-table-body");
@@ -182,7 +178,7 @@ function renderTable() {
     if (currentFilteredTransfers.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="12" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="13" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-right-left text-3xl mb-3 opacity-30"></i>
                     <div>လွှဲပြောင်းမှု မှတ်တမ်း မရှိသေးပါ</div>
                 </td>
@@ -193,11 +189,9 @@ function renderTable() {
     }
 
     const pageItems = pagination.getPageItems(currentFilteredTransfers);
-    const currentBranchId = state.currentBranch?.id || 1;
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
     pageItems.forEach((t, idx) => {
-        const isOutbound = Number(t.from_branch_id) === currentBranchId;
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const unit = t.size || "ထည်";
 
@@ -220,11 +214,8 @@ function renderTable() {
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
-            <!-- 2. TRANSFER DATE (Trf No + Date) -->
-            <td class="py-2 px-3 text-left w-36">
-                <div class="font-mono text-xs font-bold text-purple-600 dark:text-purple-400">${escapeHtml(t.transfer_no || "-")}</div>
-                <div class="font-mono text-xs font-medium text-slate-500 dark:text-slate-400">${dateStr}</div>
-            </td>
+            <!-- 2. DATE (Date Only) -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
             <!-- 3. BARCODE -->
             <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(t.barcode || t.sku || "-")}">${escapeHtml(t.barcode || t.sku || "-")}</td>
@@ -241,33 +232,32 @@ function renderTable() {
             <!-- 7. UNIT -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
             
-            <!-- 8. TRANSFER QTY -->
-            <td class="py-2 px-4 text-center w-32">
-                <span class="px-3 py-1 rounded-xl font-mono font-black text-base bg-purple-500/15 text-purple-600 dark:text-purple-400">
-                    ${Number(t.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(unit)}</span>
-                </span>
+            <!-- 8. QTY (Plain text number) -->
+            <td class="py-2 px-4 text-right font-mono font-black text-base text-purple-600 dark:text-purple-400 w-28">
+                ${Number(t.quantity || 0).toLocaleString()}
             </td>
 
-            <!-- 9. FROM SHOP -->
-            <td class="py-2 px-4 text-left w-36">
-                <span class="px-2 py-0.5 rounded font-bold text-xs ${isOutbound ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
-                    ${escapeHtml(t.from_branch_name || "Main")}
-                </span>
+            <!-- 9. FROM SHOP (Plain Text) -->
+            <td class="py-2 px-4 text-left text-xs font-bold text-slate-700 dark:text-slate-300 w-32">
+                ${escapeHtml(t.from_branch_name || "Main")}
             </td>
             
-            <!-- 10. TO SHOP -->
-            <td class="py-2 px-4 text-left w-36">
-                <span class="px-2 py-0.5 rounded font-bold text-xs ${!isOutbound ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
-                    ${escapeHtml(t.to_branch_name || "-")}
-                </span>
+            <!-- 10. TO SHOP (Plain Text) -->
+            <td class="py-2 px-4 text-left text-xs font-bold text-slate-700 dark:text-slate-300 w-32">
+                ${escapeHtml(t.to_branch_name || "-")}
             </td>
             
             <!-- 11. REMARK -->
             <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(t.notes || '')}">
                 ${escapeHtml(t.notes || "-")}
             </td>
+
+            <!-- 12. TRF NO (Moved to right end) -->
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate">
+                ${escapeHtml(t.transfer_no || "-")}
+            </td>
             
-            <!-- 12. ACTION (Sticky Right) -->
+            <!-- 13. ACTION -->
             <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
@@ -291,7 +281,6 @@ function renderTable() {
     pagination.renderControls("transfers-pagination");
 }
 
-// --- Create Transfer Modal Logic ---
 function openCreateTransferModal() {
     const modal = document.getElementById("create-trf-modal");
     const prodSelect = document.getElementById("create-trf-prod-id");
@@ -379,7 +368,6 @@ async function submitCreateTransfer(e) {
     }
 }
 
-// --- Edit Transfer Modal Logic (Admin) ---
 function openEditTransferModal(trf) {
     const modal = document.getElementById("edit-trf-modal");
     document.getElementById("edit-trf-form")?.reset();
@@ -440,7 +428,6 @@ async function deleteTransfer(id) {
     }
 }
 
-// --- CSV Export Logic ---
 function exportTransfersToCSV() {
     const dataToExport = currentFilteredTransfers.length > 0 ? currentFilteredTransfers : transfersList;
     if (dataToExport.length === 0) {
@@ -448,12 +435,14 @@ function exportTransfersToCSV() {
     }
 
     const currentYear = new Date().getFullYear();
-    let csvContent = "Transfer No,Date,Barcode,Category,Item Name,Color,Unit,Quantity,From Branch,To Branch,Remark\n";
+    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT,QTY,FROM SHOP,TO SHOP,REMARK,TRF NO\n";
 
-    dataToExport.forEach(t => {
+    dataToExport.forEach((t, idx) => {
+        const no = idx + 1;
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
+        
         const row = [
-            escapeCsv(t.transfer_no),
+            no,
             escapeCsv(dateStr),
             escapeCsv(t.barcode || t.sku),
             escapeCsv(t.category),
@@ -463,7 +452,8 @@ function exportTransfersToCSV() {
             t.quantity || 0,
             escapeCsv(t.from_branch_name),
             escapeCsv(t.to_branch_name),
-            escapeCsv(t.notes)
+            escapeCsv(t.notes),
+            escapeCsv(t.transfer_no)
         ];
         csvContent += row.join(",") + "\n";
     });

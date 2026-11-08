@@ -473,27 +473,40 @@ export default {
                 const search = url.searchParams.get("search")?.trim() || "";
                 const category = url.searchParams.get("category")?.trim() || "";
 
+                // COALESCE တွင် branchId ရှိက ထိုဆိုင်၏ လက်ကျန်၊ မရှိပါက (Product Master အတွက်) ဆိုင်အားလုံးပေါင်း စုစုပေါင်းလက်ကျန် (SUM) ကို ပြသမည်
                 let sql = `
                     SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
                            p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
-                           COALESCE(${branchId ? "bi.quantity" : "0"}, 0) AS current_stock
+                           COALESCE(
+                               (
+                                   SELECT ${branchId ? "bi.quantity" : "SUM(bi.quantity)"} 
+                                   FROM branch_inventory bi 
+                                   WHERE bi.product_id = p.id 
+                                   ${branchId ? "AND bi.branch_id = ?" : ""}
+                               ), 0
+                           ) AS current_stock
                     FROM products p
                 `;
+                
                 const bindings = [];
                 if (branchId) {
-                    sql += " LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ? ";
                     bindings.push(branchId);
                 }
+
                 sql += " WHERE p.is_active = 1 ";
+                
                 if (search) {
                     sql += " AND (p.barcode = ? OR p.sku LIKE ? OR p.item_name LIKE ? OR p.pattern LIKE ? OR p.color LIKE ? OR p.category LIKE ?) ";
                     bindings.push(search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
                 }
+                
                 if (category) {
                     sql += " AND p.category = ? ";
                     bindings.push(category);
                 }
+                
                 sql += " ORDER BY p.item_name ASC, p.id DESC LIMIT 1000";
+                
                 const { results } = await env.DB.prepare(sql).bind(...bindings).all();
                 return jsonResponse(results || []);
             }

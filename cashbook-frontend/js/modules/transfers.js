@@ -39,11 +39,25 @@ export async function initTransfers() {
 }
 
 function bindEvents() {
-    // Search Box (စာရင်းရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
+    // Toolbar: Filter & Search
     document.getElementById("trf-search")?.addEventListener("input", filterAndRender);
+    document.getElementById("trf-category-filter")?.addEventListener("change", filterAndRender);
 
     // Export CSV
     document.getElementById("btn-export-trf-csv")?.addEventListener("click", exportTransfersToCSV);
+
+    // Refresh Button
+    const refreshBtn = document.getElementById("btn-refresh-transfers");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            icon?.classList.add("fa-spin");
+            await loadProductsForTransfer();
+            await loadTransfers();
+            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            ui.toast.info("လွှဲပြောင်းမှုမှတ်တမ်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
+        });
+    }
 
     // Create Modal Events
     document.getElementById("btn-open-create-transfer")?.addEventListener("click", () => openCreateTransferModal());
@@ -88,7 +102,7 @@ async function loadTransfers() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="10" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-purple-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-purple-500 text-2xl mb-3"></i><div class="font-bold text-xs">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
@@ -96,45 +110,58 @@ async function loadTransfers() {
         transfersList = res.data || [];
         currentFilteredTransfers = [...transfersList];
 
+        populateCategoryFilter();
         updateTransferKPIs();
         pagination.reset();
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="10" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
+}
+
+function populateCategoryFilter() {
+    const select = document.getElementById("trf-category-filter");
+    if (!select) return;
+    const current = select.value;
+    const cats = [...new Set(transfersList.map(t => t.category).filter(Boolean))];
+    
+    select.innerHTML = `<option value="">All Categories</option>`;
+    cats.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        select.appendChild(opt);
+    });
+    if (cats.includes(current)) select.value = current;
 }
 
 function updateTransferKPIs() {
     const currentBranchId = state.currentBranch?.id || 1;
 
-    // ၁။ စုစုပေါင်း လွှဲပြောင်းမှု အကြိမ်
     const totalCount = transfersList.length;
-
-    // ၂။ စုစုပေါင်း ပစ္စည်းပမာဏ
     const totalQty = transfersList.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-
-    // ၃။ လက်ရှိဆိုင်မှ ပေးပို့မှု (Outbound Stock)
     const outboundQty = transfersList
         .filter(t => Number(t.from_branch_id) === currentBranchId)
         .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-
-    // ၄။ လက်ရှိဆိုင်သို့ လက်ခံရရှိမှု (Inbound Stock)
     const inboundQty = transfersList
         .filter(t => Number(t.to_branch_id) === currentBranchId)
         .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
 
-    setKPI(1, "စုစုပေါင်း လွှဲပြောင်းမှုအကြိမ်", totalCount, "fa-right-left", "blue");
-    setKPI(2, "စုစုပေါင်း ပစ္စည်းပမာဏ", totalQty, "fa-boxes-stacked", "emerald");
-    setKPI(3, "ဆိုင်မှ ထုတ်ပေးမှု (Outbound)", outboundQty, "fa-truck-arrow-right", "amber");
-    setKPI(4, "ဆိုင်သို့ လက်ခံမှု (Inbound)", inboundQty, "fa-parachute-box", "purple");
+    // အင်္ဂလိပ်စာသားဖြင့် KPI ဖော်ပြခြင်း
+    setKPI(1, "Total Transfers", totalCount, "fa-right-left", "blue");
+    setKPI(2, "Total Items Qty", totalQty, "fa-boxes-stacked", "emerald");
+    setKPI(3, "Outbound Stock", outboundQty, "fa-truck-arrow-right", "amber");
+    setKPI(4, "Inbound Stock", inboundQty, "fa-parachute-box", "purple");
 }
 
 function filterAndRender() {
+    const cat = document.getElementById("trf-category-filter")?.value || "";
     const kw = (document.getElementById("trf-search")?.value || "").trim().toLowerCase();
 
     currentFilteredTransfers = transfersList.filter(t => {
+        if (cat && t.category !== cat) return false;
         if (!kw) return true;
         const hay = `${t.transfer_no || ""} ${t.sku || ""} ${t.barcode || ""} ${t.item_name || ""} ${t.from_branch_name || ""} ${t.to_branch_name || ""} ${t.notes || ""}`.toLowerCase();
         return hay.includes(kw);
@@ -144,31 +171,42 @@ function filterAndRender() {
     renderTable();
 }
 
+/**
+ * Transfers Table (12 Columns - Flat Design)
+ */
 function renderTable() {
     const tbody = document.getElementById("trf-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (currentFilteredTransfers.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="p-12 text-center text-slate-400 font-bold text-base">လွှဲပြောင်းမှု မှတ်တမ်း မရှိသေးပါ</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="12" class="p-16 text-center text-slate-400 text-xs font-bold">
+                    <i class="fa-solid fa-right-left text-3xl mb-3 opacity-30"></i>
+                    <div>လွှဲပြောင်းမှု မှတ်တမ်း မရှိသေးပါ</div>
+                </td>
+            </tr>
+        `;
         pagination.renderControls("transfers-pagination");
         return;
     }
 
     const pageItems = pagination.getPageItems(currentFilteredTransfers);
     const currentBranchId = state.currentBranch?.id || 1;
+    const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
-    pageItems.forEach(t => {
+    pageItems.forEach((t, idx) => {
         const isOutbound = Number(t.from_branch_id) === currentBranchId;
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const unit = t.size || "ထည်";
 
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${t.id}" title="ပြင်ဆင်မည်" class="btn-edit-trf w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${t.id}" title="Edit Transfer" class="btn-edit-trf w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
-                <button type="button" data-id="${t.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်ညှိမည်" class="btn-delete-trf w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
+                <button type="button" data-id="${t.id}" title="Delete Transfer" class="btn-delete-trf w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
@@ -177,46 +215,60 @@ function renderTable() {
         `;
 
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         tr.innerHTML = `
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-purple-600 dark:text-purple-400 text-sm">${escapeHtml(t.transfer_no || "-")}</div>
-                <div class="text-xs text-slate-400">${dateStr}</div>
+            <!-- 1. NO -->
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
+            
+            <!-- 2. TRANSFER DATE (Trf No + Date) -->
+            <td class="py-2 px-3 text-left w-36">
+                <div class="font-mono text-xs font-bold text-purple-600 dark:text-purple-400">${escapeHtml(t.transfer_no || "-")}</div>
+                <div class="font-mono text-xs font-medium text-slate-500 dark:text-slate-400">${dateStr}</div>
             </td>
-            <td class="p-4">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${isOutbound ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
-                    ${escapeHtml(t.from_branch_name || "Main")} (${escapeHtml(t.from_branch_code || "-")})
-                </span>
-            </td>
-            <td class="p-4">
-                <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${!isOutbound ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
-                    ${escapeHtml(t.to_branch_name || "-")} (${escapeHtml(t.to_branch_code || "-")})
-                </span>
-            </td>
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(t.sku || "-")}</div>
-                <div class="text-xs">${escapeHtml(t.barcode || "")}</div>
-            </td>
-            <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(t.item_name || "-")}</div>
-                <div class="text-xs text-slate-400">${escapeHtml(t.pattern || "-")} | <span class="text-emerald-500 font-bold">${escapeHtml(t.category || "-")}</span></div>
-            </td>
-            <td class="p-4 text-sm font-bold text-slate-700 dark:text-slate-300">
-                <div>${escapeHtml(t.color || "-")}</div>
-                <div class="text-xs text-purple-600 dark:text-purple-400 font-bold">${escapeHtml(unit)}</div>
-            </td>
-            <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-purple-500/15 text-purple-600 dark:text-purple-400">
+            
+            <!-- 3. BARCODE -->
+            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(t.barcode || t.sku || "-")}">${escapeHtml(t.barcode || t.sku || "-")}</td>
+            
+            <!-- 4. CATEGORY -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(t.category || "-")}">${escapeHtml(t.category || "-")}</td>
+            
+            <!-- 5. ITEM NAME -->
+            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(t.item_name || "-")}">${escapeHtml(t.item_name || "-")}</td>
+            
+            <!-- 6. COLOR -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(t.color || "-")}">${escapeHtml(t.color || "-")}</td>
+            
+            <!-- 7. UNIT -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
+            
+            <!-- 8. TRANSFER QTY -->
+            <td class="py-2 px-4 text-center w-32">
+                <span class="px-3 py-1 rounded-xl font-mono font-black text-base bg-purple-500/15 text-purple-600 dark:text-purple-400">
                     ${Number(t.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(unit)}</span>
                 </span>
             </td>
-            <td class="p-4 text-xs text-slate-600 dark:text-slate-300 max-w-[200px] truncate" title="${escapeHtml(t.notes || '')}">
+
+            <!-- 9. FROM SHOP -->
+            <td class="py-2 px-4 text-left w-36">
+                <span class="px-2 py-0.5 rounded font-bold text-xs ${isOutbound ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
+                    ${escapeHtml(t.from_branch_name || "Main")}
+                </span>
+            </td>
+            
+            <!-- 10. TO SHOP -->
+            <td class="py-2 px-4 text-left w-36">
+                <span class="px-2 py-0.5 rounded font-bold text-xs ${!isOutbound ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}">
+                    ${escapeHtml(t.to_branch_name || "-")}
+                </span>
+            </td>
+            
+            <!-- 11. REMARK -->
+            <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(t.notes || '')}">
                 ${escapeHtml(t.notes || "-")}
             </td>
-            <td class="p-4 text-xs font-bold text-slate-700 dark:text-slate-300">
-                ${escapeHtml(t.created_by_name || "Admin")}
-            </td>
-            <td class="p-4 text-center">
+            
+            <!-- 12. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
                 ${actionButtons}
             </td>
         `;
@@ -396,24 +448,22 @@ function exportTransfersToCSV() {
     }
 
     const currentYear = new Date().getFullYear();
-    let csvContent = "Transfer No,Date,From Branch,To Branch,SKU,Barcode,Category,Item Name,Color,Unit,Quantity,Notes,Recorded By\n";
+    let csvContent = "Transfer No,Date,Barcode,Category,Item Name,Color,Unit,Quantity,From Branch,To Branch,Remark\n";
 
     dataToExport.forEach(t => {
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const row = [
             escapeCsv(t.transfer_no),
             escapeCsv(dateStr),
-            escapeCsv(t.from_branch_name),
-            escapeCsv(t.to_branch_name),
-            escapeCsv(t.sku),
-            escapeCsv(t.barcode),
+            escapeCsv(t.barcode || t.sku),
             escapeCsv(t.category),
             escapeCsv(t.item_name),
             escapeCsv(t.color),
             escapeCsv(t.size || 'ထည်'),
             t.quantity || 0,
-            escapeCsv(t.notes),
-            escapeCsv(t.created_by_name || 'Admin')
+            escapeCsv(t.from_branch_name),
+            escapeCsv(t.to_branch_name),
+            escapeCsv(t.notes)
         ];
         csvContent += row.join(",") + "\n";
     });

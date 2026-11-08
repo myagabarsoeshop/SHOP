@@ -116,7 +116,7 @@ function filterAndRenderMaster() {
 }
 
 /**
- * Master Table Rendering (11 Columns - Flat Design, Added TOTAL QTY)
+ * Master Table Rendering (11 Columns - Flat Design, Plain Number for Total Qty)
  */
 function renderMasterTable() {
     const tbody = document.getElementById("master-table-body");
@@ -141,10 +141,10 @@ function renderMasterTable() {
 
     pageItems.forEach((item, idx) => {
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap"; // Flat row design
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
 
-        // Default 'current_stock' represents main branch stock if not explicitly queried as total across all branches
-        const stock = Number(item.current_stock || 0);
+        // current_stock သို့မဟုတ် quantity ကို မှန်ကန်စွာ ဖော်ပြရန်
+        const stock = Number(item.current_stock || item.quantity || 0);
         const unit = item.size || "ထည်";
 
         tr.innerHTML = `
@@ -166,11 +166,9 @@ function renderMasterTable() {
             <!-- 6. COLOR -->
             <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
             
-            <!-- 7. TOTAL QTY -->
-            <td class="py-2 px-4 text-center w-28">
-                <span class="px-2 py-1 rounded-lg font-mono font-black text-sm bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                    ${stock.toLocaleString()}
-                </span>
+            <!-- 7. TOTAL QTY (နောက်ခံကာလာဖြုတ်ပြီး ဂဏန်းသီးသန့် Flat Design သို့ ပြောင်းခြင်း) -->
+            <td class="py-2 px-4 text-right font-mono font-black text-base text-blue-600 dark:text-blue-400 w-28">
+                ${stock.toLocaleString()}
             </td>
 
             <!-- 8. PURCHASE -->

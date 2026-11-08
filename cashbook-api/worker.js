@@ -2054,10 +2054,10 @@ export default {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
                 const branchId = url.searchParams.get("branch_id");
 
-                // ၁။ Products နှင့် Branch Inventory ပေါင်းစပ်ဆွဲထုတ်ခြင်း
+                // ၁။ Products နှင့် Branch Inventory ပေါင်းစပ်ဆွဲထုတ်ခြင်း (Barcode ပါ ထည့်သွင်းထားသည်)
                 let prodSql = `
                     SELECT 
-                        p.id, p.sku, p.category, p.item_name, p.cost_price,
+                        p.id, p.sku, p.barcode, p.category, p.item_name, p.cost_price,
                         COALESCE(bi.quantity, 0) AS current_balance
                     FROM products p
                     LEFT JOIN branch_inventory bi ON p.id = bi.product_id
@@ -2169,6 +2169,7 @@ export default {
 
                     purchases.filter(r => r.product_id === pid).forEach(r => { inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0); });
                     trfIn.filter(r => r.product_id === pid).forEach(r => { inMap[r.m] = (inMap[r.m] || 0) + Number(r.qty || 0); });
+                    
                     sales.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
                     waste.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
                     trfOut.filter(r => r.product_id === pid).forEach(r => { outMap[r.m] = (outMap[r.m] || 0) + Number(r.qty || 0); });
@@ -2190,6 +2191,7 @@ export default {
                     return {
                         id: prod.id,
                         sku: prod.sku,
+                        barcode: prod.barcode,
                         category: prod.category,
                         item_name: prod.item_name,
                         cost_price: Number(prod.cost_price || 0),

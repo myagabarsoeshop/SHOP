@@ -45,13 +45,17 @@ export async function initYarn() {
 }
 
 function bindEvents() {
-    // Search Box
+    // Search Box & Category Filter
     document.getElementById("yarn-search")?.addEventListener("input", filterAndRender);
+    document.getElementById("yarn-category-filter")?.addEventListener("change", filterAndRender);
 
     // Export CSV
     document.getElementById("btn-export-yarn-csv")?.addEventListener("click", exportYarnToCSV);
+    
+    // Import CSV (if admin)
+    document.getElementById("btn-import-csv")?.addEventListener("click", triggerImport);
 
-    // Refresh Button (Stock Balances ကဲ့သို့ ထည့်သွင်းခြင်း)
+    // Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-yarn");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -63,7 +67,7 @@ function bindEvents() {
         });
     }
 
-    // Issue Modal Events
+    // Issue/Add Modal Events
     document.getElementById("btn-open-issue-modal")?.addEventListener("click", () => openIssueModal());
     document.getElementById("btn-close-yarn-issue-modal")?.addEventListener("click", () => {
         document.getElementById("yarn-issue-modal")?.classList.add("hidden");
@@ -80,6 +84,10 @@ function bindEvents() {
         document.getElementById("yarn-edit-modal")?.classList.add("hidden");
     });
     document.getElementById("yarn-edit-form")?.addEventListener("submit", submitEditYarn);
+    
+    if (!state.isAdmin()) {
+        document.getElementById("btn-import-csv")?.classList.add("hidden");
+    }
 }
 
 async function loadYarnInventory() {
@@ -87,36 +95,49 @@ async function loadYarnInventory() {
     const branchId = state.currentBranch?.id || 1;
 
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="12" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">ချည်စာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">ချည်စာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
         const res = await api.get("/products", { branch_id: branchId });
         const allProducts = res.data || [];
         
-        // Category ကို အဓိကထား စစ်ဆေးပြီး အထည်အမည်များကို ဖယ်ထုတ်ခြင်း
         yarnList = allProducts.filter(p => {
             const cat = (p.category || "").trim().toLowerCase();
             const name = (p.item_name || "").toLowerCase();
 
-            // ပုဆိုး၊ လုံချည်၊ အင်္ကျီ ဖြစ်ပါက လုံးဝ ဖယ်ထုတ်မည်
             if (cat.includes("ပုဆိုး") || cat.includes("လုံချည်") || cat.includes("အင်္ကျီ") || 
                 name.includes("ပုဆိုး") || name.includes("လုံချည်") || name.includes("အင်္ကျီ")) {
                 return false;
             }
-
             return cat === "ချည်" || cat === "yarn" || cat.startsWith("ချည်");
         });
 
         currentFilteredYarns = [...yarnList];
+        populateCategoryFilter();
         updateYarnKPIs();
         pagination.reset();
         renderTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="12" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
+}
+
+function populateCategoryFilter() {
+    const select = document.getElementById("yarn-category-filter");
+    if (!select) return;
+    const current = select.value;
+    const cats = [...new Set(yarnList.map(p => p.category).filter(Boolean))];
+    select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${yarnList.length})</option>`;
+    cats.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        select.appendChild(opt);
+    });
+    if (cats.includes(current)) select.value = current;
 }
 
 function updateYarnKPIs() {
@@ -132,9 +153,11 @@ function updateYarnKPIs() {
 }
 
 function filterAndRender() {
+    const cat = document.getElementById("yarn-category-filter")?.value || "";
     const kw = (document.getElementById("yarn-search")?.value || "").trim().toLowerCase();
 
     currentFilteredYarns = yarnList.filter(y => {
+        if (cat && y.category !== cat) return false;
         if (!kw) return true;
         const hay = `${y.sku || ""} ${y.barcode || ""} ${y.item_name || ""} ${y.color || ""} ${y.size || ""}`.toLowerCase();
         return hay.includes(kw);
@@ -145,7 +168,7 @@ function filterAndRender() {
 }
 
 /**
- * Yarn Table Rendering (Stock Balances နှင့် တစ်ထပ်တည်း မျဉ်းတားမဲ့ Flat Row, ၁၂ ကော်လံ)
+ * Yarn Table Rendering (၁၃ ကော်လံစနစ် - Stock Balances နှင့် တစ်ထပ်တည်း မျဉ်းတားမဲ့ Flat Row)
  */
 function renderTable() {
     const tbody = document.getElementById("yarn-table-body");
@@ -155,7 +178,7 @@ function renderTable() {
     if (currentFilteredYarns.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="12" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="13" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-scroll text-3xl mb-3 opacity-30"></i>
                     <div>ချည်လက်ကျန်စာရင်း မရှိသေးပါ</div>
                 </td>
@@ -343,10 +366,10 @@ async function submitYarnIssue(e) {
     try {
         await api.post("/yarns/issue", payload);
         document.getElementById("yarn-issue-modal")?.classList.add("hidden");
-        ui.toast.success("ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နုတ်ပြီးပါပြီ။");
+        ui.toast.success("အောင်မြင်စွာ စာရင်းသွင်းပြီးပါပြီ။");
         await loadYarnInventory();
     } catch (err) {
-        ui.toast.error("ထုတ်ပေး၍မရပါ: " + err.message);
+        ui.toast.error("လုပ်ဆောင်၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -420,13 +443,17 @@ function exportYarnToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
     }
     const currentYear = new Date().getFullYear();
-    let csvContent = "Yarn SKU,Barcode,Category,Item Name,Design,Color,Unit,Cost Price,Wholesale Price,Retail Price,Current Stock\n";
+    let csvContent = "NO,BARCODE,CATEGORY,ITEM NAME,DESIGN,COLOR,UNIT,PURCHASE,WHOLESALE,RETAIL,TOTAL STOCK,STATUS\n";
 
-    dataToExport.forEach(y => {
+    dataToExport.forEach((y, idx) => {
+        const no = idx + 1;
         const unit = getYarnUnit(y);
+        const stock = Number(y.current_stock || 0);
+        const status = stock <= Number(y.alert_quantity || 10) ? "စတော့နည်း" : "ပုံမှန်";
+
         const row = [
-            escapeCsv(y.sku),
-            escapeCsv(y.barcode),
+            no,
+            escapeCsv(y.barcode || y.sku),
             escapeCsv(y.category),
             escapeCsv(y.item_name),
             escapeCsv(y.pattern),
@@ -435,7 +462,8 @@ function exportYarnToCSV() {
             y.cost_price || 0,
             y.wholesale_price || 0,
             y.retail_price || 0,
-            y.current_stock || 0
+            stock,
+            escapeCsv(status)
         ];
         csvContent += row.join(",") + "\n";
     });
@@ -448,4 +476,63 @@ function exportYarnToCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// --- CSV Import Logic (Admin Only) ---
+function triggerImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = async e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const text = event.target.result;
+            await processImport(text);
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+async function processImport(csvText) {
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    if (lines.length <= 1) {
+        return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
+    }
+    
+    let successCount = 0;
+    const branchId = state.currentBranch?.id || 1;
+    
+    for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || lines[i].split(',');
+        if (row.length < 4) continue; 
+        
+        const payload = {
+            sku: row[0] || null,
+            barcode: row[1] || null,
+            category: row[2] || "ချည်",
+            itemName: row[3] || "Imported Yarn",
+            pattern: row[4] || null,
+            color: row[5] || null,
+            size: row[6] || "ပေါင်",
+            costPrice: parseFloat(row[7]) || 0,
+            retailPrice: parseFloat(row[8]) || 0,
+            wholesalePrice: parseFloat(row[9]) || 0,
+            initialStock: parseInt(row[10], 10) || 0,
+            quantity: parseInt(row[10], 10) || 0,
+            targetBranchId: branchId,
+            branchId: branchId
+        };
+        
+        try {
+            await api.post("/products", payload);
+            successCount++;
+        } catch (e) {
+            console.error("Import error line " + i, e);
+        }
+    }
+    ui.toast.success(`အချက်အလက် အသစ် ${successCount} ခု အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
+    await loadYarnInventory();
 }

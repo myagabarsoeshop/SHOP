@@ -81,7 +81,7 @@ async function loadBranches() {
 async function loadInventory() {
     const tbody = document.getElementById("inv-table-body");
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">အထည်လက်ကျန် စာရင်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
     try {
@@ -94,7 +94,7 @@ async function loadInventory() {
         filterAndRender();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="9" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -141,75 +141,109 @@ function filterAndRender() {
     renderTable();
 }
 
+/**
+ * Stock Balances Table Rendering (Purchases စံနှုန်းအတိုင်း မျဉ်းတားမဲ့ Flat Row, One-Line View, ၁၃ ကော်လံ)
+ */
 function renderTable() {
     const tbody = document.getElementById("inv-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (currentFilteredProducts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-12 text-center text-slate-400 font-bold text-base">အထည်စာရင်း မတွေ့ရှိပါ</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="13" class="p-16 text-center text-slate-400 text-xs font-bold">
+                    <i class="fa-solid fa-shirt text-3xl mb-3 opacity-30"></i>
+                    <div>အထည်လက်ကျန် စာရင်း မရှိသေးပါ</div>
+                </td>
+            </tr>
+        `;
         pagination.renderControls("inventory-pagination");
         return;
     }
 
     const pageItems = pagination.getPageItems(currentFilteredProducts);
+    const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
-    pageItems.forEach(item => {
+    pageItems.forEach((item, idx) => {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
         const unit = item.size || "ထည်";
 
         const actionButtons = state.isAdmin() ? `
-            <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" class="btn-edit-prod w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-pen-to-square text-xs"></i>
-            </button>
-            <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" class="btn-transfer-prod w-8 h-8 flex items-center justify-center bg-purple-500/10 hover:bg-purple-600 hover:text-white rounded-lg text-purple-600 dark:text-purple-400 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-parachute-box text-xs"></i>
-            </button>
-            <button type="button" data-id="${item.id}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" class="btn-waste-prod w-8 h-8 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-white rounded-lg text-amber-600 dark:text-amber-400 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-box-open text-xs"></i>
-            </button>
-            <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" class="btn-delete-prod w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-trash-can text-xs"></i>
-            </button>
+            <div class="flex items-center justify-center gap-1.5">
+                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
+                    class="btn-edit-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+                </button>
+                <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" 
+                    class="btn-transfer-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-parachute-box text-xs"></i>
+                </button>
+                <button type="button" data-id="${item.id}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" 
+                    class="btn-waste-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-box-open text-xs"></i>
+                </button>
+                <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" 
+                    class="btn-delete-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+            </div>
         ` : `
-            <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" class="btn-transfer-prod w-8 h-8 flex items-center justify-center bg-purple-500/10 hover:bg-purple-600 hover:text-white rounded-lg text-purple-600 dark:text-purple-400 transition cursor-pointer shadow-sm">
-                <i class="fa-solid fa-parachute-box text-xs"></i>
-            </button>
+            <div class="flex items-center justify-center gap-1.5">
+                <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" 
+                    class="btn-transfer-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                    <i class="fa-solid fa-parachute-box text-xs"></i>
+                </button>
+            </div>
         `;
 
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
         tr.innerHTML = `
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(item.sku || "-")}</div>
-                <div>${escapeHtml(item.barcode || "")}</div>
+            <!-- 1. NO -->
+            <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
+            
+            <!-- 2. BARCODE -->
+            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
+            
+            <!-- 3. CATEGORY -->
+            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
+            
+            <!-- 4. ITEM NAME -->
+            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
+            
+            <!-- 5. DESIGN -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.pattern || "-")}">${escapeHtml(item.pattern || "-")}</td>
+            
+            <!-- 6. COLOR -->
+            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
+            
+            <!-- 7. UNIT -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
+            
+            <!-- 8. PURCHASE (အရင်းဈေး) -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
+            
+            <!-- 9. WHOLESALE -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
+            
+            <!-- 10. RETAIL -->
+            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
+            
+            <!-- 11. TOTAL STOCK -->
+            <td class="py-2 px-4 text-right font-mono text-base font-black ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'} w-32">
+                ${stock.toLocaleString()} <span class="text-xs font-sans font-bold text-slate-400">${escapeHtml(unit)}</span>
             </td>
-            <td class="p-4">
-                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
-                    ${escapeHtml(item.category)}
-                </span>
+
+            <!-- 12. STATUS (Low / Normal) -->
+            <td class="py-2 px-3 text-center font-mono text-xs font-bold w-24 ${isLow ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">
+                ${isLow ? 'စတော့နည်း' : 'ပုံမှန်'}
             </td>
-            <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(item.item_name)}</div>
-                <div class="text-sm text-slate-400">${escapeHtml(item.pattern || "-")}</div>
-            </td>
-            <td class="p-4 text-sm">
-                <div class="font-bold text-slate-700 dark:text-slate-300">${escapeHtml(item.color || "-")}</div>
-                <div class="text-slate-400 font-medium">${escapeHtml(unit)}</div>
-            </td>
-            <td class="p-4 text-right font-mono text-base text-slate-500">${Number(item.cost_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">${Number(item.retail_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-right font-mono font-bold text-base text-blue-600 dark:text-blue-400">${Number(item.wholesale_price || 0).toLocaleString()}</td>
-            <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base ${isLow ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"}">
-                    ${stock.toLocaleString()} <span class="text-xs font-sans font-bold">${escapeHtml(unit)}</span>
-                </span>
-            </td>
-            <td class="p-4 text-center">
-                <div class="flex items-center justify-center gap-1.5">
-                    ${actionButtons}
-                </div>
+
+            <!-- 13. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-28">
+                ${actionButtons}
             </td>
         `;
         tbody.appendChild(tr);

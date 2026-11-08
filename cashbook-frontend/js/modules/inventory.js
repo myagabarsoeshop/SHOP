@@ -233,8 +233,8 @@ function renderTable() {
             
             <!-- 11. TOTAL STOCK -->
             <td class="py-2 px-4 text-right font-mono text-base font-black ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'} w-32">
-                ${stock.toLocaleString()} <span class="text-xs font-sans font-bold text-slate-400">${escapeHtml(unit)}</span>
-            </td>
+    ${stock.toLocaleString()}
+</td>
 
             <!-- 12. STATUS (Low / Normal) -->
             <td class="py-2 px-3 text-center font-mono text-xs font-bold w-24 ${isLow ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">

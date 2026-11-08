@@ -25,7 +25,6 @@ function escapeHtml(str) {
 
 function escapeCsv(val) {
     let str = String(val ?? "").trim();
-    // Excel Formula Injection ကာကွယ်ရန်
     if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
 }
@@ -37,8 +36,20 @@ export async function initInventory() {
 }
 
 function bindEvents() {
-    // Export CSV ကို မည်သည့် User မဆို ဝင်ရောက်အသုံးပြုနိုင်ရန် အမြဲဖွင့်ပေးမည်
+    // Export CSV
     document.getElementById("btn-export-csv")?.addEventListener("click", exportToCSV);
+
+    // Refresh Button (Purchases ကဲ့သို့ ထည့်သွင်းခြင်း)
+    const refreshBtn = document.getElementById("btn-refresh-inventory");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            icon?.classList.add("fa-spin");
+            await loadInventory();
+            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            ui.toast.info("စတော့လက်ကျန် စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
+        });
+    }
 
     if (state.isAdmin()) {
         document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
@@ -59,7 +70,7 @@ function bindEvents() {
     });
     document.getElementById("waste-form")?.addEventListener("submit", submitWaste);
 
-    // Stock Transfer Modal Events (ဆိုင်အချင်းချင်း ပို့သည့်စနစ်)
+    // Stock Transfer Modal Events
     document.getElementById("btn-close-transfer-modal")?.addEventListener("click", () => {
         document.getElementById("transfer-modal")?.classList.add("hidden");
     });
@@ -142,7 +153,7 @@ function filterAndRender() {
 }
 
 /**
- * Stock Balances Table Rendering (Purchases စံနှုန်းအတိုင်း မျဉ်းတားမဲ့ Flat Row, One-Line View, ၁၃ ကော်လံ)
+ * Stock Balances Table Rendering (Total Stock တွင် ယူနစ်စာသားမပါဘဲ ဂဏန်းသီးသန့် ပြသခြင်း)
  */
 function renderTable() {
     const tbody = document.getElementById("inv-table-body");
@@ -222,7 +233,7 @@ function renderTable() {
             <!-- 7. UNIT -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
             
-            <!-- 8. PURCHASE (အရင်းဈေး) -->
+            <!-- 8. PURCHASE -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
             
             <!-- 9. WHOLESALE -->
@@ -231,12 +242,12 @@ function renderTable() {
             <!-- 10. RETAIL -->
             <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
             
-            <!-- 11. TOTAL STOCK -->
+            <!-- 11. TOTAL STOCK (ယူနစ်စာသားမပါဘဲ ဂဏန်းသီးသန့်) -->
             <td class="py-2 px-4 text-right font-mono text-base font-black ${isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'} w-32">
-    ${stock.toLocaleString()}
-</td>
+                ${stock.toLocaleString()}
+            </td>
 
-            <!-- 12. STATUS (Low / Normal) -->
+            <!-- 12. STATUS -->
             <td class="py-2 px-3 text-center font-mono text-xs font-bold w-24 ${isLow ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}">
                 ${isLow ? 'စတော့နည်း' : 'ပုံမှန်'}
             </td>

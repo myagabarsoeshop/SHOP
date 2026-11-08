@@ -1,34 +1,30 @@
 <!-- cashbook-frontend/views/yarn.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Action Toolbar (Stock Balances စံနှုန်းအတိုင်း ညီညာစေခြင်း) -->
+    <!-- Top Action Toolbar (Purchases & Stock Balances ၏ စံနှုန်းအတိုင်း ညီညာစေခြင်း) -->
     <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown နှင့် Search Box -->
-        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
-            <div class="relative w-44 md:w-48 shrink-0">
-                <i class="fa-solid fa-layer-group text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-                <select id="yarn-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none shadow-sm">
-                    <option value="">ချည်အမျိုးအစား အားလုံး</option>
-                </select>
-                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+        <!-- ဘယ်ဘက်ခြမ်း: Search Box သီးသန့် -->
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
+                <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                <input type="text" id="yarn-search" placeholder="ချည်ကုတ် / Barcode / ချည်အမည် / အရောင် ရှာရန်..." 
+                    class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
             
-            <div class="relative flex-1 max-w-md">
-                <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                <input type="text" id="yarn-search" placeholder="ချည်ကုတ် / Barcode / ချည်အမည် / အရောင် ရှာရန်..."
-                    class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
+            <div class="hidden md:flex px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-bold rounded-lg border border-amber-500/20">
+                <i class="fa-solid fa-circle-info mr-1.5 mt-0.5"></i> ချည်ကုန်ကြမ်းလက်ကျန် နှင့် ရက်ကန်းထုတ်ပေးမှု
             </div>
         </div>
 
-        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV, Import CSV နှင့် Add New (Issue) Button -->
+        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV နှင့် ရက်ကန်းထုတ်မည် (Issue) Button -->
         <div class="flex items-center gap-2 shrink-0">
             <button type="button" id="btn-refresh-yarn" title="ချည်စာရင်းများ ပြန်လည်ဆွဲယူမည်" 
                 class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-arrows-rotate text-xs"></i>
             </button>
 
-            <button type="button" id="btn-export-yarn-csv" title="ချည်စာရင်းကို CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
+            <button type="button" id="btn-export-yarn-csv" title="ချည်စာရင်းများကို CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-file-export text-emerald-500 text-xs"></i>
                 <span class="hidden sm:inline">Export CSV</span>
             </button>
@@ -42,16 +38,15 @@
         </div>
     </div>
 
-    <!-- Yarn Balances Table Container (Stock Balances နှင့် တစ်ထပ်တည်း ၁၃ ကော်လံ - Flat Row) -->
+    <!-- Yarn Balances Table Container (၁၀ ကော်လံစနစ် - Flat Row) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
-        <table class="w-full text-left border-collapse min-w-[1500px]">
+        <table class="w-full text-left border-collapse min-w-[1250px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-11">
                     <th class="py-2.5 px-3 w-12 text-center">NO</th>
                     <th class="py-2.5 px-3 w-28 text-left">BARCODE</th>
                     <th class="py-2.5 px-4 w-32 text-left">CATEGORY</th>
                     <th class="py-2.5 px-4 min-w-[180px] text-left">ITEM NAME</th>
-                    <th class="py-2.5 px-3 w-28 text-left">DESIGN</th>
                     <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
                     <th class="py-2.5 px-3 w-20 text-left">UNIT</th>
                     <th class="py-2.5 px-4 w-28 text-right">PURCHASE</th>
@@ -65,10 +60,9 @@
                     </th>
                 </tr>
             </thead>
-            
             <tbody id="yarn-table-body">
                 <tr>
-                    <td colspan="13" class="p-16 text-center text-slate-400">
+                    <td colspan="12" class="p-16 text-center text-slate-400 text-sm">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                         <div class="font-bold text-xs">ချည်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                     </td>

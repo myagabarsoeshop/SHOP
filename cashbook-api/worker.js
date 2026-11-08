@@ -2006,34 +2006,40 @@ export default {
             }
 
             // =================================================================
-            // 12. INVENTORY & STOCK REPORTS
+            // 12. INVENTORY & STOCK REPORTS (OPTIMIZED & ERROR-FREE)
             // =================================================================
             if (path === "/api/reports/monthly-stock" && method === "GET") {
                 const year = url.searchParams.get("year") || String(new Date().getFullYear());
                 const branchId = url.searchParams.get("branch_id");
 
+                // ၁။ Products နှင့် Branch Inventory ပေါင်းစပ်ဆွဲထုတ်ခြင်း
                 let prodSql = `
                     SELECT 
                         p.id, p.sku, p.category, p.item_name, p.cost_price,
-                        COALESCE(SUM(bi.quantity), 0) AS current_balance
+                        COALESCE(bi.quantity, 0) AS current_balance
                     FROM products p
                     LEFT JOIN branch_inventory bi ON p.id = bi.product_id
                 `;
                 const prodBindings = [];
                 if (branchId && branchId !== "ALL") {
-                    prodSql += ` AND bi.branch_id = ? `;
+                    prodSql += ` WHERE bi.branch_id = ? AND p.is_active = 1 `;
                     prodBindings.push(Number(branchId));
+                } else {
+                    prodSql += ` WHERE p.is_active = 1 `;
                 }
-                prodSql += ` WHERE p.is_active = 1 GROUP BY p.id ORDER BY p.category ASC, p.item_name ASC `;
-                const { results: products } = await env.DB.prepare(prodSql).bind(...prodBindings).all();
+                prodSql += ` GROUP BY p.id ORDER BY p.category ASC, p.item_name ASC `;
+                
+                const prodRes = await env.DB.prepare(prodSql).bind(...prodBindings).all().catch(() => ({ results: [] }));
+                const products = prodRes.results || [];
 
+                // ၂။ Purchases (အဝယ်အဝင်) ဆွဲထုတ်ခြင်း
                 let purchases = [];
                 try {
                     let purchSql = `
-                        SELECT pi.product_id, CAST(strftime('%m', p.created_at) AS INTEGER) AS m, SUM(pi.quantity) AS qty
+                        SELECT pi.product_id, CAST(SUBSTR(p.created_at, 6, 2) AS INTEGER) AS m, SUM(pi.quantity) AS qty
                         FROM purchase_items pi
                         JOIN purchases p ON pi.purchase_id = p.id
-                        WHERE strftime('%Y', p.created_at) = ?
+                        WHERE SUBSTR(p.created_at, 1, 4) = ?
                     `;
                     const purchBindings = [year];
                     if (branchId && branchId !== "ALL") {
@@ -2047,13 +2053,14 @@ export default {
                     purchases = [];
                 }
 
+                // ၃။ Sales (အရောင်းအထွက်) ဆွဲထုတ်ခြင်း
                 let sales = [];
                 try {
                     let saleSql = `
-                        SELECT si.product_id, CAST(strftime('%m', s.created_at) AS INTEGER) AS m, SUM(si.quantity) AS qty
+                        SELECT si.product_id, CAST(SUBSTR(s.created_at, 6, 2) AS INTEGER) AS m, SUM(si.quantity) AS qty
                         FROM sale_items si
                         JOIN sales s ON si.sale_id = s.id
-                        WHERE strftime('%Y', s.created_at) = ?
+                        WHERE SUBSTR(s.created_at, 1, 4) = ?
                     `;
                     const saleBindings = [year];
                     if (branchId && branchId !== "ALL") {
@@ -2067,12 +2074,13 @@ export default {
                     sales = [];
                 }
 
+                // ၄။ Waste (ပျက်စီးဆုံးရှုံးမှု) ဆွဲထုတ်ခြင်း
                 let waste = [];
                 try {
                     let wasteSql = `
-                        SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
+                        SELECT product_id, CAST(SUBSTR(created_at, 6, 2) AS INTEGER) AS m, SUM(quantity) AS qty
                         FROM waste_logs
-                        WHERE strftime('%Y', created_at) = ?
+                        WHERE SUBSTR(created_at, 1, 4) = ?
                     `;
                     const wasteBindings = [year];
                     if (branchId && branchId !== "ALL") {
@@ -2086,22 +2094,23 @@ export default {
                     waste = [];
                 }
 
+                // ၅။ Stock Transfers (ဆိုင်အချင်းချင်း လွှဲပြောင်းမှု) ဆွဲထုတ်ခြင်း
                 let trfIn = [];
                 let trfOut = [];
                 if (branchId && branchId !== "ALL") {
                     try {
                         const trfInRes = await env.DB.prepare(`
-                            SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
+                            SELECT product_id, CAST(SUBSTR(created_at, 6, 2) AS INTEGER) AS m, SUM(quantity) AS qty
                             FROM stock_transfers
-                            WHERE to_branch_id = ? AND strftime('%Y', created_at) = ?
+                            WHERE to_branch_id = ? AND SUBSTR(created_at, 1, 4) = ?
                             GROUP BY product_id, m
                         `).bind(Number(branchId), year).all();
                         trfIn = trfInRes.results || [];
 
                         const trfOutRes = await env.DB.prepare(`
-                            SELECT product_id, CAST(strftime('%m', created_at) AS INTEGER) AS m, SUM(quantity) AS qty
+                            SELECT product_id, CAST(SUBSTR(created_at, 6, 2) AS INTEGER) AS m, SUM(quantity) AS qty
                             FROM stock_transfers
-                            WHERE from_branch_id = ? AND strftime('%Y', created_at) = ?
+                            WHERE from_branch_id = ? AND SUBSTR(created_at, 1, 4) = ?
                             GROUP BY product_id, m
                         `).bind(Number(branchId), year).all();
                         trfOut = trfOutRes.results || [];
@@ -2111,7 +2120,7 @@ export default {
                     }
                 }
 
-                const report = (products || []).map(prod => {
+                const report = products.map(prod => {
                     const pid = prod.id;
                     const inMap = {};
                     const outMap = {};

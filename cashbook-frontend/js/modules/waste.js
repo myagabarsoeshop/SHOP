@@ -1,275 +1,176 @@
-// cashbook-frontend/js/modules/waste.js
-import { api } from "../core/api.js";
-import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
-import { setKPI } from "../app.js";
-import { PaginationController } from "../core/pagination.js";
-
-let wasteLogs = [];
-let currentFilteredWaste = [];
-
-// အလေအလွင့်မှတ်တမ်းအတွက် စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
-const pagination = new PaginationController({
-    pageSize: 15,
-    onPageChange: () => renderTable()
-});
-
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    // Excel Formula Injection ကာကွယ်ရန်
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
-
-export async function initWaste() {
-    bindEvents();
-    await loadWasteLogs();
-}
-
-function bindEvents() {
-    // Search Box (စာရင်းရှာဖွေချိန်တွင် စာမျက်နှာ ၁ သို့ Reset လုပ်မည်)
-    document.getElementById("waste-search")?.addEventListener("input", filterAndRender);
-    document.getElementById("btn-export-waste-csv")?.addEventListener("click", exportWasteToCSV);
+<!-- cashbook-frontend/views/waste.html -->
+<div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    document.getElementById("btn-close-waste-edit-modal")?.addEventListener("click", () => {
-        document.getElementById("waste-edit-modal")?.classList.add("hidden");
-    });
+    <!-- Top Action Toolbar (Standardized layout) -->
+    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+        
+        <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown + Search Box -->
+        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+            <div class="relative w-44 md:w-48 shrink-0">
+                <i class="fa-solid fa-layer-group text-amber-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="waste-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none shadow-sm">
+                    <option value="">All Categories</option>
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
 
-    document.getElementById("waste-edit-form")?.addEventListener("submit", submitEditWaste);
-}
+            <div class="relative flex-1 max-w-md">
+                <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                <input type="text" id="waste-search" placeholder="ကုတ် / Barcode / အထည်အမည် / အကြောင်းပြချက် ရှာရန်..." 
+                    class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition shadow-sm">
+            </div>
+        </div>
 
-async function loadWasteLogs() {
-    const tbody = document.getElementById("waste-table-body");
-    const branchId = state.currentBranch?.id || 1;
+        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV, Add New -->
+        <div class="flex items-center gap-2 shrink-0">
+            <button type="button" id="btn-refresh-waste" title="အလေအလွင့် မှတ်တမ်းများ ပြန်လည်ဆွဲယူမည်" 
+                class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
+                <i class="fa-solid fa-arrows-rotate text-xs"></i>
+            </button>
 
-    if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl"></i></td></tr>`;
-    }
+            <button type="button" id="btn-export-waste-csv" title="အလေအလွင့်စာရင်းများကို CSV ဖြင့် ထုတ်ယူမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
+                <i class="fa-solid fa-file-export text-emerald-500 text-xs"></i>
+                <span class="hidden sm:inline">Export CSV</span>
+            </button>
 
-    try {
-        const res = await api.get("/waste", { branch_id: branchId });
-        wasteLogs = res.data || [];
-        currentFilteredWaste = [...wasteLogs];
+            <div class="h-5 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
-        updateWasteKPIs();
-        pagination.reset();
-        renderTable();
-    } catch (err) {
-        if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center text-rose-500 font-bold">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
-        }
-    }
-}
+            <button type="button" id="btn-open-create-waste" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-amber-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95">
+                <i class="fa-solid fa-plus text-xs"></i>
+                <span>Add New</span>
+            </button>
+        </div>
+    </div>
 
-function updateWasteKPIs() {
-    const totalWasteValue = wasteLogs.reduce((sum, w) => sum + (Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
-    const uniqueCategories = new Set(wasteLogs.map(w => w.category).filter(Boolean)).size;
-    const totalItems = wasteLogs.reduce((sum, w) => sum + Number(w.quantity || 0), 0);
-    const totalEntries = wasteLogs.length;
+    <!-- Table (11 Columns - Flat Design) -->
+    <div class="flex-1 overflow-x-auto overflow-y-auto relative">
+        <table class="w-full text-left border-collapse min-w-[1300px]">
+            <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
+                <tr class="h-11">
+                    <th class="py-2.5 px-3 w-12 text-center">NO</th>
+                    <th class="py-2.5 px-3 w-28 text-left">DATE</th>
+                    <th class="py-2.5 px-3 w-28 text-left">BARCODE</th>
+                    <th class="py-2.5 px-4 w-32 text-left">CATEGORY</th>
+                    <th class="py-2.5 px-4 min-w-[180px] text-left">ITEM NAME</th>
+                    <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
+                    <th class="py-2.5 px-3 w-20 text-left">SIZE</th>
+                    <th class="py-2.5 px-4 w-32 text-center">DEMIT QTY</th>
+                    <th class="py-2.5 px-4 w-28 text-right">PURCHASE</th>
+                    <th class="py-2.5 px-4 w-32 text-right">WASTE VALUE</th>
+                    <th class="py-2.5 px-4 min-w-[200px] text-left">REASON/REMARK</th>
+                    <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+                        ACTION
+                    </th>
+                </tr>
+            </thead>
+            
+            <tbody id="waste-table-body">
+                <tr>
+                    <td colspan="12" class="p-16 text-center text-slate-400">
+                        <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-amber-500"></i>
+                        <div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
-    setKPI(1, "Total Waste Value", totalWasteValue, "fa-vault", "rose");
-    setKPI(2, "Total Category", uniqueCategories, "fa-tags", "blue");
-    setKPI(3, "Total Items", totalItems, "fa-shirt", "amber");
-    setKPI(4, "Total Entries", totalEntries, "fa-clipboard-list", "emerald");
-}
+    <!-- Pagination Footer Container -->
+    <div id="waste-pagination" class="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50"></div>
+</div>
 
-function filterAndRender() {
-    const kw = (document.getElementById("waste-search")?.value || "").trim().toLowerCase();
+<!-- ===================================================================== -->
+<!-- Create Waste Modal                                                    -->
+<!-- ===================================================================== -->
+<div id="create-waste-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
+        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-sm font-extrabold flex items-center gap-2.5">
+                <i class="fa-solid fa-box-open text-amber-400 opacity-90"></i>
+                <span>အလေအလွင့် / ပျက်စီး စာရင်းအသစ်သွင်းမည်</span>
+            </div>
+            <button type="button" id="btn-close-create-waste" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
 
-    currentFilteredWaste = wasteLogs.filter(w => {
-        if (!kw) return true;
-        const hay = `${w.reference_no || ""} ${w.sku || ""} ${w.barcode || ""} ${w.category || ""} ${w.item_name || ""} ${w.pattern || ""} ${w.color || ""} ${w.reason || ""} ${w.recorded_by_name || ""}`.toLowerCase();
-        return hay.includes(kw);
-    });
+        <form id="create-waste-form" class="p-6 space-y-4 overflow-y-auto">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပျက်စီး/ဆုံးရှုံးသော ပစ္စည်း ရွေးချယ်ပါ *</label>
+                <div class="relative">
+                    <select id="create-waste-prod-id" required class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none">
+                        <!-- Dynamic Options -->
+                    </select>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+                <div id="create-waste-stock-hint" class="text-[11px] text-amber-600 dark:text-amber-400 font-bold mt-1.5 ml-1"></div>
+            </div>
 
-    pagination.reset();
-    renderTable();
-}
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပျက်စီး/ဆုံးရှုံး အရေအတွက် *</label>
+                <input type="number" id="create-waste-qty" min="0.1" step="any" required placeholder="0" class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-amber-600 dark:text-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
 
-function renderTable() {
-    const tbody = document.getElementById("waste-table-body");
-    if (!tbody) return;
-    tbody.innerHTML = "";
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက် (Reason) *</label>
+                <input type="text" id="create-waste-reason" required placeholder="ဥပမာ - ကြွက်ကိုက် / အရောင်စွန်း / ပျောက်ဆုံး" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
 
-    if (currentFilteredWaste.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-slate-400 font-bold text-base">ပျက်စီး/အလေအလွင့် မှတ်တမ်း မရှိပါ</td></tr>`;
-        pagination.renderControls("waste-pagination");
-        return;
-    }
+            <div class="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 rounded-xl mt-2">
+                <p class="text-[11px] text-rose-700 dark:text-rose-400 font-bold leading-relaxed">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> သတိပြုရန်: အတည်ပြုပြီးပါက လက်ကျန်စာရင်းမှ ချက်ချင်း အပြီးတိုင် နှုတ်သွားမည်ဖြစ်ပါသည်။
+                </p>
+            </div>
 
-    const pageItems = pagination.getPageItems(currentFilteredWaste);
-
-    pageItems.forEach(w => {
-        const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
-        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
-
-        const actionButtons = state.isAdmin() ? `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${w.id}" title="ပြင်ဆင်မည်" class="btn-edit-waste w-8 h-8 flex items-center justify-center bg-blue-500/10 hover:bg-blue-600 hover:text-white rounded-lg text-blue-600 dark:text-blue-400 transition cursor-pointer shadow-sm">
-                    <i class="fa-solid fa-pen-to-square text-xs"></i>
-                </button>
-                <button type="button" data-id="${w.id}" title="ဖျက်မည် (စတော့ထဲ ပြန်ပေါင်းမည်)" class="btn-delete-waste w-8 h-8 flex items-center justify-center bg-rose-500/10 hover:bg-rose-600 hover:text-white rounded-lg text-rose-500 dark:text-rose-400 transition cursor-pointer shadow-sm">
-                    <i class="fa-solid fa-trash-can text-xs"></i>
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button type="submit" id="btn-submit-create-waste" class="w-full py-3 bg-amber-600 hover:bg-amber-500 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i>
+                    <span>အတည်ပြု၍ စာရင်းမှနှုတ်မည်</span>
                 </button>
             </div>
-        ` : `<span class="text-xs text-slate-400">-</span>`;
+        </form>
+    </div>
+</div>
 
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition";
-        tr.innerHTML = `
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-amber-600 dark:text-amber-400 text-sm">${escapeHtml(w.reference_no || "-")}</div>
-                <div class="text-xs text-slate-400">${dateStr}</div>
-            </td>
-            <td class="p-4 font-mono text-sm text-slate-500 dark:text-slate-400">
-                <div class="font-bold text-slate-800 dark:text-slate-200 text-base">${escapeHtml(w.sku || "-")}</div>
-                <div class="text-xs">${escapeHtml(w.barcode || "")}</div>
-            </td>
-            <td class="p-4">
-                <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-bold">
-                    ${escapeHtml(w.category || "-")}
-                </span>
-            </td>
-            <td class="p-4">
-                <div class="font-bold text-slate-900 dark:text-white text-base">${escapeHtml(w.item_name || "-")}</div>
-                <div class="text-sm text-slate-400">${escapeHtml(w.pattern || "-")}</div>
-            </td>
-            <td class="p-4 text-sm">
-                <div>${escapeHtml(w.color || "-")}</div>
-                <div class="text-slate-400">${escapeHtml(w.size || "ထည်")}</div>
-            </td>
-            <td class="p-4 text-center">
-                <span class="px-3.5 py-1.5 rounded-xl font-mono font-black text-base bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                    -${Number(w.quantity || 0).toLocaleString()} <span class="text-xs font-normal font-sans">${escapeHtml(w.size || "ထည်")}</span>
-                </span>
-            </td>
-            <td class="p-4 text-right font-mono text-base text-slate-500">
-                ${Number(w.unit_cost || 0).toLocaleString()}
-            </td>
-            <td class="p-4 text-right font-mono font-bold text-base text-rose-600 dark:text-rose-400">
-                ${subtotal.toLocaleString()}
-            </td>
-            <td class="p-4 text-sm max-w-xs truncate" title="${escapeHtml(w.reason || '')}">
-                ${escapeHtml(w.reason || "-")}
-            </td>
-            <td class="p-4 text-center font-bold text-slate-600 dark:text-slate-300 text-sm">
-                ${escapeHtml(w.recorded_by_name || "Admin")}
-            </td>
-            <td class="p-4 text-center">
-                ${actionButtons}
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
+<!-- ===================================================================== -->
+<!-- Edit Waste Modal (Admin Only)                                         -->
+<!-- ===================================================================== -->
+<div id="waste-edit-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
+        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-sm font-extrabold flex items-center gap-2.5">
+                <i class="fa-solid fa-pen-to-square text-amber-400 opacity-90"></i>
+                <span>ပျက်စီးစာရင်း ပြင်ဆင်မည်</span>
+            </div>
+            <button type="button" id="btn-close-waste-edit-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
 
-    if (state.isAdmin()) {
-        tbody.querySelectorAll(".btn-edit-waste").forEach(btn => {
-            btn.onclick = () => {
-                const log = wasteLogs.find(w => w.id === Number(btn.dataset.id));
-                if (log) openEditWasteModal(log);
-            };
-        });
+        <form id="waste-edit-form" class="p-6 space-y-4">
+            <input type="hidden" id="edit-waste-id">
 
-        tbody.querySelectorAll(".btn-delete-waste").forEach(btn => {
-            btn.onclick = () => deleteWasteLog(Number(btn.dataset.id));
-        });
-    }
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပစ္စည်းအမည်</label>
+                <input type="text" id="edit-waste-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
+            </div>
 
-    pagination.renderControls("waste-pagination");
-}
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပျက်စီး အရေအတွက် *</label>
+                <input type="number" id="edit-waste-qty" min="0.1" step="any" required class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-amber-600 dark:text-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
 
-function openEditWasteModal(log) {
-    document.getElementById("edit-waste-id").value = log.id;
-    document.getElementById("edit-waste-name").value = `${log.item_name} (${log.sku || "-"})`;
-    document.getElementById("edit-waste-qty").value = log.quantity;
-    document.getElementById("edit-waste-reason").value = log.reason || "";
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက်</label>
+                <input type="text" id="edit-waste-reason" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
 
-    document.getElementById("waste-edit-modal")?.classList.remove("hidden");
-    document.getElementById("edit-waste-qty")?.focus();
-}
-
-async function submitEditWaste(e) {
-    e.preventDefault();
-    const btn = document.getElementById("btn-save-waste-edit");
-    const id = document.getElementById("edit-waste-id")?.value;
-    const qty = parseInt(document.getElementById("edit-waste-qty")?.value, 10);
-    const reason = document.getElementById("edit-waste-reason")?.value.trim();
-
-    if (!qty || qty <= 0) {
-        return ui.toast.warning("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ။");
-    }
-
-    if (btn) btn.disabled = true;
-
-    try {
-        await api.put(`/waste/${id}`, { quantity: qty, reason });
-        document.getElementById("waste-edit-modal")?.classList.add("hidden");
-        ui.toast.success("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
-        await loadWasteLogs();
-    } catch (err) {
-        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-async function deleteWasteLog(id) {
-    const confirmed = await ui.confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)", "error");
-    if (!confirmed) return;
-
-    try {
-        await api.delete(`/waste/${id}`);
-        ui.toast.success("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
-        await loadWasteLogs();
-    } catch (err) {
-        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
-    }
-}
-
-function exportWasteToCSV() {
-    const dataToExport = currentFilteredWaste.length > 0 ? currentFilteredWaste : wasteLogs;
-    if (dataToExport.length === 0) {
-        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
-    }
-    const currentYear = new Date().getFullYear();
-    let csvContent = "Reference No,Date,SKU,Barcode,Category,Item Name,Color,Size,Quantity,Unit Cost,Total Loss,Reason,Recorded By\n";
-
-    dataToExport.forEach(w => {
-        const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
-        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
-
-        const row = [
-            escapeCsv(w.reference_no),
-            escapeCsv(dateStr),
-            escapeCsv(w.sku),
-            escapeCsv(w.barcode),
-            escapeCsv(w.category),
-            escapeCsv(w.item_name),
-            escapeCsv(w.color),
-            escapeCsv(w.size || 'ထည်'),
-            w.quantity || 0,
-            w.unit_cost || 0,
-            subtotal,
-            escapeCsv(w.reason),
-            escapeCsv(w.recorded_by_name || 'Admin')
-        ];
-        csvContent += row.join(",") + "\n";
-    });
-
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Damage_Waste_Logs_FY${currentYear}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button type="submit" id="btn-save-waste-edit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i>
+                    <span>ပြင်ဆင်ချက် သိမ်းဆည်းမည်</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

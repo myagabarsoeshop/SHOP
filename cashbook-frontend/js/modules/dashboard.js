@@ -1,7 +1,7 @@
 // cashbook-frontend/js/modules/dashboard.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Import Professional UI (Toast)
+import { ui } from "../core/ui.js";
 
 let dashboardData = null;
 let branchesList = [];
@@ -17,7 +17,6 @@ function escapeHtml(str) {
 
 function escapeCsv(val) {
     let str = String(val ?? "").trim();
-    // Excel Formula Injection ကာကွယ်ရန်
     if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
 }
@@ -26,7 +25,7 @@ export async function initDashboard() {
     setupRoleUI();
     bindEvents();
     await loadBranches();
-    await fetchDashboardData();
+    await fetchDashboardData(false);
 }
 
 function setupRoleUI() {
@@ -36,7 +35,6 @@ function setupRoleUI() {
     const staffView = document.getElementById("dash-staff-view");
     const adminView = document.getElementById("dash-admin-view");
 
-    // Role အလိုက် UI ခွဲခြားဖွင့်လှစ်ခြင်း
     if (isAdmin) {
         yearContainer?.classList.remove("hidden");
         exportBtn?.classList.remove("hidden");
@@ -70,29 +68,46 @@ function setupYearOptions() {
 }
 
 function bindEvents() {
-    document.getElementById("btn-refresh-dashboard")?.addEventListener("click", fetchDashboardData);
+    const refreshBtn = document.getElementById("btn-refresh-dashboard");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            icon?.classList.add("fa-spin");
+            await fetchDashboardData(true);
+            setTimeout(() => icon?.classList.remove("fa-spin"), 400);
+        });
+    }
 
     document.getElementById("dash-branch-select")?.addEventListener("change", () => {
-        fetchDashboardData();
+        fetchDashboardData(false);
     });
 
     document.getElementById("dash-year-select")?.addEventListener("change", (e) => {
         selectedYear = parseInt(e.target.value, 10);
-        fetchDashboardData();
+        fetchDashboardData(false);
     });
 
     document.getElementById("btn-export-dash-csv")?.addEventListener("click", exportDashboardToCSV);
 }
 
+/**
+ * D1 Read Quota ချွေတာရန် Branches စာရင်းကို Memory မှ ပြန်သုံးခြင်း
+ */
 async function loadBranches() {
     const select = document.getElementById("dash-branch-select");
     if (!select) return;
 
     try {
-        const res = await api.get("/branches");
-        branchesList = res.data || [];
-        select.innerHTML = "";
+        if (branchesList.length === 0) {
+            if (Array.isArray(state.branches) && state.branches.length > 0) {
+                branchesList = state.branches;
+            } else {
+                const res = await api.get("/branches");
+                branchesList = res.data || [];
+            }
+        }
 
+        select.innerHTML = "";
         if (state.isAdmin()) {
             select.innerHTML = `<option value="ALL">🏢 ဆိုင်အားလုံး စုစုပေါင်း (Consolidated)</option>`;
             branchesList.forEach(b => {
@@ -100,7 +115,7 @@ async function loadBranches() {
             });
             select.disabled = false;
         } else {
-            const currentBranch = state.currentBranch || branchesList[0];
+            const currentBranch = state.currentBranch || branchesList[0] || { id: 1, name: "Main Shop" };
             select.innerHTML = `<option value="${currentBranch.id}">${escapeHtml(currentBranch.name)}</option>`;
             select.disabled = true;
         }
@@ -109,7 +124,7 @@ async function loadBranches() {
     }
 }
 
-async function fetchDashboardData() {
+async function fetchDashboardData(showToast = false) {
     const branchVal = document.getElementById("dash-branch-select")?.value || "ALL";
 
     try {
@@ -124,6 +139,10 @@ async function fetchDashboardData() {
         } else {
             renderStaffDashboard(dashboardData);
         }
+
+        if (showToast) {
+            ui.toast.info("Dashboard အချက်အလက်များ အသစ်ဆွဲယူပြီးပါပြီ");
+        }
     } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
         ui.toast.error("Dashboard အချက်အလက် ဆွဲယူ၍ မရပါ: " + err.message);
@@ -131,12 +150,11 @@ async function fetchDashboardData() {
 }
 
 // -------------------------------------------------------------
-// 1. Staff / Cashier View Rendering (ရိုးရှင်းသော နေ့စဉ်လုပ်ငန်းဆောင်ရွက်မှု)
+// 1. Staff / Cashier View Rendering
 // -------------------------------------------------------------
 function renderStaffDashboard(data) {
     const s = data.staff || {};
 
-    // 4 Top Cards (Staff Mode)
     updateCard(1, "ယနေ့ လက်ငင်းရငွေ (Cash)", s.today_cash || 0, "ငွေသား အရောင်း", "fa-money-bill-wave", "emerald");
     updateCard(2, "ယနေ့ ဘဏ်/KPay ရငွေ", s.today_bank || 0, "ဘဏ်လွှဲ အရောင်း", "fa-building-columns", "blue");
     updateCard(3, "ယနေ့ ရောင်းရသည့် ဦးရေ", s.today_items_sold || 0, "ထည် / ခု", "fa-shirt", "purple");
@@ -153,9 +171,9 @@ function renderStaffDashboard(data) {
             categories.forEach(c => {
                 catTbody.innerHTML += `
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="py-2.5 font-bold text-slate-800 dark:text-slate-200">${escapeHtml(c.category)}</td>
-                        <td class="py-2.5 text-center font-mono font-bold">${Number(c.quantity).toLocaleString()}</td>
-                        <td class="py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(c.total_amount).toLocaleString()} Ks</td>
+                        <td class="py-2 font-bold text-slate-800 dark:text-slate-200">${escapeHtml(c.category)}</td>
+                        <td class="py-2 text-center font-mono font-bold">${Number(c.quantity).toLocaleString()}</td>
+                        <td class="py-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(c.total_amount).toLocaleString()} Ks</td>
                     </tr>
                 `;
             });
@@ -173,10 +191,10 @@ function renderStaffDashboard(data) {
             recent.forEach(r => {
                 recentTbody.innerHTML += `
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                        <td class="py-2.5 font-mono font-bold text-emerald-600 dark:text-emerald-400">${escapeHtml(r.invoice_no)}</td>
-                        <td class="py-2.5 font-semibold text-slate-700 dark:text-slate-300">${escapeHtml(r.customer_name || "Walk-in")}</td>
-                        <td class="py-2.5 capitalize text-slate-500">${escapeHtml(r.payment_method)}</td>
-                        <td class="py-2.5 text-right font-mono font-black text-slate-900 dark:text-white">${Number(r.final_amount).toLocaleString()} Ks</td>
+                        <td class="py-2 font-mono font-bold text-emerald-600 dark:text-emerald-400">${escapeHtml(r.invoice_no)}</td>
+                        <td class="py-2 font-semibold text-slate-700 dark:text-slate-300">${escapeHtml(r.customer_name || "Walk-in")}</td>
+                        <td class="py-2 uppercase font-mono text-[11px] font-bold text-slate-500">${escapeHtml(r.payment_method)}</td>
+                        <td class="py-2 text-right font-mono font-black text-slate-900 dark:text-white">${Number(r.final_amount).toLocaleString()} Ks</td>
                     </tr>
                 `;
             });
@@ -185,18 +203,20 @@ function renderStaffDashboard(data) {
 }
 
 // -------------------------------------------------------------
-// 2. Admin View Rendering (စာလုံး လျှော့ချထားပြီး Total Row ထည့်သွင်းထားသည်)
+// 2. Admin View Rendering
 // -------------------------------------------------------------
 function renderAdminDashboard(data) {
     const a = data.admin || {};
+    const opex = Number(a.total_expenses || 0);
+    const totalPayable = Number(a.total_payable || 0);
 
-    // 4 Top Cards (စာသား လျှော့ချပြီး အတိုချဉ်းကပ်ထားသည်)
+    // 4 Top Cards
     updateCard(1, "တစ်နှစ်တာ ဝင်ငွေ (Revenue)", a.total_revenue || 0, `${selectedYear} ခုနှစ် အရောင်းစုစုပေါင်း`, "fa-sack-dollar", "emerald");
-    updateCard(2, "တစ်နှစ်တာ အမြတ် (Net Profit)", a.net_profit || 0, "အဝယ်နှင့် စရိတ်နုတ်ပြီး အမြတ်", "fa-chart-line", a.net_profit >= 0 ? "blue" : "rose");
-    updateCard(3, "ရရန်ကျန် အကြွေး", a.total_outstanding_debt || 0, "Customer Liabilities", "fa-hand-holding-dollar", "purple");
+    updateCard(2, "တစ်နှစ်တာ အမြတ် (Net Profit)", a.net_profit || 0, `ဆိုင်စရိတ် (OPEX): ${opex.toLocaleString()} Ks နှုတ်ပြီး`, "fa-chart-line", Number(a.net_profit || 0) >= 0 ? "blue" : "rose");
+    updateCard(3, "ရရန်ကျန် အကြွေး (Receivables)", a.total_outstanding_debt || 0, `ပွဲရုံပေးရန်ကျန်: ${totalPayable.toLocaleString()} Ks`, "fa-hand-holding-dollar", "purple");
     updateCard(4, "စတော့ တန်ဖိုး (Valuation)", a.total_stock_value || 0, "ပစ္စည်းရင်းနှီးမြှုပ်နှံမှု တန်ဖိုး", "fa-boxes-stacked", "amber");
 
-    // Admin: Branch Breakdown Table (အလယ်ဇယား + စုစုပေါင်း Total Row)
+    // Admin: Branch Breakdown Table
     const branchTbody = document.getElementById("dash-branch-table-body");
     if (branchTbody) {
         branchTbody.innerHTML = "";
@@ -218,56 +238,61 @@ function renderAdminDashboard(data) {
                 totalStockVal += sVal;
 
                 branchTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td class="p-3 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 h-10">
+                        <td class="px-3 py-2 font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <i class="fa-solid fa-store text-emerald-500 text-xs"></i>
                             <span>${escapeHtml(b.name)}</span>
                         </td>
-                        <td class="p-3 text-right font-mono font-bold ${cNet < 0 ? 'text-rose-500' : 'text-emerald-500'}">${cNet.toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-bold text-blue-400">${bNet.toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-black text-amber-500">${sVal.toLocaleString()} Ks</td>
-                        <td class="p-3 text-right font-mono font-black text-rose-400">${Number(b.outstanding_debt || 0).toLocaleString()} Ks</td>
+                        <td class="px-3 py-2 text-right font-mono font-bold ${cNet < 0 ? "text-rose-500" : "text-emerald-500"}">${cNet.toLocaleString()} Ks</td>
+                        <td class="px-3 py-2 text-right font-mono font-bold text-blue-400">${bNet.toLocaleString()} Ks</td>
+                        <td class="px-3 py-2 text-right font-mono font-black text-amber-500">${sVal.toLocaleString()} Ks</td>
+                        <td class="px-3 py-2 text-right font-mono font-black text-rose-400">${Number(b.outstanding_debt || 0).toLocaleString()} Ks</td>
                     </tr>
                 `;
             });
 
-            // စုစုပေါင်း Row အသစ်
+            // All Branches Total Row
             branchTbody.innerHTML += `
-                <tr class="bg-slate-100/80 dark:bg-slate-950 font-black border-t-2 border-slate-300 dark:border-slate-700">
-                    <td class="p-3 text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-2">
+                <tr class="bg-slate-100/80 dark:bg-slate-950 font-black border-t-2 border-slate-300 dark:border-slate-700 h-10">
+                    <td class="px-3 py-2 text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-2">
                         <i class="fa-solid fa-calculator"></i>
                         <span>စုစုပေါင်း (All Branches Total)</span>
                     </td>
-                    <td class="p-3 text-right font-mono ${totalCashNet < 0 ? 'text-rose-500' : 'text-emerald-500'}">${totalCashNet.toLocaleString()} Ks</td>
-                    <td class="p-3 text-right font-mono text-blue-400">${totalBankNet.toLocaleString()} Ks</td>
-                    <td class="p-3 text-right font-mono text-amber-500">${totalStockVal.toLocaleString()} Ks</td>
-                    <td class="p-3 text-right font-mono text-rose-400">${Number(a.total_outstanding_debt || 0).toLocaleString()} Ks</td>
+                    <td class="px-3 py-2 text-right font-mono ${totalCashNet < 0 ? "text-rose-500" : "text-emerald-500"}">${totalCashNet.toLocaleString()} Ks</td>
+                    <td class="px-3 py-2 text-right font-mono text-blue-400">${totalBankNet.toLocaleString()} Ks</td>
+                    <td class="px-3 py-2 text-right font-mono text-amber-500">${totalStockVal.toLocaleString()} Ks</td>
+                    <td class="px-3 py-2 text-right font-mono text-rose-400">${Number(a.total_outstanding_debt || 0).toLocaleString()} Ks</td>
                 </tr>
             `;
         }
     }
 
-    // Admin: Expense Breakdown by Category (အောက်ဆုံးပိုင်း)
+    // Admin: Expense Breakdown by Category (Accurate 100% Sum & Progress Bars)
     const expenseList = document.getElementById("dash-expense-list");
     const totalExpLabel = document.getElementById("dash-total-expense-label");
-    if (totalExpLabel) totalExpLabel.textContent = `${Number(a.total_expenses || 0).toLocaleString()} Ks`;
+    const expenses = a.expense_breakdown || [];
+    const breakdownTotal = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    if (totalExpLabel) {
+        totalExpLabel.textContent = `${breakdownTotal.toLocaleString()} Ks`;
+    }
 
     if (expenseList) {
         expenseList.innerHTML = "";
-        const expenses = a.expense_breakdown || [];
         if (expenses.length === 0) {
             expenseList.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">အသုံးစရိတ်စာရင်း မရှိသေးပါ</div>`;
         } else {
             expenses.forEach(e => {
-                const percent = a.total_expenses > 0 ? Math.round((e.amount / a.total_expenses) * 100) : 0;
+                const amt = Number(e.amount || 0);
+                const percent = breakdownTotal > 0 ? Math.min(100, Math.round((amt / breakdownTotal) * 100)) : 0;
                 expenseList.innerHTML += `
                     <div class="space-y-1">
-                        <div class="flex justify-between text-xs font-bold">
-                            <span class="text-slate-700 dark:text-slate-300">${escapeHtml(e.category_name)}</span>
-                            <span class="font-mono text-slate-900 dark:text-white">${Number(e.amount).toLocaleString()} Ks (${percent}%)</span>
+                        <div class="flex justify-between text-xs font-bold gap-2">
+                            <span class="text-slate-700 dark:text-slate-300 truncate">${escapeHtml(e.category_name)}</span>
+                            <span class="font-mono text-slate-900 dark:text-white shrink-0">${amt.toLocaleString()} Ks (${percent}%)</span>
                         </div>
                         <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                            <div class="bg-rose-500 h-1.5 rounded-full" style="width: ${percent}%"></div>
+                            <div class="bg-rose-500 h-1.5 rounded-full transition-all duration-300" style="width: ${percent}%"></div>
                         </div>
                     </div>
                 `;
@@ -275,7 +300,7 @@ function renderAdminDashboard(data) {
         }
     }
 
-    // Admin: Top Selling Items (အောက်ဆုံးပိုင်း)
+    // Admin: Top Selling Items
     const topTbody = document.getElementById("dash-admin-top-items");
     if (topTbody) {
         topTbody.innerHTML = "";
@@ -285,11 +310,11 @@ function renderAdminDashboard(data) {
         } else {
             topItems.forEach(i => {
                 topTbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td class="py-2.5 font-bold text-slate-900 dark:text-white">${escapeHtml(i.item_name)}</td>
-                        <td class="py-2.5"><span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-400">${escapeHtml(i.category)}</span></td>
-                        <td class="py-2.5 text-center font-mono font-bold">${Number(i.quantity).toLocaleString()}</td>
-                        <td class="py-2.5 text-right font-mono font-black text-emerald-400">${Number(i.total_sales).toLocaleString()} Ks</td>
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 h-9">
+                        <td class="py-2 font-bold text-slate-900 dark:text-white">${escapeHtml(i.item_name)}</td>
+                        <td class="py-2"><span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400">${escapeHtml(i.category)}</span></td>
+                        <td class="py-2 text-center font-mono font-bold">${Number(i.quantity).toLocaleString()}</td>
+                        <td class="py-2 text-right font-mono font-black text-emerald-500 dark:text-emerald-400">${Number(i.total_sales).toLocaleString()} Ks</td>
                     </tr>
                 `;
             });
@@ -310,11 +335,11 @@ function updateCard(num, title, val, sub, icon, theme) {
     if (iconEl && icon) iconEl.className = `fa-solid ${icon}`;
 
     const colorClasses = {
-        emerald: { val: "text-2xl font-black text-emerald-500 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl shrink-0" },
-        blue: { val: "text-2xl font-black text-blue-500 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-xl shrink-0" },
-        purple: { val: "text-2xl font-black text-purple-400 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xl shrink-0" },
-        amber: { val: "text-2xl font-black text-amber-500 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xl shrink-0" },
-        rose: { val: "text-2xl font-black text-rose-500 font-mono tracking-tight", box: "w-12 h-12 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center text-xl shrink-0" }
+        emerald: { val: "text-2xl font-black text-emerald-500 font-mono tracking-tight", box: "w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-lg shrink-0" },
+        blue: { val: "text-2xl font-black text-blue-500 font-mono tracking-tight", box: "w-11 h-11 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-lg shrink-0" },
+        purple: { val: "text-2xl font-black text-purple-400 font-mono tracking-tight", box: "w-11 h-11 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-lg shrink-0" },
+        amber: { val: "text-2xl font-black text-amber-500 font-mono tracking-tight", box: "w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-lg shrink-0" },
+        rose: { val: "text-2xl font-black text-rose-500 font-mono tracking-tight", box: "w-11 h-11 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center text-lg shrink-0" }
     };
 
     const chosen = colorClasses[theme] || colorClasses.emerald;
@@ -334,10 +359,12 @@ function exportDashboardToCSV() {
     let csv = `Executive Financial Summary (${selectedYear})\n`;
     csv += `Metric,Value (MMK)\n`;
     csv += `Total Revenue,${a.total_revenue || 0}\n`;
+    csv += `Gross Profit,${a.gross_profit || 0}\n`;
+    csv += `Operating Expenses (OPEX),${a.total_expenses || 0}\n`;
     csv += `Net Profit,${a.net_profit || 0}\n`;
-    csv += `Total Expenses,${a.total_expenses || 0}\n`;
     csv += `Total Stock Valuation,${a.total_stock_value || 0}\n`;
-    csv += `Outstanding Debt,${a.total_outstanding_debt || 0}\n\n`;
+    csv += `Customer Receivables (Debt),${a.total_outstanding_debt || 0}\n`;
+    csv += `Supplier Payables,${a.total_payable || 0}\n\n`;
 
     csv += `Branch Valuation & Balances\n`;
     csv += `Branch Name,Cash Net,Bank Net,Stock Valuation,Outstanding Debt\n`;
@@ -346,7 +373,7 @@ function exportDashboardToCSV() {
     });
     csv += `\n`;
 
-    csv += `Expense Breakdown by Category\n`;
+    csv += `Cashbook Outflows Breakdown by Category\n`;
     csv += `Category Name,Amount (MMK)\n`;
     (a.expense_breakdown || []).forEach(e => {
         csv += `${escapeCsv(e.category_name)},${e.amount || 0}\n`;
@@ -360,4 +387,5 @@ function exportDashboardToCSV() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }

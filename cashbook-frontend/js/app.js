@@ -1,7 +1,7 @@
 // cashbook-frontend/js/app.js
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
-import { ui } from "./core/ui.js"; // UI Utilities (Toast & Confirm) ကို Import လုပ်ခြင်း
+import { ui } from "./core/ui.js";
 
 import { initAuth } from "./modules/auth.js";
 import { initDashboard } from "./modules/dashboard.js";
@@ -28,17 +28,19 @@ const VIEW_TITLES = {
     stock_report: "Stock Report (လစဉ်စတော့လှုပ်ရှားမှုနှင့် လက်ကျန်မက်ထရစ်)",
     master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
     yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
-    customers: "Customers & Liabilities (ဖောက်သည်နှင့် အကြွေးစာရင်း)",
+    customers: "Customers & Suppliers (ဖောက်သည်နှင့် ပွဲရုံကြွေးမြီစာရင်း)",
     system_setting: "System Setting (စနစ် ဆက်တင်နှင့် အရင်းအမြစ်)"
 };
 
 let currentActiveView = "dashboard";
+const viewTemplateCache = new Map();
 
 document.addEventListener("DOMContentLoaded", async () => {
     startClock();
     initTheme();
     setupNavigation();
     setupTopKpiClickEvents();
+    setupGlobalKeyboardShortcuts();
 
     if (!state.isLoggedIn()) {
         await showLoginView();
@@ -65,19 +67,39 @@ function setupNavigation() {
     });
 }
 
+/**
+ * Global Esc Key Shortcut: ပွင့်နေသော Modal များကို Esc နှိပ်ရုံဖြင့် ပိတ်ပေးခြင်း
+ */
+function setupGlobalKeyboardShortcuts() {
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            // Confirm dialog ပွင့်နေပါက Confirm dialog က သူ့ဘာသာ ကိုင်တွယ်မည်
+            const confirmDialog = document.getElementById("global-confirm-dialog");
+            if (confirmDialog && !confirmDialog.classList.contains("hidden")) {
+                document.getElementById("btn-confirm-cancel")?.click();
+                return;
+            }
+
+            // View container အတွင်း ပွင့်နေသော Modal များကို အပေါ်ဆုံးမှ စပိတ်မည်
+            const openModals = Array.from(
+                document.querySelectorAll("#view-container .fixed.inset-0:not(.hidden)")
+            );
+            if (openModals.length > 0) {
+                const topModal = openModals[openModals.length - 1];
+                topModal.classList.add("hidden");
+            }
+        }
+    });
+}
+
 function setupTopKpiClickEvents() {
-    const kpi3Card = document.getElementById("kpi-3-value")?.closest(".kpi-card") || document.getElementById("kpi-3-value")?.parentElement;
+    const kpi3Card = document.getElementById("kpi-3-value")?.closest("div.bg-white") || document.getElementById("kpi-3-value")?.parentElement;
     if (kpi3Card) {
-        kpi3Card.classList.add("cursor-pointer", "hover:opacity-80", "transition");
+        kpi3Card.classList.add("cursor-pointer", "hover:opacity-90", "transition");
         kpi3Card.title = "ယနေ့အရောင်းစာရင်း အသေးစိတ် ကြည့်ရှုရန် နှိပ်ပါ";
         kpi3Card.addEventListener("click", () => {
-            const todaySalesBtn = document.getElementById("btn-open-today-sales");
-            if (todaySalesBtn && currentActiveView === "pos") {
-                todaySalesBtn.click();
-            } else {
-                navigateTo("pos").then(() => {
-                    setTimeout(() => document.getElementById("btn-open-today-sales")?.click(), 300);
-                });
+            if (currentActiveView === "pos") {
+                document.getElementById("btn-open-today-sales")?.click();
             }
         });
     }
@@ -86,11 +108,22 @@ function setupTopKpiClickEvents() {
 function setActiveNavButton(viewName) {
     document.querySelectorAll(".nav-item").forEach(b => {
         if (b.dataset.view === viewName) {
-            b.className = "nav-item active flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer";
+            b.className = "nav-item active flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer";
         } else {
-            b.className = "nav-item flex items-center gap-3.5 w-full px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer";
+            b.className = "nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer";
         }
     });
+}
+
+async function fetchViewHtml(viewName) {
+    if (viewTemplateCache.has(viewName)) {
+        return viewTemplateCache.get(viewName);
+    }
+    const res = await fetch(`views/${viewName}.html`);
+    if (!res.ok) throw new Error("View not found");
+    const html = await res.text();
+    viewTemplateCache.set(viewName, html);
+    return html;
 }
 
 async function showLoginView() {
@@ -99,7 +132,7 @@ async function showLoginView() {
     if (!container) return;
     container.classList.remove("hidden");
 
-    const html = await fetch("views/login.html").then(r => r.text());
+    const html = await fetchViewHtml("login");
     container.innerHTML = html;
     initAuth();
 }
@@ -136,6 +169,7 @@ async function loadBranches() {
     try {
         const res = await api.get("/branches");
         const branches = res.data || [];
+        state.branches = branches; // Cache branches in state to save D1 Reads across modules
         select.innerHTML = "";
 
         if (branches.length > 0 && !state.currentBranch) {
@@ -165,6 +199,9 @@ async function loadBranches() {
     }
 }
 
+/**
+ * မြန်မာစံတော်ချိန်နှင့် ကိုက်ညီသော YYYY-MM-DD ရက်စွဲ ထုတ်ပေးခြင်း
+ */
 export function getLocalTodayDate() {
     const now = new Date();
     const year = now.getFullYear();
@@ -173,57 +210,17 @@ export function getLocalTodayDate() {
     return `${year}-${month}-${day}`;
 }
 
+/**
+ * Global KPI Bar အဖွင့်/အပိတ် ထိန်းချုပ်ခြင်း (D1 Read မကုန်စေရန် သက်ဆိုင်ရာ Module ကသာ KPI ကို တွက်ချက်မည်)
+ */
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
     const globalKpiBar = document.getElementById("global-kpi-bar");
 
     if (view === "dashboard" || view === "system_setting") {
         globalKpiBar?.classList.add("hidden");
-        return;
     } else {
         globalKpiBar?.classList.remove("hidden");
-    }
-
-    if (
-        view === "inventory" || 
-        view === "yarn" || 
-        view === "customers" || 
-        view === "purchases" || 
-        view === "master_products" || 
-        view === "waste" || 
-        view === "transfers" ||
-        view === "stock_report"
-    ) return;
-
-    try {
-        const branchId = state.currentBranch?.id || 1;
-        const today = getLocalTodayDate();
-
-        if (view === "cashbook") {
-            const res = await api.get("/cashbook/entries", { branch_id: branchId, start_date: today, end_date: today });
-            const summary = res.data?.summary || {
-                cash: { in: 0, out: 0, net: 0 },
-                bank: { in: 0, out: 0, net: 0 },
-                totalNet: 0
-            };
-            const totalExpenses = Number(summary.cash?.out || 0) + Number(summary.bank?.out || 0);
-
-            setKPI(1, "လက်ကျန် ငွေသား (Cash Net)", summary.cash?.net || 0, "fa-money-bill-wave", "emerald");
-            setKPI(2, "လက်ကျန် ဘဏ်ငွေ (Bank Net)", summary.bank?.net || 0, "fa-building-columns", "blue");
-            setKPI(3, "စုစုပေါင်း စရိတ်ထွက်ငွေ (Expenses)", totalExpenses, "fa-arrow-trend-down", "rose");
-            setKPI(4, "စုစုပေါင်း အသားတင် (Total Net)", summary.totalNet || 0, "fa-vault", "amber");
-        } else {
-            // POS Sale Counter တွင် အခြားဝင်ငွေ/အကြွေးဆပ်ငွေများ မရောဘဲ စစ်မှန်သော အရောင်းနှင့် အထည်အရေအတွက်ကို တိုက်ရိုက်ယူခြင်း
-            const dashRes = await api.get("/dashboard/summary", { branch_id: branchId, year: today.split("-")[0] });
-            const staff = dashRes.data?.staff || {};
-
-            setKPI(1, "Today Sale (Cash)", staff.today_cash || 0, "fa-money-bill-wave", "emerald");
-            setKPI(2, "Today Sale (Bank)", staff.today_bank || 0, "fa-building-columns", "blue");
-            setKPI(3, "Total Today Sale", staff.today_total || 0, "fa-cash-register", "emerald");
-            setKPI(4, "Total Sale Items", staff.today_items_sold || 0, "fa-shirt", "slate");
-        }
-    } catch (err) {
-        console.error("KPI update error:", err);
     }
 }
 
@@ -245,7 +242,21 @@ export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
         };
         valEl.className = colorMap[colorTheme] || colorMap.emerald;
     }
-    if (icoEl && iconClass) icoEl.className = `fa-solid ${iconClass}`;
+    if (icoEl) {
+        if (iconClass) icoEl.className = `fa-solid ${iconClass}`;
+        const iconWrapper = icoEl.parentElement;
+        if (iconWrapper) {
+            const bgMap = {
+                emerald: "w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0",
+                blue: "w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0",
+                rose: "w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg shrink-0",
+                amber: "w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0",
+                purple: "w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-lg shrink-0",
+                slate: "w-11 h-11 rounded-xl bg-slate-500/10 text-slate-500 flex items-center justify-center text-lg shrink-0"
+            };
+            iconWrapper.className = bgMap[colorTheme] || bgMap.emerald;
+        }
+    }
 }
 
 export async function navigateTo(viewName) {
@@ -257,10 +268,7 @@ export async function navigateTo(viewName) {
     if (titleEl) titleEl.textContent = VIEW_TITLES[viewName] || "GARMENT ERP";
 
     try {
-        const html = await fetch(`views/${viewName}.html`).then(r => {
-            if (!r.ok) throw new Error("View not found");
-            return r.text();
-        });
+        const html = await fetchViewHtml(viewName);
         container.innerHTML = html;
 
         await refreshGlobalKPIs(viewName);

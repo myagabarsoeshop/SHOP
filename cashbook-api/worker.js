@@ -792,81 +792,6 @@ export default {
     },
 
     // =========================================================================
-    // AUTOMATED DAILY CASHBOOK CLOSING CRON (runs at 00:00 UTC)
-    // =========================================================================
-    async scheduled(event, env, ctx) {
-        try {
-            const closingDate = getMyanmarTodayDate();
-            const { results: branches } = await env.DB.prepare(
-                "SELECT id FROM branches WHERE is_active = 1"
-            ).all();
-
-            const batch = [];
-            for (const b of (branches || [])) {
-                const row = await env.DB.prepare(`
-                    SELECT 
-                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' AND entry_date < ? THEN amount 
-                                          WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' AND entry_date < ? THEN -amount ELSE 0 END), 0) AS open_cash,
-                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' AND entry_date < ? THEN amount 
-                                          WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' AND entry_date < ? THEN -amount ELSE 0 END), 0) AS open_bank,
-                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' AND entry_date = ? THEN amount ELSE 0 END), 0) AS cash_in,
-                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' AND entry_date = ? THEN amount ELSE 0 END), 0) AS cash_out,
-                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' AND entry_date = ? THEN amount ELSE 0 END), 0) AS bank_in,
-                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' AND entry_date = ? THEN amount ELSE 0 END), 0) AS bank_out
-                    FROM cashbook_entries
-                    WHERE branch_id = ? AND entry_date <= ?
-                `).bind(
-                    closingDate, closingDate, closingDate, closingDate,
-                    closingDate, closingDate, closingDate, closingDate,
-                    b.id, closingDate
-                ).first();
-
-                if (row) {
-                    const openCash = roundKyat(row.open_cash);
-                    const openBank = roundKyat(row.open_bank);
-                    const cashIn = roundKyat(row.cash_in);
-                    const cashOut = roundKyat(row.cash_out);
-                    const bankIn = roundKyat(row.bank_in);
-                    const bankOut = roundKyat(row.bank_out);
-                    const closeCash = openCash + cashIn - cashOut;
-                    const closeBank = openBank + bankIn - bankOut;
-
-                    batch.push(
-                        env.DB.prepare(`
-                            INSERT INTO daily_closings (
-                                branch_id, closing_date, opening_cash, opening_bank,
-                                total_cash_in, total_cash_out, closing_cash,
-                                total_bank_in, total_bank_out, closing_bank,
-                                actual_cash_counted, cash_difference, closed_by, notes
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 'Auto Daily Closing')
-                            ON CONFLICT(branch_id, closing_date) DO UPDATE SET
-                                opening_cash = excluded.opening_cash,
-                                opening_bank = excluded.opening_bank,
-                                total_cash_in = excluded.total_cash_in,
-                                total_cash_out = excluded.total_cash_out,
-                                closing_cash = excluded.closing_cash,
-                                total_bank_in = excluded.total_bank_in,
-                                total_bank_out = excluded.total_bank_out,
-                                closing_bank = excluded.closing_bank
-                        `).bind(
-                            b.id, closingDate, openCash, openBank,
-                            cashIn, cashOut, closeCash,
-                            bankIn, bankOut, closeBank, closeCash
-                        )
-                    );
-                }
-            }
-
-            if (batch.length > 0) {
-                await env.DB.batch(batch);
-            }
-        } catch (err) {
-            console.error("[Cron] Daily closing error:", err.message);
-        }
-    }
-};
-
-// =========================================================================
     // AUTOMATED DAILY CASHBOOK CLOSING & EMAIL BACKUP CRON (runs at 00:00 MMT)
     // =========================================================================
     async scheduled(event, env, ctx) {
@@ -991,3 +916,4 @@ export default {
             console.error("[Cron Error]:", err.message);
         }
     }
+};

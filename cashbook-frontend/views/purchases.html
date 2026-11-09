@@ -1,19 +1,27 @@
 <!-- cashbook-frontend/views/purchases.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar -->
-    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <!-- Top Filter & Action Toolbar (Standardized Pro Layout) -->
+    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- Search Box -->
-        <div class="flex items-center gap-3 flex-1 min-w-0">
-            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
+        <!-- ဘယ်ဘက်ခြမ်း: Category Filter + Search Box -->
+        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+            <div class="relative w-44 md:w-48 shrink-0">
+                <i class="fa-solid fa-layer-group text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <select id="pur-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none shadow-sm">
+                    <option value="">အမျိုးအစား အားလုံး</option>
+                </select>
+                <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+
+            <div class="relative flex-1 max-w-md">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="pur-search" placeholder="VR NO / REF / ပစ္စည်းအမည် / Barcode / ပွဲရုံ ရှာရန်..." 
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
         </div>
 
-        <!-- Toolbar Buttons -->
+        <!-- ညာဘက်ခြမ်း: Refresh, Export CSV နှင့် Add New Button -->
         <div class="flex items-center gap-2 shrink-0">
             <button type="button" id="btn-refresh-purchases" title="အဝယ်စာရင်းများ ပြန်လည်ဆွဲယူမည်" 
                 class="w-9 h-9 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center cursor-pointer shadow-sm active:scale-95">
@@ -36,9 +44,9 @@
         </div>
     </div>
 
-    <!-- Purchases History Table Container (၁၇ ကော်လံစနစ်) -->
+    <!-- Purchases History Table Container (QTY ပါဝင်သော ၁၈ ကော်လံစနစ်) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
-        <table class="w-full text-left border-collapse min-w-[1800px]">
+        <table class="w-full text-left border-collapse min-w-[1850px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-11">
                     <th class="py-2.5 px-3 w-12 text-center">NO</th>
@@ -48,6 +56,7 @@
                     <th class="py-2.5 px-4 w-32 text-left">CATEGORY</th>
                     <th class="py-2.5 px-4 min-w-[180px] text-left">ITEM NAME</th>
                     <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
+                    <th class="py-2.5 px-3 w-20 text-center">QTY</th>
                     <th class="py-2.5 px-4 w-28 text-right">UNIT PRICE</th>
                     <th class="py-2.5 px-4 w-32 text-right">AMOUNT</th>
                     <th class="py-2.5 px-3 w-20 text-left">METHOD</th>
@@ -65,7 +74,7 @@
             
             <tbody id="pur-table-body">
                 <tr>
-                    <td colspan="17" class="p-16 text-center text-slate-400">
+                    <td colspan="18" class="p-16 text-center text-slate-400">
                         <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                         <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                     </td>
@@ -79,13 +88,13 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Enterprise Purchase Order Workspace Modal (Pro Balanced Layout)       -->
+<!-- Enterprise Purchase Order Workspace Modal (Pro Entry Form)            -->
 <!-- ===================================================================== -->
 <div id="purchase-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-2 md:p-4">
-    <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-7xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[96vh] overflow-hidden scale-100 transition-all">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-7xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-[95vh] overflow-hidden scale-100 transition-all">
         
-        <!-- Header -->
-        <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+        <!-- Modal Header -->
+        <div class="px-5 py-3.5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-base">
                     <i class="fa-solid fa-cart-flatbed"></i>
@@ -107,14 +116,13 @@
         <div class="p-4 space-y-3.5 overflow-y-auto flex-1">
             <input type="hidden" id="pur-edit-id" value="">
 
-            <!-- SECTION 1: Purchase Information (Balanced 4-Column / 5-Column Grid) -->
+            <!-- SECTION 1: Purchase Information -->
             <div class="space-y-1.5">
                 <div class="flex items-center justify-between">
                     <div class="text-[11px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                         <i class="fa-solid fa-circle-info text-emerald-500"></i>
                         <span>၁။ အဝယ်အချက်အလက် (Purchase Information)</span>
                     </div>
-                    <!-- အပိုင်း (၂) ခလုတ်နှင့် အထက်အောက် တစ်သားတည်း ညီညာသော ပွဲရုံသစ် ခလုတ် -->
                     <button type="button" id="btn-open-new-supplier-modal" class="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 font-bold text-[11px] rounded-xl border border-emerald-500/30 transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95">
                         <i class="fa-solid fa-plus-circle"></i>
                         <span>ပွဲရုံအသစ် စာရင်းသွင်းမည်</span>
@@ -165,8 +173,17 @@
                         <!-- 5. ဘဏ် / အကောင့်အမည် (BANK ရွေးမှသာ ပေါ်မည်) -->
                         <div id="pur-bank-container" class="hidden">
                             <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">ဘဏ် / အကောင့်အမည် *</label>
-                            <input type="text" id="pur-bank-name" placeholder="ဥပမာ - KBZ Pay" 
+                            <input type="text" id="pur-bank-name" list="pur-bank-datalist" placeholder="ဥပမာ - KBZPay / KBZ Bank" 
                                 class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <datalist id="pur-bank-datalist">
+                                <option value="KBZPay">
+                                <option value="WavePay">
+                                <option value="KBZ Bank">
+                                <option value="CB Bank">
+                                <option value="AYA Bank">
+                                <option value="A Bank">
+                                <option value="UAB Bank">
+                            </datalist>
                         </div>
                     </div>
                 </div>
@@ -290,40 +307,42 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Dedicated Create Product Sub-Modal                                    -->
+<!-- Dedicated Create Product Sub-Modal (Pro Form Standard)                -->
 <!-- ===================================================================== -->
 <div id="new-prod-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" style="z-index: 70;">
-    <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col scale-100 transition-all">
-        <div class="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-            <span class="text-xs font-bold flex items-center gap-2">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col scale-100 transition-all">
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
+            <span class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-sparkles text-blue-400"></i>
                 <span>ပစ္စည်းအမည်သစ် စာရင်းသွင်းမည်</span>
             </span>
             <button type="button" id="btn-close-new-prod-modal" class="text-slate-400 hover:text-white cursor-pointer transition"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <form id="new-prod-form" class="p-5 space-y-4">
+        <form id="new-prod-form" class="p-5 space-y-3.5">
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အမျိုးအစား (Category) *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အမျိုးအစား (Category) *</label>
                 <div class="relative">
-                    <input type="text" id="sub-cat" required placeholder="ပုဆိုး / လုံချည် / အင်္ကျီ / ချည်" list="sub-cat-datalist"
-                        class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <datalist id="sub-cat-datalist"></datalist>
+                    <input type="text" id="sub-cat" required placeholder="ပုဆိုး / လုံချည် / အင်္ကျီ / ပိုးထည် / ချည်" list="sub-cat-datalist"
+                        class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <datalist id="sub-cat-datalist">
+                        <option value="ပုဆိုး"><option value="လုံချည်"><option value="အင်္ကျီ"><option value="ပိုးထည်"><option value="ပိတ်စ"><option value="ချည်">
+                    </datalist>
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပစ္စည်းအမည် (Item Name) *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပစ္စည်းအမည် (Item Name) *</label>
                 <input type="text" id="sub-name" required placeholder="ဥပမာ - ကချင်ရိုးရာပိုးထည်"
-                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
-            <div class="grid grid-cols-2 gap-3.5">
+            <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အထည်ကုတ် (SKU)</label>
-                    <input type="text" id="sub-sku" placeholder="Auto Generate" class="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-blue-500 focus:outline-none">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အထည်ကုတ် (SKU)</label>
+                    <input type="text" id="sub-sku" placeholder="Auto Generate" class="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-blue-500 focus:outline-none">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ယူနစ် (Unit) *</label>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ယူနစ် (Unit) *</label>
                     <div class="relative">
-                        <select id="sub-size" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white appearance-none cursor-pointer">
+                        <select id="sub-size" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white appearance-none cursor-pointer">
                             <option value="ထည်" selected>ထည်</option>
                             <option value="ပေါင်">ပေါင် (lb)</option>
                             <option value="လိပ်">လိပ်</option>
@@ -334,18 +353,18 @@
                     </div>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-3.5">
+            <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အဆင် / ဒီဇိုင်း</label>
-                    <input type="text" id="sub-pattern" placeholder="အကွက်စိပ်" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အဆင် / ဒီဇိုင်း</label>
+                    <input type="text" id="sub-pattern" placeholder="အကွက်စိပ်" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အရောင် (Color)</label>
-                    <input type="text" id="sub-color" placeholder="နက်ပြာ" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အရောင် (Color)</label>
+                    <input type="text" id="sub-color" placeholder="နက်ပြာ" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
-            <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20 active:scale-95">
+            <div class="pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold rounded-xl transition cursor-pointer shadow-md shadow-blue-600/20 active:scale-95">
                     စာရင်းထဲသို့ ပေါင်းထည့်မည်
                 </button>
             </div>
@@ -354,12 +373,12 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Dedicated Quick Add Supplier Sub-Modal                                -->
+<!-- Dedicated Quick Add Supplier Sub-Modal (Pro Form Standard)            -->
 <!-- ===================================================================== -->
 <div id="quick-supplier-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" style="z-index: 70;">
-    <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col scale-100 transition-all">
-        <div class="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-            <span class="text-xs font-bold flex items-center gap-2">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col scale-100 transition-all">
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
+            <span class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-warehouse text-emerald-400"></i>
                 <span>ပွဲရုံ / ပေးသွင်းသူ အသစ်မှတ်ပုံတင်မည်</span>
             </span>
@@ -371,24 +390,24 @@
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပွဲရုံ / ပေးသွင်းသူအမည် *</label>
                 <input type="text" id="quick-supp-name" required placeholder="ဥပမာ - ရွှေမန်းပွဲရုံ" 
-                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ဖုန်းနံပါတ်</label>
                 <input type="text" id="quick-supp-phone" placeholder="09xxxxxxxxx" 
-                    class="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ဆိုင်အမည် / ဆိုင်ခွဲ</label>
                 <input type="text" id="quick-supp-shop" placeholder="ဆိုင်အမည် (မထည့်လည်းရ)" 
-                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လိပ်စာ / မြို့နယ်</label>
                 <input type="text" id="quick-supp-address" placeholder="ဥပမာ - မန္တလေး (မထည့်လည်းရ)" 
-                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
-            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div class="pt-2.5 border-t border-slate-100 dark:border-slate-800">
                 <button type="submit" id="btn-submit-quick-supp" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition cursor-pointer shadow-md shadow-emerald-600/20 active:scale-95">
                     ပွဲရုံ သိမ်းဆည်းမည်
                 </button>

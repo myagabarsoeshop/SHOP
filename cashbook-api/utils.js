@@ -1,6 +1,7 @@
 // =============================================================================
 // FILE 1 OF 5: cashbook-api/utils.js
-// SHARED HELPERS, KYAT/QTY MATH, D1 SCHEMA GUARD & CRYPTO/JWT AUTH
+// SHARED HELPERS, KYAT/QTY MATH, D1 SCHEMA GUARD, RATE LIMITER & CRYPTO/JWT AUTH
+// Version: 3.1.0 (Security Hardened)
 // =============================================================================
 
 export const corsHeaders = {
@@ -8,7 +9,34 @@ export const corsHeaders = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Branch-Id",
     "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY"
 };
+
+/**
+ * Request Origin အား wrangler.toml ရှိ ALLOWED_ORIGIN နှင့် တိုက်ဆိုင်စစ်ဆေးပြီး CORS သတ်မှတ်ခြင်း
+ */
+export function configureRequestContext(request, env) {
+    const reqOrigin = request.headers.get("Origin") || "";
+    const allowedOrigin = (env && env.ALLOWED_ORIGIN) ? String(env.ALLOWED_ORIGIN).trim() : "";
+
+    if (!reqOrigin) {
+        corsHeaders["Access-Control-Allow-Origin"] = allowedOrigin || "*";
+        return;
+    }
+
+    const isLocal = reqOrigin.startsWith("http://localhost") || reqOrigin.startsWith("http://127.0.0.1");
+    const isAllowedDomain =
+        (allowedOrigin && reqOrigin === allowedOrigin) ||
+        reqOrigin.endsWith(".pages.dev") ||
+        reqOrigin.endsWith(".workers.dev");
+
+    if (isLocal || isAllowedDomain) {
+        corsHeaders["Access-Control-Allow-Origin"] = reqOrigin;
+    } else {
+        corsHeaders["Access-Control-Allow-Origin"] = allowedOrigin || "*";
+    }
+}
 
 export function jsonResponse(data, status = 200) {
     return new Response(JSON.stringify({ success: true, data }), {
@@ -63,6 +91,67 @@ export function roundQty(val) {
 }
 
 // =============================================================================
+// LOGIN BRUTE-FORCE RATE LIMITER (IP တစ်ခုလျှင် ၁ မိနစ်အတွင်း ၅ ကြိမ်ထက်ပိုမှားပါက ပိတ်မည်)
+// =============================================================================
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_WINDOW_MS = 60 * 1000; // 1 minute
+
+export function getClientIp(request) {
+    return (
+        request.headers.get("CF-Connecting-IP") ||
+        request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
+        "unknown-ip"
+    );
+}
+
+export function checkLoginRateLimit(request) {
+    const ip = getClientIp(request);
+    const now = Date.now();
+    const record = loginAttempts.get(ip);
+
+    if (!record) return { allowed: true };
+
+    if (now - record.firstAttemptAt > LOCKOUT_WINDOW_MS) {
+        loginAttempts.delete(ip);
+        return { allowed: true };
+    }
+
+    if (record.count >= MAX_LOGIN_ATTEMPTS) {
+        const waitSec = Math.ceil((LOCKOUT_WINDOW_MS - (now - record.firstAttemptAt)) / 1000);
+        return {
+            allowed: false,
+            waitSeconds: Math.max(1, waitSec)
+        };
+    }
+
+    return { allowed: true };
+}
+
+export function recordLoginAttempt(request, isSuccess) {
+    const ip = getClientIp(request);
+    if (isSuccess) {
+        loginAttempts.delete(ip);
+        return;
+    }
+
+    const now = Date.now();
+    const record = loginAttempts.get(ip);
+    if (!record || (now - record.firstAttemptAt > LOCKOUT_WINDOW_MS)) {
+        loginAttempts.set(ip, { count: 1, firstAttemptAt: now });
+    } else {
+        record.count += 1;
+    }
+
+    // Memory သန့်ရှင်းရေး (Map အရွယ်အစား 500 ကျော်ပါက အဟောင်းများ ဖျက်မည်)
+    if (loginAttempts.size > 500) {
+        for (const [k, v] of loginAttempts.entries()) {
+            if (now - v.firstAttemptAt > LOCKOUT_WINDOW_MS) loginAttempts.delete(k);
+        }
+    }
+}
+
+// =============================================================================
 // ONE-TIME LAZY SCHEMA GUARD (D1 Write Quota မကုန်စေရန် ၁ ကြိမ်သာ စစ်မည်)
 // =============================================================================
 let schemaVerified = false;
@@ -70,7 +159,6 @@ let schemaVerified = false;
 export async function ensureSchemaOnce(db) {
     if (schemaVerified || !db) return;
     try {
-        // 1. စနစ်သုံး ငွေစာရင်းခေါင်းစဉ်များ သေချာစေခြင်း
         await db.batch([
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1, 1)`),
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1, 1)`),
@@ -79,7 +167,6 @@ export async function ensureSchemaOnce(db) {
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (11, 'ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)', 'EXPENSE', 1, 1)`)
         ]).catch(() => {});
 
-        // 2. customers ဇယားတွင် entity_type နှင့် current_payable ကော်လံများ သေချာစေခြင်း
         const custInfo = await db.prepare("PRAGMA table_info(customers)").all().catch(() => ({ results: [] }));
         const custCols = (custInfo.results || []).map(r => r.name.toLowerCase());
         if (custCols.length > 0) {
@@ -91,7 +178,6 @@ export async function ensureSchemaOnce(db) {
             }
         }
 
-        // 3. purchases ဇယားတွင် supplier_id နှင့် purchase_date ကော်လံများ သေချာစေခြင်း
         const purInfo = await db.prepare("PRAGMA table_info(purchases)").all().catch(() => ({ results: [] }));
         const purCols = (purInfo.results || []).map(r => r.name.toLowerCase());
         if (purCols.length > 0) {
@@ -103,7 +189,6 @@ export async function ensureSchemaOnce(db) {
             }
         }
 
-        // 4. stock_transfers ဇယားတွင် product_id, quantity, created_by ကော်လံများ သေချာစေခြင်း
         const trfInfo = await db.prepare("PRAGMA table_info(stock_transfers)").all().catch(() => ({ results: [] }));
         const trfCols = (trfInfo.results || []).map(r => r.name.toLowerCase());
         if (trfCols.length > 0 && !trfCols.includes("product_id")) {
@@ -112,7 +197,6 @@ export async function ensureSchemaOnce(db) {
             await db.prepare("ALTER TABLE stock_transfers ADD COLUMN created_by INTEGER REFERENCES users(id)").run().catch(() => {});
         }
 
-        // 5. D1 Read Quota သက်သာစေမည့် အရေးကြီး Index များ သေချာစေခြင်း
         await db.batch([
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)"),
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id, purchase_id)"),
@@ -130,6 +214,18 @@ export async function ensureSchemaOnce(db) {
 // =============================================================================
 // SECURITY & CRYPTO HELPERS (PBKDF2 Password Hashing & HMAC-SHA256 Token)
 // =============================================================================
+
+let secretWarned = false;
+export function getJwtSecret(env) {
+    if (env && env.JWT_SECRET && String(env.JWT_SECRET).trim().length >= 16) {
+        return String(env.JWT_SECRET).trim();
+    }
+    if (!secretWarned) {
+        console.warn("[Security Notice] Using default JWT_SECRET fallback. Set `wrangler secret put JWT_SECRET` for production.");
+        secretWarned = true;
+    }
+    return "mya-gabar-soe-garment-erp-secret-2026-key";
+}
 
 function base64UrlEncode(bufferOrStr) {
     let str = typeof bufferOrStr === "string" ? bufferOrStr : String.fromCharCode(...new Uint8Array(bufferOrStr));
@@ -258,6 +354,6 @@ export async function getAuthUser(request, env) {
     const authHeader = request.headers.get("Authorization") || "";
     if (!authHeader.startsWith("Bearer ")) return null;
     const token = authHeader.slice(7).trim();
-    const secret = env.JWT_SECRET || "mya-gabar-soe-garment-erp-secret-2026-key";
+    const secret = getJwtSecret(env);
     return await verifyToken(token, secret);
 }

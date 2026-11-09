@@ -1,17 +1,21 @@
 // =============================================================================
 // FILE 5 OF 5: cashbook-api/worker.js
 // MAIN WORKER ENTRYPOINT, AUTH, REPORTS, DASHBOARD & AUTOMATED CRON CLOSING
-// Version: 3.0.0 (Modular 5-File Architecture - D1 Quota Optimized)
+// Version: 3.1.0 (Modular 5-File Architecture - D1 Quota Optimized & Security Hardened)
 // =============================================================================
 
 import {
     corsHeaders,
+    configureRequestContext,
     jsonResponse,
     errorResponse,
     getMyanmarTodayDate,
     roundKyat,
     roundQty,
     ensureSchemaOnce,
+    checkLoginRateLimit,
+    recordLoginAttempt,
+    getJwtSecret,
     hashPassword,
     verifyPassword,
     signToken,
@@ -24,6 +28,9 @@ import { handleFinanceRoutes } from "./routes-finance.js";
 
 export default {
     async fetch(request, env, ctx) {
+        // Apply Dynamic CORS Origin & Security Headers
+        configureRequestContext(request, env);
+
         if (request.method === "OPTIONS") {
             return new Response(null, { headers: corsHeaders });
         }
@@ -39,7 +46,7 @@ export default {
             }
             return jsonResponse({
                 status: "online",
-                version: "3.0.0",
+                version: "3.1.0",
                 note: "Frontend assets not bound."
             });
         }
@@ -47,14 +54,22 @@ export default {
         try {
             // 1. Health Check (Zero D1 Reads)
             if (path === "/api/health" && method === "GET") {
-                return jsonResponse({ status: "online", version: "3.0.0" });
+                return jsonResponse({ status: "online", version: "3.1.0" });
             }
 
             // One-time lazy schema & index verification per isolate
             await ensureSchemaOnce(env.DB);
 
-            // 2. Auth Login
+            // 2. Auth Login (With Brute-Force Rate Limiting & Auto PBKDF2 Upgrade)
             if (path === "/api/auth/login" && method === "POST") {
+                const rateCheck = checkLoginRateLimit(request);
+                if (!rateCheck.allowed) {
+                    return errorResponse(
+                        `စကားဝှက် မှားယွင်းမှု များနေပါသဖြင့် (${rateCheck.waitSeconds}) စက္ကန့် စောင့်ဆိုင်းပြီးမှ ပြန်လည်ကြိုးစားပါ`,
+                        429
+                    );
+                }
+
                 const body = await request.json().catch(() => ({}));
                 const { username, password } = body;
                 if (!username || !password) {
@@ -71,10 +86,23 @@ export default {
                 const user = await env.DB.prepare(query).bind(String(username).trim()).first();
 
                 if (!user || !(await verifyPassword(String(password), user.password_hash))) {
+                    recordLoginAttempt(request, false);
                     return errorResponse("အသုံးပြုသူအမည် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်", 401);
                 }
 
-                const secret = env.JWT_SECRET || "mya-gabar-soe-garment-erp-secret-2026-key";
+                // Clear failed login attempts on success
+                recordLoginAttempt(request, true);
+
+                // Auto-upgrade legacy seed password hash to PBKDF2 on first successful login
+                if (user.password_hash && !String(user.password_hash).startsWith("pbkdf2:")) {
+                    const upgradedHash = await hashPassword(String(password));
+                    await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+                        .bind(upgradedHash, user.id)
+                        .run()
+                        .catch(() => {});
+                }
+
+                const secret = getJwtSecret(env);
                 const token = await signToken({
                     uid: user.id,
                     username: user.username,
@@ -154,7 +182,6 @@ export default {
                 const yearStart = `${year}-01-01`;
                 const yearEnd = `${year}-12-31 23:59:59`;
 
-                // ၁။ Products နှင့် Branch Inventory ပေါင်းစပ်ဆွဲထုတ်ခြင်း
                 let prodSql = "";
                 const prodBindings = [];
                 if (isSpecificBranch) {
@@ -179,7 +206,6 @@ export default {
                     `;
                 }
 
-                // ၂။ Purchases, Sales, Waste Queries
                 let purchSql = `
                     SELECT pi.product_id, CAST(SUBSTR(p.created_at, 6, 2) AS INTEGER) AS m, SUM(pi.quantity) AS qty
                     FROM purchase_items pi
@@ -306,7 +332,6 @@ export default {
                 const isSpecificBranch = Boolean(branchId && branchId !== "ALL");
                 const targetBranchId = isSpecificBranch ? Number(branchId) : (currentUserRole === "cashier" ? userBranchId : 1);
 
-                // Admin Dynamic Filters
                 let salesFilter = ` s.created_at >= ? AND s.created_at <= ? AND s.status = 'completed' `;
                 const salesBindings = [yearStart, yearEnd];
                 if (isSpecificBranch) {
@@ -314,7 +339,6 @@ export default {
                     salesBindings.push(Number(branchId));
                 }
 
-                // FIXED OPEX FILTER: Exclude all inventory purchases (5, 6), supplier debt settlements (11, supplier_ledger_id), and owner remittances (10)
                 let opexFilter = ` entry_date >= ? AND entry_date <= ? AND entry_type = 'EXPENSE' AND category_id NOT IN (5, 6, 10, 11) AND purchase_id IS NULL AND supplier_ledger_id IS NULL `;
                 const opexBindings = [`${year}-01-01`, `${year}-12-31`];
                 if (isSpecificBranch) {
@@ -336,7 +360,6 @@ export default {
                     stockValBindings.push(Number(branchId));
                 }
 
-                // Execute ALL Dashboard Queries in ONE D1 Batch Roundtrip!
                 const [
                     todaySalesRes,
                     todayItemsRes,
@@ -353,7 +376,6 @@ export default {
                     branchCashGroupRes,
                     branchStockGroupRes
                 ] = await env.DB.batch([
-                    // 1. Staff: Today Sales
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(cash_amount), 0) AS today_cash,
                                COALESCE(SUM(bank_amount), 0) AS today_bank,
@@ -362,7 +384,6 @@ export default {
                         WHERE branch_id = ? AND date(created_at, '+390 minutes') = ? AND status = 'completed'
                     `).bind(targetBranchId, today),
 
-                    // 2. Staff: Today Items Sold
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(si.quantity), 0) AS items_sold
                         FROM sale_items si
@@ -370,7 +391,6 @@ export default {
                         WHERE s.branch_id = ? AND date(s.created_at, '+390 minutes') = ? AND s.status = 'completed'
                     `).bind(targetBranchId, today),
 
-                    // 3. Staff: Cash Drawer & Bank Balance
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
                                                   WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_drawer,
@@ -380,7 +400,6 @@ export default {
                         WHERE branch_id = ? AND entry_date <= ?
                     `).bind(targetBranchId, today),
 
-                    // 4. Staff: Category Breakdown Today
                     env.DB.prepare(`
                         SELECT p.category, SUM(si.quantity) AS quantity, SUM(si.subtotal) AS total_amount
                         FROM sale_items si
@@ -391,7 +410,6 @@ export default {
                         ORDER BY total_amount DESC
                     `).bind(targetBranchId, today),
 
-                    // 5. Staff: Recent 5 Sales Today
                     env.DB.prepare(`
                         SELECT s.invoice_no, s.final_amount, s.payment_method, COALESCE(c.name, 'Walk-in') AS customer_name
                         FROM sales s
@@ -400,7 +418,6 @@ export default {
                         ORDER BY s.id DESC LIMIT 5
                     `).bind(targetBranchId, today),
 
-                    // 6. Admin: Annual Revenue & COGS
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(s.final_amount), 0) AS total_revenue,
                                COALESCE((
@@ -413,14 +430,12 @@ export default {
                         WHERE ${salesFilter}
                     `).bind(...salesBindings, ...salesBindings),
 
-                    // 7. Admin: Operating Expenses (OPEX)
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(amount), 0) AS total_opex
                         FROM cashbook_entries
                         WHERE ${opexFilter}
                     `).bind(...opexBindings),
 
-                    // 8. Admin: Expense Breakdown by Category
                     env.DB.prepare(`
                         SELECT COALESCE(cc.name, 'အထွေထွေ') AS category_name, SUM(ce.amount) AS amount
                         FROM cashbook_entries ce
@@ -430,7 +445,6 @@ export default {
                         ORDER BY amount DESC
                     `).bind(...expCatBindings),
 
-                    // 9. Admin: Total Receivables & Payables
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(current_debt), 0) AS total_debt,
                                COALESCE(SUM(current_payable), 0) AS total_payable
@@ -438,7 +452,6 @@ export default {
                         WHERE is_active = 1
                     `),
 
-                    // 10. Admin: Total Stock Valuation
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(bi.quantity * p.cost_price), 0) AS total_stock_value
                         FROM branch_inventory bi
@@ -446,7 +459,6 @@ export default {
                         WHERE ${stockValFilter}
                     `).bind(...stockValBindings),
 
-                    // 11. Admin: Top 6 Selling Items
                     env.DB.prepare(`
                         SELECT p.item_name, p.category, SUM(si.quantity) AS quantity, SUM(si.subtotal) AS total_sales
                         FROM sale_items si
@@ -457,10 +469,8 @@ export default {
                         ORDER BY quantity DESC LIMIT 6
                     `).bind(...salesBindings),
 
-                    // 12. Branches List
                     env.DB.prepare("SELECT id, name FROM branches WHERE is_active = 1 ORDER BY id ASC"),
 
-                    // 13. Grouped Cash & Bank Net per Branch (Replaces 5 queries!)
                     env.DB.prepare(`
                         SELECT branch_id,
                                COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -471,7 +481,6 @@ export default {
                         GROUP BY branch_id
                     `),
 
-                    // 14. Grouped Stock Valuation per Branch (Replaces 5 queries!)
                     env.DB.prepare(`
                         SELECT bi.branch_id, COALESCE(SUM(bi.quantity * p.cost_price), 0) AS stock_value
                         FROM branch_inventory bi

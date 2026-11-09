@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 1 OF 5: cashbook-api/utils.js
-// SHARED HELPERS, KYAT/QTY MATH, D1 SCHEMA GUARD, RATE LIMITER & CRYPTO/JWT AUTH
-// Version: 3.1.0 (Security Hardened)
+// SHARED HELPERS, KYAT/QTY MATH, FULL D1 AUTO-MIGRATION GUARD & CRYPTO/JWT AUTH
+// Version: 3.1.1 (Auto-Migrates Missing Columns on Existing Live D1 Databases)
 // =============================================================================
 
 export const corsHeaders = {
@@ -95,7 +95,7 @@ export function roundQty(val) {
 // =============================================================================
 const loginAttempts = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_WINDOW_MS = 60 * 1000; // 1 minute
+const LOCKOUT_WINDOW_MS = 60 * 1000;
 
 export function getClientIp(request) {
     return (
@@ -143,7 +143,6 @@ export function recordLoginAttempt(request, isSuccess) {
         record.count += 1;
     }
 
-    // Memory သန့်ရှင်းရေး (Map အရွယ်အစား 500 ကျော်ပါက အဟောင်းများ ဖျက်မည်)
     if (loginAttempts.size > 500) {
         for (const [k, v] of loginAttempts.entries()) {
             if (now - v.firstAttemptAt > LOCKOUT_WINDOW_MS) loginAttempts.delete(k);
@@ -152,13 +151,111 @@ export function recordLoginAttempt(request, isSuccess) {
 }
 
 // =============================================================================
-// ONE-TIME LAZY SCHEMA GUARD (D1 Write Quota မကုန်စေရန် ၁ ကြိမ်သာ စစ်မည်)
+// ONE-TIME LAZY SCHEMA & COLUMN AUTO-MIGRATION GUARD
+// (D1 Database အဟောင်းတွင် လိုအပ်နေသော ဇယားနှင့် ကော်လံအသစ်အားလုံးကို ၁ ကြိမ်တည်း အလိုအလျောက် ဖြည့်စွက်ပေးမည်)
 // =============================================================================
 let schemaVerified = false;
+
+async function ensureColumns(db, tableName, requiredColumns) {
+    const info = await db.prepare(`PRAGMA table_info(${tableName})`).all().catch(() => ({ results: [] }));
+    const existing = (info.results || []).map(r => String(r.name).toLowerCase());
+    if (existing.length === 0) return;
+
+    for (const [colName, colDef] of Object.entries(requiredColumns)) {
+        if (!existing.includes(colName.toLowerCase())) {
+            await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${colName} ${colDef}`).run().catch(() => {});
+        }
+    }
+}
 
 export async function ensureSchemaOnce(db) {
     if (schemaVerified || !db) return;
     try {
+        // 1. အရေးကြီး ဇယားများ မရှိသေးပါက တည်ဆောက်ပေးခြင်း
+        await db.batch([
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS supplier_ledger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    supplier_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
+                    type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    balance_after REAL NOT NULL,
+                    payment_method TEXT,
+                    bank_account_name TEXT,
+                    reference_note TEXT,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS customer_ledger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    sale_id INTEGER,
+                    type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    balance_after REAL NOT NULL,
+                    payment_method TEXT,
+                    bank_account_name TEXT,
+                    reference_note TEXT,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS waste_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reference_no TEXT NOT NULL UNIQUE,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                    quantity REAL NOT NULL,
+                    unit_cost REAL NOT NULL DEFAULT 0,
+                    reason TEXT NOT NULL,
+                    recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS yarn_issues (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+                    yarn_id INTEGER NOT NULL,
+                    product_id INTEGER,
+                    weaver_name TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    issue_date DATE NOT NULL DEFAULT (CURRENT_DATE),
+                    notes TEXT,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS daily_closings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    closing_date DATE NOT NULL,
+                    opening_cash REAL NOT NULL DEFAULT 0.0,
+                    opening_bank REAL NOT NULL DEFAULT 0.0,
+                    total_cash_in REAL NOT NULL DEFAULT 0.0,
+                    total_cash_out REAL NOT NULL DEFAULT 0.0,
+                    closing_cash REAL NOT NULL DEFAULT 0.0,
+                    total_bank_in REAL NOT NULL DEFAULT 0.0,
+                    total_bank_out REAL NOT NULL DEFAULT 0.0,
+                    closing_bank REAL NOT NULL DEFAULT 0.0,
+                    actual_cash_counted REAL NOT NULL DEFAULT 0.0,
+                    cash_difference REAL NOT NULL DEFAULT 0.0,
+                    closed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    notes TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_branch_closing_date UNIQUE (branch_id, closing_date)
+                )
+            `)
+        ]).catch(() => {});
+
+        // 2. စနစ်သုံး ငွေစာရင်းခေါင်းစဉ်များ သေချာစေခြင်း
         await db.batch([
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1, 1)`),
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1, 1)`),
@@ -167,42 +264,71 @@ export async function ensureSchemaOnce(db) {
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (11, 'ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)', 'EXPENSE', 1, 1)`)
         ]).catch(() => {});
 
-        const custInfo = await db.prepare("PRAGMA table_info(customers)").all().catch(() => ({ results: [] }));
-        const custCols = (custInfo.results || []).map(r => r.name.toLowerCase());
-        if (custCols.length > 0) {
-            if (!custCols.includes("entity_type")) {
-                await db.prepare("ALTER TABLE customers ADD COLUMN entity_type TEXT DEFAULT 'CUSTOMER'").run().catch(() => {});
-            }
-            if (!custCols.includes("current_payable")) {
-                await db.prepare("ALTER TABLE customers ADD COLUMN current_payable REAL DEFAULT 0").run().catch(() => {});
-            }
-        }
+        // 3. ရှိပြီးသား ဇယားအဟောင်းများတွင် လိုအပ်နေသော ကော်လံအသစ်များ အလိုအလျောက် ထပ်ပေါင်းထည့်ပေးခြင်း
+        await ensureColumns(db, "cashbook_entries", {
+            sale_id: "INTEGER",
+            purchase_id: "INTEGER",
+            customer_ledger_id: "INTEGER",
+            supplier_ledger_id: "INTEGER",
+            bank_account_name: "TEXT",
+            quantity: "REAL DEFAULT 1.0",
+            unit_price: "REAL DEFAULT 0.0",
+            diff_amount: "REAL DEFAULT 0.0",
+            ref_no: "TEXT"
+        });
 
-        const purInfo = await db.prepare("PRAGMA table_info(purchases)").all().catch(() => ({ results: [] }));
-        const purCols = (purInfo.results || []).map(r => r.name.toLowerCase());
-        if (purCols.length > 0) {
-            if (!purCols.includes("supplier_id")) {
-                await db.prepare("ALTER TABLE purchases ADD COLUMN supplier_id INTEGER REFERENCES customers(id)").run().catch(() => {});
-            }
-            if (!purCols.includes("purchase_date")) {
-                await db.prepare("ALTER TABLE purchases ADD COLUMN purchase_date DATE").run().catch(() => {});
-            }
-        }
+        await ensureColumns(db, "customers", {
+            shop_name: "TEXT",
+            entity_type: "TEXT DEFAULT 'CUSTOMER'",
+            customer_type: "TEXT DEFAULT 'retail'",
+            credit_limit: "REAL DEFAULT 0.0",
+            current_debt: "REAL DEFAULT 0.0",
+            current_payable: "REAL DEFAULT 0.0",
+            address: "TEXT",
+            is_active: "INTEGER DEFAULT 1"
+        });
 
-        const trfInfo = await db.prepare("PRAGMA table_info(stock_transfers)").all().catch(() => ({ results: [] }));
-        const trfCols = (trfInfo.results || []).map(r => r.name.toLowerCase());
-        if (trfCols.length > 0 && !trfCols.includes("product_id")) {
-            await db.prepare("ALTER TABLE stock_transfers ADD COLUMN product_id INTEGER REFERENCES products(id)").run().catch(() => {});
-            await db.prepare("ALTER TABLE stock_transfers ADD COLUMN quantity REAL DEFAULT 0").run().catch(() => {});
-            await db.prepare("ALTER TABLE stock_transfers ADD COLUMN created_by INTEGER REFERENCES users(id)").run().catch(() => {});
-        }
+        await ensureColumns(db, "purchases", {
+            ref_no: "TEXT",
+            supplier_id: "INTEGER",
+            purchase_date: "DATE",
+            items_total: "REAL DEFAULT 0.0",
+            paid_amount: "REAL DEFAULT 0.0",
+            diff_amount: "REAL DEFAULT 0.0",
+            bank_account_name: "TEXT",
+            notes: "TEXT",
+            status: "TEXT DEFAULT 'completed'"
+        });
 
+        await ensureColumns(db, "sales", {
+            cash_amount: "REAL DEFAULT 0.0",
+            bank_amount: "REAL DEFAULT 0.0",
+            bank_account_name: "TEXT",
+            notes: "TEXT",
+            status: "TEXT DEFAULT 'completed'"
+        });
+
+        await ensureColumns(db, "stock_transfers", {
+            product_id: "INTEGER",
+            quantity: "REAL DEFAULT 0",
+            created_by: "INTEGER",
+            notes: "TEXT"
+        });
+
+        await ensureColumns(db, "yarn_issues", {
+            branch_id: "INTEGER",
+            product_id: "INTEGER",
+            notes: "TEXT"
+        });
+
+        // 4. D1 Read Quota သက်သာစေမည့် အရေးကြီး Index များ သေချာစေခြင်း
         await db.batch([
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)"),
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id, purchase_id)"),
             db.prepare("CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id, sale_id)"),
             db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_sale_id ON cashbook_entries(sale_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_purchase_id ON cashbook_entries(purchase_id)")
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_purchase_id ON cashbook_entries(purchase_id)"),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_supp_ledger ON cashbook_entries(supplier_ledger_id)")
         ]).catch(() => {});
 
         schemaVerified = true;

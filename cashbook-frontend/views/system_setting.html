@@ -67,14 +67,14 @@
                 <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400">Active</span>
             </div>
             <div class="my-1">
-                <div class="text-lg font-black text-emerald-600 dark:text-emerald-400">Free Tier (v3.0)</div>
+                <div class="text-lg font-black text-emerald-600 dark:text-emerald-400">Free Tier (v3.1)</div>
                 <div class="text-[11px] font-semibold text-slate-400">Composite Indexes & Batching Enabled</div>
             </div>
         </div>
     </div>
 
     <!-- 3. Bottom Two-Column Section: Email Backup & Password Security -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 flex-1 min-h-0">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 shrink-0">
         
         <!-- Left Card: Automated Email Report Dispatcher Section -->
         <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
@@ -123,7 +123,7 @@
             </div>
         </div>
 
-        <!-- Right Card: Password Change & Account Security Section -->
+        <!-- Right Card: Password Change & Account Security Section (Self) -->
         <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <form id="change-password-form" class="flex flex-col justify-between h-full">
                 <div>
@@ -133,7 +133,7 @@
                         </div>
                         <div>
                             <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">
-                                စကားဝှက် ပြောင်းလဲခြင်း (Change Password)
+                                ကိုယ်ပိုင် စကားဝှက် ပြောင်းလဲခြင်း (Change Password)
                             </h3>
                             <p class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                                 လက်ရှိဝင်ရောက်ထားသော အကောင့်၏ စကားဝှက်ကို PBKDF2 လုံခြုံရေးစနစ်ဖြင့် ပြောင်းလဲမည်
@@ -172,4 +172,67 @@
         </div>
 
     </div>
+
+    <!-- 4. Admin Only: All Users Password Management Section -->
+    <div id="admin-users-password-section" class="hidden p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
+        <div class="flex items-center gap-2.5 mb-3">
+            <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-users-gear"></i>
+            </div>
+            <div>
+                <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">
+                    အသုံးပြုသူ (၇) ဦးလုံး၏ အကောင့်နှင့် စကားဝှက် စီမံခန့်ခွဲမှု (Admin Control)
+                </h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                    Admin သာလျှင် မည်သည့် User မဆို ၎င်းတို့၏ လက်ရှိ Username နှင့် Password ကို မျက်လုံးပုံဖြင့် ကြည့်ရှုနိုင်ပြီး စကားဝှက်အသစ် ပြောင်းလဲသတ်မှတ်ပေးနိုင်သည်
+                </p>
+            </div>
+        </div>
+
+        <form id="admin-reset-password-form" class="grid grid-cols-1 md:grid-cols-4 gap-3.5 items-end mt-4">
+            <!-- 1. User Selector Dropdown -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အသုံးပြုသူ ရွေးချယ်ရန် *</label>
+                <div class="relative">
+                    <select id="setting-user-select" class="w-full pl-3.5 pr-8 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-white appearance-none cursor-pointer">
+                        <option value="">-- User ရွေးချယ်ပါ --</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+            </div>
+
+            <!-- 2. Current Username (Readonly) -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လက်ရှိ Username</label>
+                <input type="text" id="setting-selected-username" readonly placeholder="-"
+                    class="w-full px-3.5 py-2.5 text-xs font-mono font-bold bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 cursor-not-allowed">
+            </div>
+
+            <!-- 3. Current Password (With Show/Hide Eye Icon) -->
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လက်ရှိ Password</label>
+                <div class="relative">
+                    <input type="password" id="setting-selected-password" readonly placeholder="-"
+                        class="w-full pl-3.5 pr-10 py-2.5 text-xs font-mono font-bold bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl text-amber-600 dark:text-amber-400 cursor-not-allowed">
+                    <button type="button" id="btn-toggle-selected-pwd" title="စကားဝှက် ပြ/ဖျောက်" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                        <i class="fa-solid fa-eye text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. New Password Input & Submit Button -->
+            <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">စကားဝှက်အသစ် *</label>
+                    <input type="text" id="setting-admin-new-password" required placeholder="စကားဝှက်အသစ်..."
+                        class="w-full px-3.5 py-2.5 text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-white">
+                </div>
+                <button type="submit" id="btn-admin-save-password" class="py-2.5 px-4 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-amber-600/20 transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
+                    <i class="fa-solid fa-check"></i>
+                    <span>ပြောင်းမည်</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
 </div>

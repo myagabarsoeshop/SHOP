@@ -243,15 +243,31 @@ export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
     if (valEl) {
         valEl.textContent = Number(value || 0).toLocaleString();
         const colorMap = {
-            emerald: "text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight",
-            blue: "text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight",
-            rose: "text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight",
-            amber: "text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight",
-            purple: "text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight",
-            slate: "text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight"
+            emerald: "text-lg sm:text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight truncate",
+            blue: "text-lg sm:text-xl md:text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight truncate",
+            rose: "text-lg sm:text-xl md:text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight truncate",
+            amber: "text-lg sm:text-xl md:text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tracking-tight truncate",
+            purple: "text-lg sm:text-xl md:text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight truncate",
+            slate: "text-lg sm:text-xl md:text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight truncate"
         };
         valEl.className = colorMap[colorTheme] || colorMap.emerald;
     }
+    if (icoEl) {
+        if (iconClass) icoEl.className = `fa-solid ${iconClass}`;
+        const iconWrapper = icoEl.parentElement;
+        if (iconWrapper) {
+            const bgMap = {
+                emerald: "w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0",
+                blue: "w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0",
+                rose: "w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg shrink-0",
+                amber: "w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0",
+                purple: "w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-lg shrink-0",
+                slate: "w-11 h-11 rounded-xl bg-slate-500/10 text-slate-500 flex items-center justify-center text-lg shrink-0"
+            };
+            iconWrapper.className = bgMap[colorTheme] || bgMap.emerald;
+        }
+    }
+}
     if (icoEl) {
         if (iconClass) icoEl.className = `fa-solid ${iconClass}`;
         const iconWrapper = icoEl.parentElement;

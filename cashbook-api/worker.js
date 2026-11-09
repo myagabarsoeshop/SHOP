@@ -19,7 +19,8 @@ import {
     hashPassword,
     verifyPassword,
     signToken,
-    getAuthUser
+    getAuthUser,
+    getQueryYear
 } from "./utils.js";
 
 import { handleInventoryRoutes } from "./routes-inventory.js";
@@ -232,7 +233,7 @@ export default {
             // 3. MONTHLY 12-MONTH STOCK REPORT (D1 BATCHED & ALL-BRANCH FIXED)
             // =================================================================
             if (path === "/api/reports/monthly-stock" && method === "GET") {
-                const year = url.searchParams.get("year") || String(new Date().getFullYear());
+                const year = getQueryYear(url);
                 const branchId = url.searchParams.get("branch_id");
                 const isSpecificBranch = Boolean(branchId && branchId !== "ALL");
                 const yearStart = `${year}-01-01`;
@@ -379,7 +380,7 @@ export default {
             // 4. DUAL-MODE DASHBOARD SUMMARY (OPEX BUG FIXED & SINGLE D1 BATCH)
             // =================================================================
             if (path === "/api/dashboard/summary" && method === "GET") {
-                const year = url.searchParams.get("year") || String(new Date().getFullYear());
+                const year = getQueryYear(url);
                 const branchId = url.searchParams.get("branch_id");
                 const today = getMyanmarTodayDate();
                 const yearStart = `${year}-01-01`;
@@ -449,9 +450,9 @@ export default {
 
                     env.DB.prepare(`
                         SELECT COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
-                                                  WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_drawer,
+                                                 WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS cash_drawer,
                                COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
-                                                  WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
+                                                 WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
                         FROM cashbook_entries
                         WHERE branch_id = ? AND entry_date <= ?
                     `).bind(targetBranchId, today),
@@ -617,7 +618,7 @@ export default {
                 }
 
                 const body = await request.json().catch(() => ({}));
-                const targetYear = String(body.year || new Date().getFullYear());
+                const targetYear = getQueryYear(url);
                 const yearStart = `${targetYear}-01-01`;
                 const yearEnd = `${targetYear}-12-31 23:59:59`;
                 const targetEmail = body.email;
@@ -734,7 +735,7 @@ export default {
  </Styles>
 `;
                 workbookXml += buildSheet("Products", ["ID", "SKU", "အမျိုးအစား", "ပစ္စည်းအမည်", "ဒီဇိုင်း/အဆင်", "ဆိုဒ်", "အရောင်", "အရင်းဈေး", "လက်လီဈေး", "လက်ကားဈေး", "လက်ကျန်အရေအတွက်", "စုစုပေါင်းတန်ဖိုး (Ks)"], products.map(p => [p.id, p.sku, p.category, p.item_name, p.pattern, p.size, p.color, p.cost_price, p.retail_price, p.wholesale_price, p.total_stock, p.total_value]));
-                workbookXml += buildSheet("Sales", ["ဘောင်ချာအမှတ်", "ဆိုင်ခွဲ", "ဖောက်သည်", "အရောင်းအမျိုးအစား", "ငွေပေးချေမှု", "စုစုပေါင်း", "လျှော့ဈေး", "ကျသင့်ငွေ", "ပေးချေငွေ", "အကြွေးကျန်", "ရက်စွဲ"], sales.map(s => [s.invoice_no, s.branch_name, s.customer_name, s.sale_type, s.payment_method, s.total_amount, s.discount_amount, s.final_amount, s.paid_amount, s.debt_amount, s.created_at]));
+                workbookXml += buildSheet("Sales", ["ဘောင်ချာအမှတ်", "ဆိုင်ခွဲ", "ဖောက်သည်", "အရောင်းအမျိုးအစား", "ငွေပေးချေမှု", "စုစုပေါင်း", "လျှော့ဈေး", "ကျသင့်ငွေ", "ပေးချေငွေ", "အကြွေးကျන්", "ရက်စွဲ"], sales.map(s => [s.invoice_no, s.branch_name, s.customer_name, s.sale_type, s.payment_method, s.total_amount, s.discount_amount, s.final_amount, s.paid_amount, s.debt_amount, s.created_at]));
                 workbookXml += buildSheet("Cashbook", ["ရက်စွဲ", "ဆိုင်ခွဲ", "ခေါင်းစဉ်", "အမျိုးအစား (IN/OUT)", "ငွေပေးချေမှု", "ဘဏ်အကောင့်", "ပမာဏ (Ks)", "အကြောင်းအရာ"], cashbook.map(c => [c.entry_date, c.branch_name, c.category_name, c.entry_type, c.payment_method, c.bank_account_name, c.amount, c.description]));
                 workbookXml += buildSheet("Customers", ["အမည်", "ဖုန်းနံပါတ်", "ဆိုင်/ပွဲရုံအမည်", "စာရင်းအမျိုးအစား", "လက်လီ/လက်ကား", "ရရန်ရှိအကြွေး (Ks)", "ပေးရန်ရှိအကြွေး (Ks)", "လိပ်စာ"], customers.map(c => [c.name, c.phone, c.shop_name, c.entity_type, c.customer_type, c.current_debt, c.current_payable, c.address]));
                 workbookXml += buildSheet("Purchases", ["VR NO", "Ref No", "ဆိုင်ခွဲ", "ပွဲရုံအမည်", "ငွေပေးချေမှု", "ပစ္စည်းတန်ဖိုး (Ks)", "ပေးချေငွေ (Ks)", "ပိုငွေ/လိုငွေ", "အခြေအနေ", "ရက်စွဲ"], purchases.map(p => [p.purchase_no, p.ref_no, p.branch_name, p.supplier_name, p.payment_method, p.items_total, p.paid_amount, p.diff_amount, p.status, p.created_at]));

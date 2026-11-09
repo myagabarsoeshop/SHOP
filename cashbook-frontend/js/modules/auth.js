@@ -12,7 +12,30 @@ export function initAuth() {
     const errorText = document.getElementById("login-error-text");
     const submitBtn = document.getElementById("btn-login-submit");
 
-    // Password Toggle (Show / Hide)
+    // ၁။ နောက်ဆုံး ဝင်ရောက်ခဲ့သော အသုံးပြုသူအမည်ကို အသင့်ပြန်ရွေးပေးထားခြင်း
+    const lastUser = localStorage.getItem("pos_last_username");
+    if (userSelect && lastUser) {
+        userSelect.value = lastUser;
+        if (userSelect.value === lastUser) {
+            setTimeout(() => passInput?.focus(), 50);
+        }
+    }
+
+    // အသုံးပြုသူ ရွေးချယ်လိုက်သည်နှင့် Password အကွက်သို့ အလိုအလျောက် Focus ပို့ပေးခြင်း
+    if (userSelect) {
+        userSelect.addEventListener("change", () => {
+            errorBox?.classList.add("hidden");
+            passInput?.focus();
+        });
+    }
+
+    if (passInput) {
+        passInput.addEventListener("input", () => {
+            errorBox?.classList.add("hidden");
+        });
+    }
+
+    // ၂။ Password Toggle (Show / Hide)
     if (togglePassBtn && passInput) {
         togglePassBtn.onclick = () => {
             const isPassword = passInput.type === "password";
@@ -20,10 +43,11 @@ export function initAuth() {
             if (passIcon) {
                 passIcon.className = isPassword ? "fa-regular fa-eye-slash text-sm" : "fa-regular fa-eye text-sm";
             }
+            passInput.focus();
         };
     }
 
-    // Login Form Submit Event
+    // ၃။ Login Form Submit Event
     if (form) {
         form.onsubmit = async (e) => {
             e.preventDefault();
@@ -37,6 +61,7 @@ export function initAuth() {
                     errorBox.classList.remove("hidden");
                     errorText.textContent = "ကျေးဇူးပြု၍ အသုံးပြုသူအမည် ရွေးချယ်/ထည့်သွင်းပေးပါ";
                 }
+                userSelect?.focus();
                 return;
             }
 
@@ -45,6 +70,7 @@ export function initAuth() {
                     errorBox.classList.remove("hidden");
                     errorText.textContent = "ကျေးဇူးပြု၍ စကားဝှက် ရိုက်ထည့်ပေးပါ";
                 }
+                passInput?.focus();
                 return;
             }
 
@@ -57,20 +83,30 @@ export function initAuth() {
                 const response = await api.post("/auth/login", { username, password });
 
                 if (response?.success && response?.data) {
-                    // ၁။ Backend မှ ပေးပို့သော Token အား LocalStorage တွင် သိမ်းဆည်းခြင်း (API Gateway စစ်ဆေးရန်)
+                    localStorage.setItem("pos_last_username", username);
+
+                    // 1. Token သိမ်းဆည်းခြင်း
                     if (response.data.token) {
                         localStorage.setItem("pos_token", response.data.token);
                     }
 
-                    // ၂။ User အချက်အလက်နှင့် ဆိုင်ခွဲ ID ကို သိမ်းဆည်းခြင်း
+                    // 2. User နှင့် သက်ဆိုင်ရာ ဆိုင်ခွဲ (Branch) အတိအကျ သတ်မှတ်ခြင်း
                     if (response.data.user) {
-                        state.setUser(response.data.user);
-                        if (response.data.user.branchId) {
-                            localStorage.setItem("pos_branch_id", String(response.data.user.branchId));
+                        const u = response.data.user;
+                        state.setUser(u);
+                        if (u.branchId) {
+                            localStorage.setItem("pos_branch_id", String(u.branchId));
+                            if (typeof state.setBranch === "function") {
+                                state.setBranch({
+                                    id: Number(u.branchId),
+                                    code: u.branchCode || "MAIN",
+                                    name: u.branchName || "Main Home Shop"
+                                });
+                            }
                         }
                     }
 
-                    // ၃။ Login အောင်မြင်ပါက စနစ်မျက်နှာပြင်သို့ ဝင်ရောက်ခြင်း
+                    // 3. Login အောင်မြင်ပါက စနစ်မျက်နှာပြင်သို့ ဝင်ရောက်ခြင်း
                     window.location.reload();
                 } else {
                     throw new Error(response?.error || "Login ဝင်ရောက်၍ မရပါ");
@@ -80,6 +116,8 @@ export function initAuth() {
                     errorBox.classList.remove("hidden");
                     errorText.textContent = err.message || "စကားဝှက် မှားယွင်းနေပါသည်";
                 }
+                passInput?.focus();
+                passInput?.select();
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;

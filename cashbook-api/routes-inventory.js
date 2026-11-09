@@ -8,7 +8,8 @@ import {
     errorResponse,
     getMyanmarTodayDate,
     roundKyat,
-    roundQty
+    roundQty,
+    getQueryYear
 } from "./utils.js";
 
 export async function handleInventoryRoutes(request, env, url, path, method, auth) {
@@ -331,12 +332,15 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     // =========================================================================
-    // 4. DAMAGE & WASTE LOGS
+    // 4. DAMAGE & WASTE LOGS (FY/Year Filter Optimized)
     // =========================================================================
     if (path === "/api/waste" && method === "GET") {
         const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const targetYear = getQueryYear(url);
+        const yearStart = `${targetYear}-01-01`;
+        const yearEnd = `${targetYear}-12-31 23:59:59`;
 
-        const sql = `
+        let sql = `
             SELECT 
                 w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
                 p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
@@ -344,10 +348,10 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             FROM waste_logs w
             INNER JOIN products p ON w.product_id = p.id
             LEFT JOIN users u ON w.recorded_by = u.id
-            WHERE w.branch_id = ?
+            WHERE w.branch_id = ? AND w.created_at >= ? AND w.created_at <= ?
             ORDER BY w.id DESC LIMIT 300
         `;
-        const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all().catch(() => ({ results: [] }));
+        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStart, yearEnd).all().catch(() => ({ results: [] }));
         return jsonResponse(results || []);
     }
 
@@ -444,10 +448,13 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     // =========================================================================
-    // 5. INTER-BRANCH STOCK TRANSFERS
+    // 5. INTER-BRANCH STOCK TRANSFERS (FY/Year Filter Optimized)
     // =========================================================================
     if (path === "/api/transfers" && method === "GET") {
         const branchId = url.searchParams.get("branch_id");
+        const targetYear = getQueryYear(url);
+        const yearStart = `${targetYear}-01-01`;
+        const yearEnd = `${targetYear}-12-31 23:59:59`;
 
         let sql = `
             SELECT 
@@ -461,10 +468,11 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             LEFT JOIN branches b2 ON t.to_branch_id = b2.id
             LEFT JOIN products p ON t.product_id = p.id
             LEFT JOIN users u ON t.created_by = u.id
+            WHERE t.created_at >= ? AND t.created_at <= ?
         `;
-        const bindings = [];
+        const bindings = [yearStart, yearEnd];
         if (branchId && branchId !== "ALL") {
-            sql += ` WHERE (t.from_branch_id = ? OR t.to_branch_id = ?) `;
+            sql += ` AND (t.from_branch_id = ? OR t.to_branch_id = ?) `;
             bindings.push(Number(branchId), Number(branchId));
         }
         sql += ` ORDER BY t.id DESC LIMIT 300 `;

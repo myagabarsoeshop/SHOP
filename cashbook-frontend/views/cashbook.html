@@ -1,12 +1,12 @@
 <!-- cashbook-frontend/views/cashbook.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Filter & Action Toolbar -->
-    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+    <!-- Top Filter & Action Toolbar (Standardized Pro Layout) -->
+    <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
-        <!-- ဘယ်ဘက်ခြမ်း: Search Box (KPI Card 1 အကျယ်အတိုင်း ညီညာစွာထားရှိခြင်း) နှင့် Calendar -->
-        <div class="flex items-center gap-3 flex-1 min-w-0">
-            <div class="relative shrink-0" style="width: calc((100% - 48px) / 4); min-width: 260px;">
+        <!-- ဘယ်ဘက်ခြမ်း: Search Box နှင့် Date Filter -->
+        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+            <div class="relative flex-1 max-w-md">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                 <input type="text" id="cb-search" placeholder="ခေါင်းစဉ်၊ ဆိုင်အမည် သို့မဟုတ် REF ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white transition shadow-sm">
@@ -45,25 +45,24 @@
     <div class="flex-1 overflow-y-auto overflow-x-auto relative">
         <table class="w-full text-left border-collapse min-w-[1300px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
-                <tr class="h-12">
-                    <th class="py-3 px-3 w-12 text-center">NO</th>
-                    <th class="py-3 px-3 w-28 text-center">DATE</th>
-                    <th class="py-3 px-4 w-44">CATEGORY</th>
-                    <th class="py-3 px-4 min-w-[200px]">DESCRIPTION</th>
-                    <th class="py-3 px-3 w-20 text-center">METHOD</th>
-                    <th class="py-3 px-3 w-16 text-center">QTY</th>
-                    <th class="py-3 px-4 w-24 text-right">PRICE</th>
-                    <th class="py-3 px-4 w-32 text-right">AMOUNT</th>
-                    <th class="py-3 px-3 w-28 text-center">REF</th>
-                    <th class="py-3 px-3 w-28 text-center">SURPLUS & DEFICIT</th>
+                <tr class="h-11">
+                    <th class="py-2.5 px-3 w-12 text-center">NO</th>
+                    <th class="py-2.5 px-3 w-28 text-center">DATE</th>
+                    <th class="py-2.5 px-4 w-48">CATEGORY</th>
+                    <th class="py-2.5 px-4 min-w-[200px]">DESCRIPTION</th>
+                    <th class="py-2.5 px-3 w-24 text-center">METHOD</th>
+                    <th class="py-2.5 px-3 w-16 text-center">QTY</th>
+                    <th class="py-2.5 px-4 w-28 text-right">PRICE</th>
+                    <th class="py-2.5 px-4 w-32 text-right">AMOUNT</th>
+                    <th class="py-2.5 px-3 w-32 text-center">REF</th>
+                    <th class="py-2.5 px-3 w-32 text-center">SURPLUS & DEFICIT</th>
                     <!-- Sticky Right Action Column Header -->
-                    <th class="py-3 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+                    <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
                 </tr>
             </thead>
             
-            <!-- divide-y ဖယ်ရှားထားသော သန့်ရှင်းသည့် tbody -->
             <tbody id="cashbook-table-body">
                 <tr>
                     <td colspan="11" class="p-16 text-center text-slate-400">
@@ -80,14 +79,14 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Consolidated Cashbook Entry Modal                                     -->
+<!-- Consolidated Cashbook Entry Modal (Pro Entry Form Standard)           -->
 <!-- ===================================================================== -->
 <div id="entry-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-[#151e32] rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col scale-100 transition-all">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col scale-100 transition-all">
         
         <!-- Modal Top Bar -->
-        <div class="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-            <div class="text-xs font-black flex items-center gap-2">
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-pen-to-square text-emerald-400"></i>
                 <span id="entry-modal-header-title">ငွေစာရင်း အသစ်ထည့်သွင်းခြင်း</span>
             </div>
@@ -97,15 +96,15 @@
         </div>
 
         <!-- Top Type Switcher Tabs -->
-        <div class="p-2 px-4 bg-slate-100 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800">
-            <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-200 dark:bg-slate-900 rounded-xl">
+        <div class="p-2.5 px-5 bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800">
+            <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 dark:bg-slate-900 rounded-xl">
                 <button type="button" id="tab-btn-expense" 
-                    class="py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-sm">
+                    class="py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-sm">
                     <i class="fa-solid fa-minus-circle"></i>
                     <span>အသုံးစရိတ် (Expense)</span>
                 </button>
                 <button type="button" id="tab-btn-income" 
-                    class="py-2 text-xs font-black rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                    class="py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                     <i class="fa-solid fa-plus-circle"></i>
                     <span>အခြားဝင်ငွေ (Income)</span>
                 </button>
@@ -113,53 +112,60 @@
         </div>
 
         <!-- Form Body -->
-        <form id="entry-form" class="p-5 pt-3 space-y-3">
+        <form id="entry-form" class="p-5 space-y-3.5">
             <input type="hidden" id="entry-type" value="EXPENSE">
             
             <!-- Category Dropdown -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေစာရင်း ခေါင်းစဉ် (Category) *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ငွေစာရင်း ခေါင်းစဉ် (Category) *</label>
                 <div class="relative">
-                    <select id="entry-category" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
+                    <select id="entry-category" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer">
                         <option value="" disabled selected>ခေါင်းစဉ် ရွေးချယ်ပါ</option>
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                 </div>
             </div>
 
-            <!-- Payment Method Dropdown -->
-            <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေပေးချေမှု လိုင်း (Method) *</label>
-                <div class="relative">
-                    <select id="entry-payment-method" required class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer font-mono">
-                        <option value="cash">ငွေသား (CASH)</option>
-                        <option value="bank">KPay / ဘဏ်လွှဲ (BANK)</option>
-                    </select>
-                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            <!-- Payment Method & Optional Ref No -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ငွေပေးချေမှု လိုင်း (Method) *</label>
+                    <div class="relative">
+                        <select id="entry-payment-method" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none cursor-pointer font-mono">
+                            <option value="cash">ငွေသား (CASH)</option>
+                            <option value="bank">KPay / ဘဏ် (BANK)</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပြေစာအမှတ် (Ref No)</label>
+                    <input type="text" id="entry-ref-no" placeholder="Auto / ဘောင်ချာအမှတ်"
+                        class="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
             </div>
 
             <!-- Amount Input -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">ငွေပမာဏ (Amount) *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ငွေပမာဏ (Amount) *</label>
                 <div class="relative">
                     <input type="text" inputmode="numeric" id="entry-amount" required placeholder="0" 
-                        class="w-full text-xl font-mono font-black bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        class="w-full text-xl font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">Ks</span>
                 </div>
             </div>
 
             <!-- Description -->
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">အသေးစိတ် အကြောင်းအရာ / ဆိုင်အမည် (Description) *</label>
-                <textarea id="entry-desc" rows="3" required placeholder="ဆိုင်အမည် သို့မဟုတ် အကြောင်းအရာ အတိုချုပ် ရေးသားပါ..." 
-                    class="w-full text-base font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-normal"></textarea>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အသေးစိတ် အကြောင်းအရာ / ဆိုင်အမည် (Description) *</label>
+                <textarea id="entry-desc" rows="2" required placeholder="ဆိုင်အမည် သို့မဟုတ် အကြောင်းအရာ အတိုချုပ် ရေးသားပါ..." 
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-relaxed"></textarea>
             </div>
 
             <!-- Submit Button -->
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button type="submit" id="btn-submit-entry" 
-                    class="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95">
+                    class="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2 active:scale-95">
                     <i class="fa-solid fa-check"></i>
                     <span id="btn-submit-text">အသုံးစရိတ် သိမ်းဆည်းမည်</span>
                 </button>

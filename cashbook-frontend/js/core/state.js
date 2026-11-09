@@ -4,7 +4,7 @@ function safeParse(key) {
     try {
         const raw = localStorage.getItem(key);
         return raw ? JSON.parse(raw) : null;
-    } catch (e) {
+    } catch {
         localStorage.removeItem(key);
         return null;
     }
@@ -13,6 +13,7 @@ function safeParse(key) {
 export const state = {
     user: safeParse("pos_user"),
     currentBranch: safeParse("pos_branch"),
+    branches: [],
     cart: [],
 
     setUser(userData) {
@@ -39,8 +40,10 @@ export const state = {
         } else {
             this.user = null;
             this.currentBranch = null;
+            this.branches = [];
             localStorage.removeItem("pos_user");
             localStorage.removeItem("pos_branch");
+            localStorage.removeItem("pos_branch_id");
             localStorage.removeItem("pos_token");
         }
     },
@@ -53,15 +56,17 @@ export const state = {
                 name: branchData.name || branchData.branch_name || "Main Home Shop (အိမ်ဆိုင်/စက်ရုံ)"
             };
             localStorage.setItem("pos_branch", JSON.stringify(this.currentBranch));
+            localStorage.setItem("pos_branch_id", String(this.currentBranch.id));
         }
     },
 
     isLoggedIn() {
-        return !!(this.user && this.user.username);
+        const token = localStorage.getItem("pos_token");
+        return !!(this.user && this.user.username && token);
     },
 
     isAdmin() {
-        return !!(this.user && (this.user.role === "admin" || this.user.role === "finance"));
+        return !!(this.user && ["admin", "finance", "manager"].includes(this.user.role));
     },
 
     logout() {

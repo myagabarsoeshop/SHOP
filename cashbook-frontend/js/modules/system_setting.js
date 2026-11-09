@@ -4,11 +4,24 @@ import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
 import { setKPI } from "../app.js";
 
+let allSystemUsers = [];
+
 export async function initSystemSetting() {
     setupYearDropdown();
     bindEvents();
     updateSystemKPIs();
     fetchQuotaMetrics(false);
+
+    // Admin ဖြစ်မှသာ User 7 ဦး၏ password စီမံခန့်ခွဲမှု card ကို ပြသမည်
+    const adminUserBox = document.getElementById("admin-users-password-section");
+    if (adminUserBox) {
+        if (state.isAdmin()) {
+            adminUserBox.classList.remove("hidden");
+            await loadSystemUsersForAdmin();
+        } else {
+            adminUserBox.classList.add("hidden");
+        }
+    }
 }
 
 function updateSystemKPIs() {
@@ -55,6 +68,113 @@ function bindEvents() {
     if (pwdForm) {
         pwdForm.onsubmit = submitPasswordChange;
     }
+
+    // Admin: User select change event for password management
+    const userSelect = document.getElementById("setting-user-select");
+    if (userSelect) {
+        userSelect.onchange = (e) => {
+            const selectedId = Number(e.target.value);
+            const userObj = allSystemUsers.find(u => u.id === selectedId);
+            const usernameField = document.getElementById("setting-selected-username");
+            const pwdField = document.getElementById("setting-selected-password");
+
+            if (userObj) {
+                if (usernameField) usernameField.value = userObj.username || "";
+                if (pwdField) pwdField.value = userObj.current_password || "123456";
+            } else {
+                if (usernameField) usernameField.value = "";
+                if (pwdField) pwdField.value = "";
+            }
+        };
+    }
+
+    // Admin: Show/Hide password toggle button
+    const btnTogglePwd = document.getElementById("btn-toggle-selected-pwd");
+    if (btnTogglePwd) {
+        btnTogglePwd.onclick = () => {
+            const pwdField = document.getElementById("setting-selected-password");
+            const icon = btnTogglePwd.querySelector("i");
+            if (!pwdField) return;
+
+            if (pwdField.type === "password") {
+                pwdField.type = "text";
+                if (icon) icon.className = "fa-solid fa-eye-slash";
+            } else {
+                pwdField.type = "password";
+                if (icon) icon.className = "fa-solid fa-eye";
+            }
+        };
+    }
+
+    // Admin: Reset user password form submit
+    const adminPwdForm = document.getElementById("admin-reset-password-form");
+    if (adminPwdForm) {
+        adminPwdForm.onsubmit = submitAdminResetPassword;
+    }
+}
+
+async function loadSystemUsersForAdmin() {
+    try {
+        const res = await api.get("/system/users");
+        allSystemUsers = res.data || res || [];
+        const select = document.getElementById("setting-user-select");
+        if (!select) return;
+
+        select.innerHTML = `<option value="">-- အသုံးပြုသူ (User) ရွေးချယ်ပါ --</option>`;
+        allSystemUsers.forEach(u => {
+            const opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = `${u.full_name || u.username} (${u.role}) - [${u.branch_name || 'Main'}]`;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        console.error("Failed to load system users:", err);
+    }
+}
+
+async function submitAdminResetPassword(e) {
+    e.preventDefault();
+    if (!state.isAdmin()) return ui.toast.error("ခွင့်ပြုချက် မရှိပါ");
+
+    const userSelect = document.getElementById("setting-user-select");
+    const newPwdInput = document.getElementById("setting-admin-new-password");
+    const btn = document.getElementById("btn-admin-save-password");
+
+    const userId = userSelect ? Number(userSelect.value) : 0;
+    const newPassword = newPwdInput?.value?.trim() || "";
+
+    if (!userId) {
+        return ui.toast.warning("ကျေးဇူးပြု၍ အသုံးပြုသူ (User) တစ်ဦး ရွေးချယ်ပါ။");
+    }
+    if (!newPassword || newPassword.length < 4) {
+        return ui.toast.warning("စကားဝှက်အသစ်သည် အနည်းဆုံး (၄) လုံး ရှိရပါမည်။");
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> သိမ်းဆည်းနေပါသည်...`;
+    }
+
+    try {
+        const res = await api.post("/system/reset-password", { user_id: userId, new_password: newPassword });
+        ui.toast.success(res.message || "စကားဝှက် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။");
+        
+        // Update local array & field
+        const target = allSystemUsers.find(u => u.id === userId);
+        if (target) target.current_password = newPassword;
+
+        const pwdField = document.getElementById("setting-selected-password");
+        if (pwdField) pwdField.value = newPassword;
+
+        if (newPwdInput) newPwdInput.value = "";
+    } catch (err) {
+        ui.toast.error("စကားဝှက် ပြောင်း၍မရပါ: " + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-check-circle mr-1"></i> <span>စကားဝှက် အသစ်ပြောင်းလဲမည်</span>`;
+        }
+    }
 }
 
 function fetchQuotaMetrics(showToast = false) {
@@ -62,7 +182,6 @@ function fetchQuotaMetrics(showToast = false) {
     const icon = btnRefresh?.querySelector("i");
     if (showToast && icon) icon.classList.add("fa-spin");
 
-    // Cloudflare D1 Free Tier Quotas: 5,000,000 Reads/day, 100,000 Writes/day, 5 GB (5,120 MB) Storage
     const reads = 18500;
     const writes = 3200;
     const storage = 48;

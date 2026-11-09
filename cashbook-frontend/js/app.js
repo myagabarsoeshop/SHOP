@@ -268,22 +268,6 @@ export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
         }
     }
 }
-    if (icoEl) {
-        if (iconClass) icoEl.className = `fa-solid ${iconClass}`;
-        const iconWrapper = icoEl.parentElement;
-        if (iconWrapper) {
-            const bgMap = {
-                emerald: "w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0",
-                blue: "w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0",
-                rose: "w-11 h-11 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-lg shrink-0",
-                amber: "w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0",
-                purple: "w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center text-lg shrink-0",
-                slate: "w-11 h-11 rounded-xl bg-slate-500/10 text-slate-500 flex items-center justify-center text-lg shrink-0"
-            };
-            iconWrapper.className = bgMap[colorTheme] || bgMap.emerald;
-        }
-    }
-}
 
 export async function navigateTo(viewName) {
     currentActiveView = viewName;

@@ -500,4 +500,149 @@ function openEditModal(item) {
         select.value = item.category_id || "";
     }
     if (amountInput) {
-        amountInput.value = item.amount ? Number(i
+        amountInput.value = item.amount ? Number(item.amount).toLocaleString("en-US") : "";
+    }
+    if (methodSelect) {
+        methodSelect.value = item.payment_method || "cash";
+    }
+    if (refInput) {
+        const rawRef = item.ref_no || "";
+        refInput.value = rawRef.startsWith("VR-CB-") ? "" : rawRef;
+    }
+    if (descInput) {
+        descInput.value = item.description || "";
+    }
+
+    modal?.classList.remove("hidden");
+    amountInput?.focus();
+}
+
+async function submitEntry(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-submit-entry");
+
+    const editId = document.getElementById("entry-edit-id")?.value;
+    const categorySelect = document.getElementById("entry-category");
+    const categoryId = parseInt(categorySelect?.value, 10);
+    const amount = parseAnyNumber(document.getElementById("entry-amount")?.value);
+    const refNo = document.getElementById("entry-ref-no")?.value.trim() || null;
+    const description = document.getElementById("entry-desc")?.value.trim();
+
+    if (!description) {
+        ui.toast.warning("အသေးစိတ် အကြောင်းအရာ (Description) မဖြစ်မနေ ထည့်သွင်းပေးပါ။");
+        document.getElementById("entry-desc")?.focus();
+        return;
+    }
+
+    if (!categoryId || isNaN(amount) || amount <= 0) {
+        ui.toast.warning("ခေါင်းစဉ်နှင့် ငွေပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ။");
+        document.getElementById("entry-amount")?.focus();
+        return;
+    }
+
+    if (btn) btn.disabled = true;
+
+    const payload = {
+        branchId: state.currentBranch?.id || 1,
+        categoryId,
+        entryType: document.getElementById("entry-type")?.value || "EXPENSE",
+        paymentMethod: document.getElementById("entry-payment-method")?.value || "cash",
+        amount,
+        refNo,
+        description,
+        entryDate: document.getElementById("cb-date-filter")?.value || getLocalTodayDate(),
+        createdBy: state.user?.id || 1
+    };
+
+    try {
+        let res;
+        if (editId) {
+            res = await api.put(`/cashbook/entries/${editId}`, payload);
+        } else {
+            res = await api.post("/cashbook/entries", payload);
+        }
+
+        if (res.success !== false) {
+            const editIdInput = document.getElementById("entry-edit-id");
+            if (editIdInput) editIdInput.value = "";
+
+            closeModal();
+            ui.toast.success(editId ? "ငွေစာရင်း ပြင်ဆင်ပြီးပါပြီ။" : "ငွေစာရင်း အသစ်ထည့်သွင်းပြီးပါပြီ။");
+            await loadEntries();
+        } else {
+            throw new Error(res.error || "သိမ်းဆည်း၍ မရပါ");
+        }
+    } catch (err) {
+        ui.toast.error("စာရင်းသွင်း၍ မရပါ: " + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function deleteEntry(id, item = null) {
+    let msg = "ဤငွေစာရင်း မှတ်တမ်းအား အမှန်တကယ် ဖျက်လိုပါသလား?";
+    if (item && (item.sale_id || item.purchase_id)) {
+        const ref = item.ref_no || item.reference_no || "";
+        msg = `ဤမှတ်တမ်းသည် ဘောင်ချာ (${ref}) နှင့် ချိတ်ဆက်နေပါသည်။ ငွေစာရင်းမှ အမှန်တကယ် ဖျက်လိုပါသလား?`;
+    }
+
+    const confirmed = await ui.confirm(msg, "error");
+    if (!confirmed) return;
+    
+    try {
+        await api.delete(`/cashbook/entries/${id}`);
+        ui.toast.success("မှတ်တမ်းကို ပယ်ဖျက်ပြီးပါပြီ။");
+        await loadEntries();
+    } catch (err) {
+        ui.toast.error(err.message || "ဖျက်၍မရပါ");
+    }
+}
+
+/**
+ * CSV Export (10 Columns)
+ */
+function exportCSV() {
+    const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
+
+    if (listToExport.length === 0) {
+        return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
+    }
+    
+    let csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,QTY,PRICE,AMOUNT,REF,SURPLUS_DEFICIT\n";
+
+    listToExport.forEach((item, idx) => {
+        const no = idx + 1;
+        const date = item.entry_date || item.date || "";
+        const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
+        const isIncome = entryType === "INCOME";
+        const sign = isIncome ? "+" : "-";
+
+        const catName = item.category_name || item.category || "General";
+        const desc = String(item.description || "-");
+        const refNo = item.ref_no || item.reference_no || item.invoice_no || item.purchase_no || "-";
+        const diffAmount = Number(item.diff_amount || 0);
+        const method = String(item.payment_method || "cash").toUpperCase();
+
+        const qtyVal = item.total_quantity || item.quantity;
+        const hasQty = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0;
+        const qtyStr = hasQty ? Number(qtyVal) : "-";
+
+        let priceVal = item.unit_price;
+        if ((priceVal === undefined || priceVal === null) && hasQty && Number(item.amount) > 0) {
+            priceVal = Math.round(Number(item.amount) / Number(qtyVal));
+        }
+        const priceStr = (priceVal !== undefined && priceVal !== null && Number(priceVal) > 0) ? Number(priceVal) : "-";
+
+        const amountStr = `${sign}${Number(item.amount || 0)}`;
+
+        csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(priceStr)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)},${diffAmount}\n`;
+    });
+    
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Cashbook_${document.getElementById("cb-date-filter")?.value || getLocalTodayDate()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}

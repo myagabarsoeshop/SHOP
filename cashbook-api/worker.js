@@ -865,3 +865,129 @@ export default {
         }
     }
 };
+
+// =========================================================================
+    // AUTOMATED DAILY CASHBOOK CLOSING & EMAIL BACKUP CRON (runs at 00:00 MMT)
+    // =========================================================================
+    async scheduled(event, env, ctx) {
+        try {
+            const closingDate = getMyanmarTodayDate();
+            const targetYear = String(new Date().getFullYear());
+            const yearStart = `${targetYear}-01-01`;
+            const yearEnd = `${targetYear}-12-31 23:59:59`;
+
+            // ၁။ နေ့စဉ် ငွေစာရင်းပိတ်ခြင်း (Daily Closing)
+            const { results: branches } = await env.DB.prepare(
+                "SELECT id FROM branches WHERE is_active = 1"
+            ).all();
+
+            const batch = [];
+            for (const b of (branches || [])) {
+                const row = await env.DB.prepare(`
+                    SELECT 
+                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' AND entry_date < ? THEN amount 
+                                          WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' AND entry_date < ? THEN -amount ELSE 0 END), 0) AS open_cash,
+                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' AND entry_date < ? THEN amount 
+                                          WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' AND entry_date < ? THEN -amount ELSE 0 END), 0) AS open_bank,
+                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' AND entry_date = ? THEN amount ELSE 0 END), 0) AS cash_in,
+                        COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'EXPENSE' AND entry_date = ? THEN amount ELSE 0 END), 0) AS cash_out,
+                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' AND entry_date = ? THEN amount ELSE 0 END), 0) AS bank_in,
+                        COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' AND entry_date = ? THEN amount ELSE 0 END), 0) AS bank_out
+                    FROM cashbook_entries
+                    WHERE branch_id = ? AND entry_date <= ?
+                `).bind(
+                    closingDate, closingDate, closingDate, closingDate,
+                    closingDate, closingDate, closingDate, closingDate,
+                    b.id, closingDate
+                ).first();
+
+                if (row) {
+                    const openCash = roundKyat(row.open_cash);
+                    const openBank = roundKyat(row.open_bank);
+                    const cashIn = roundKyat(row.cash_in);
+                    const cashOut = roundKyat(row.cash_out);
+                    const bankIn = roundKyat(row.bank_in);
+                    const bankOut = roundKyat(row.bank_out);
+                    const closeCash = openCash + cashIn - cashOut;
+                    const closeBank = openBank + bankIn - bankOut;
+
+                    batch.push(
+                        env.DB.prepare(`
+                            INSERT INTO daily_closings (
+                                branch_id, closing_date, opening_cash, opening_bank,
+                                total_cash_in, total_cash_out, closing_cash,
+                                total_bank_in, total_bank_out, closing_bank,
+                                actual_cash_counted, cash_difference, closed_by, notes
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 'Auto Daily Closing')
+                            ON CONFLICT(branch_id, closing_date) DO UPDATE SET
+                                opening_cash = excluded.opening_cash,
+                                opening_bank = excluded.opening_bank,
+                                total_cash_in = excluded.total_cash_in,
+                                total_cash_out = excluded.total_cash_out,
+                                closing_cash = excluded.closing_cash,
+                                total_bank_in = excluded.total_bank_in,
+                                total_bank_out = excluded.total_bank_out,
+                                closing_bank = excluded.closing_bank
+                        `).bind(
+                            b.id, closingDate, openCash, openBank,
+                            cashIn, cashOut, closeCash,
+                            bankIn, bankOut, closeBank, closeCash
+                        )
+                    );
+                }
+            }
+
+            if (batch.length > 0) {
+                await env.DB.batch(batch);
+            }
+
+            // ၂။ အလိုအလျောက် Excel Backup အီးမေးလ် ပို့ခြင်း (Admin Email သို့)
+            if (env.RESEND_API_KEY && env.ADMIN_EMAIL) {
+                const [prodRes, salesRes, cbRes, custRes, purRes] = await env.DB.batch([
+                    env.DB.prepare(`SELECT p.id, p.sku, p.category, p.item_name, p.cost_price, COALESCE(SUM(bi.quantity), 0) AS total_stock FROM products p LEFT JOIN branch_inventory bi ON p.id = bi.product_id WHERE p.is_active = 1 GROUP BY p.id`),
+                    env.DB.prepare(`SELECT s.invoice_no, b.name AS branch_name, s.final_amount, s.created_at FROM sales s LEFT JOIN branches b ON s.branch_id = b.id WHERE s.created_at >= ? AND s.created_at <= ? LIMIT 500`).bind(yearStart, yearEnd),
+                    env.DB.prepare(`SELECT ce.entry_date, b.name AS branch_name, cc.name AS category_name, ce.entry_type, ce.amount FROM cashbook_entries ce LEFT JOIN branches b ON ce.branch_id = b.id LEFT JOIN cash_categories cc ON ce.category_id = cc.id WHERE ce.entry_date >= ? AND ce.entry_date <= ? LIMIT 500`).bind(`${targetYear}-01-01`, `${targetYear}-12-31`),
+                    env.DB.prepare(`SELECT name, shop_name, current_debt, current_payable FROM customers WHERE is_active = 1 LIMIT 500`),
+                    env.DB.prepare(`SELECT p.purchase_no, b.name AS branch_name, p.supplier_name, p.items_total FROM purchases p LEFT JOIN branches b ON p.branch_id = b.id WHERE p.created_at >= ? AND p.created_at <= ? LIMIT 500`).bind(yearStart, yearEnd)
+                ]);
+
+                const cleanXml = (val) => String(val ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const buildSheet = (sheetName, headers, rows) => {
+                    let xml = `<Worksheet ss:Name="${cleanXml(sheetName)}"><Table><Row ss:StyleID="Header">`;
+                    headers.forEach(h => { xml += `<Cell><Data ss:Type="String">${cleanXml(h)}</Data></Cell>`; });
+                    xml += `</Row>`;
+                    rows.forEach(r => {
+                        xml += `<Row>`;
+                        r.forEach(c => {
+                            const isNum = typeof c === "number" || (!isNaN(c) && c !== "");
+                            xml += `<Cell><Data ss:Type="${isNum ? "Number" : "String"}">${cleanXml(c)}</Data></Cell>`;
+                        });
+                        xml += `</Row>`;
+                    });
+                    xml += `</Table></Worksheet>`;
+                    return xml;
+                };
+
+                let workbookXml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#064E3B" ss:Pattern="Solid"/></Style></Styles>`;
+                workbookXml += buildSheet("Products", ["ID", "SKU", "အမျိုးအစား", "ပစ္စည်းအမည်", "အရင်းဈေး", "လက်ကျန်"], (prodRes.results || []).map(p => [p.id, p.sku, p.category, p.item_name, p.cost_price, p.total_stock]));
+                workbookXml += buildSheet("Sales", ["ဘောင်ချာ", "ဆိုင်ခွဲ", "ကျသင့်ငွေ", "ရက်စွဲ"], (salesRes.results || []).map(s => [s.invoice_no, s.branch_name, s.final_amount, s.created_at]));
+                workbookXml += `</Workbook>`;
+
+                const base64Excel = btoa(unescape(encodeURIComponent(workbookXml)));
+
+                await fetch("https://api.resend.com/emails", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        from: "Garment ERP <onboarding@resend.dev>",
+                        to: [env.ADMIN_EMAIL],
+                        subject: `မြကမ္ဘာစိုး ပိုးထည်တိုက် - Auto Daily Backup Report (${closingDate})`,
+                        html: `<p>နေ့စဉ် အလိုအလျောက် ငွေစာရင်းပိတ်သိမ်းခြင်းနှင့် ဒေတာဘေ့စ် ဘက်ကပ်ဖိုင်ကို ပူးတွဲတင်ပြအပ်ပါသည်။</p>`,
+                        attachments: [{ filename: `Daily_Backup_${closingDate}.xls`, content: base64Excel }]
+                    })
+                });
+            }
+        } catch (err) {
+            console.error("[Cron Error]:", err.message);
+        }
+    }

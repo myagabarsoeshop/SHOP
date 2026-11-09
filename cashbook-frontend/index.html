@@ -17,6 +17,7 @@
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'Padauk', 'sans-serif'],
+                        mono: ['Inter', 'ui-monospace', 'SFMono-Regular', 'monospace'],
                     },
                     spacing: {
                         '68': '17rem',
@@ -52,7 +53,7 @@
                             '100%': { opacity: '0' },
                         },
                         popIn: {
-                            '0%': { transform: 'scale(0.9)', opacity: '0' },
+                            '0%': { transform: 'scale(0.95)', opacity: '0' },
                             '100%': { transform: 'scale(1)', opacity: '1' },
                         }
                     }
@@ -71,11 +72,10 @@
 
     <style>
 /* ============================================================
-   MYA GABAR SOE SHOP
-   GLOBAL UI - OPTIMIZED PRODUCTION CSS
+   MYA GABAR SOE SHOP - ENTERPRISE ERP DESIGN SYSTEM CSS
    ============================================================ */
 
-/* 1. GLOBAL FONT & RESET */
+/* 1. GLOBAL FONT, TABULAR NUMBERS & RESET */
 * {
     -webkit-tap-highlight-color: transparent;
 }
@@ -83,9 +83,25 @@
 body {
     font-family: 'Inter', 'Padauk', sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* 2. SCROLLBAR */
+/* Tabular Numbers for Accounting & Stock Alignment */
+.font-mono,
+table td,
+table th,
+input[type="number"],
+input[inputmode="numeric"] {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Clean Number Inputs (Remove ugly spinners on price inputs) */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    opacity: 0.6;
+}
+
+/* 2. CUSTOM SCROLLBAR */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -96,30 +112,27 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.3);
+    background: rgba(148, 163, 184, 0.35);
     border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(148, 163, 184, 0.5);
+    background: rgba(148, 163, 184, 0.55);
 }
 
 /* ============================================================
-   3. DARK MODE - GLOBAL
+   3. DARK MODE - GLOBAL & CONTAINERS
    ============================================================ */
-
 html.dark body {
     background-color: #0b0f19 !important;
     color: #e2e8f0;
     color-scheme: dark;
 }
 
-/* 4. DARK MODE - CARDS & CONTAINERS */
-
-html.dark .bg-white {
+html.dark .bg-white:not(#receipt-print-area):not(.receipt-paper) {
     background-color: #151e32 !important;
     color: #e2e8f0;
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.1);
 }
 
 html.dark .bg-slate-900,
@@ -127,127 +140,148 @@ html.dark .bg-slate-950 {
     background-color: #151e32;
 }
 
-/* 5. DARK MODE - BORDERS */
+/* Keep aside sidebar and modal headers deep dark */
+html.dark aside.bg-slate-950,
+html.dark header.dark\:bg-slate-950 {
+    background-color: #090d16 !important;
+}
 
+/* ============================================================
+   4. TABLES & STICKY RIGHT ACTION COLUMN (NO BLEED-THROUGH)
+   ============================================================ */
+table {
+    border-spacing: 0;
+}
+
+tbody tr {
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+    transition: background-color 0.12s ease;
+}
+
+tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+/* Sticky Action Column in Light Mode */
+thead th.sticky {
+    background-color: #f1f5f9 !important;
+}
+
+tbody td.sticky {
+    background-color: #ffffff !important;
+    box-shadow: -4px 0 8px rgba(0, 0, 0, 0.04);
+}
+
+tbody tr:hover td.sticky {
+    background-color: #f8fafc !important;
+}
+
+/* Dark Mode Table & Sticky Action Column */
 html.dark table,
 html.dark th,
-html.dark td {
-    border-color: rgba(255, 255, 255, 0.12);
+html.dark td,
+html.dark tbody tr {
+    border-color: rgba(255, 255, 255, 0.09);
 }
 
-html.dark .border {
-    border-color: rgba(255, 255, 255, 0.12);
+html.dark thead tr,
+html.dark thead th.sticky {
+    background-color: #1e293b !important;
+    color: #f1f5f9;
 }
 
+html.dark tbody td.sticky {
+    background-color: #151e32 !important;
+    box-shadow: -4px 0 10px rgba(0, 0, 0, 0.25);
+}
+
+html.dark tbody tr:hover {
+    background-color: rgba(30, 41, 59, 0.65);
+}
+
+html.dark tbody tr:hover td.sticky {
+    background-color: #1c2841 !important;
+}
+
+html.dark .border,
 html.dark [class*="border-slate-800"],
 html.dark [class*="border-slate-700"] {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.11);
 }
 
 html.dark [class*="divide-slate-800"] > :not(:last-child) {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.09);
 }
 
-/* 6. DARK MODE - TABLE */
+/* ============================================================
+   5. DARK MODE - TYPOGRAPHY & INPUTS
+   ============================================================ */
+html.dark .text-slate-900 { color: #f8fafc; }
+html.dark .text-slate-800 { color: #f1f5f9; }
+html.dark .text-slate-700 { color: #cbd5e1; }
+html.dark .text-slate-600 { color: #cbd5e1; }
+html.dark .text-slate-500 { color: #94a3b8; }
+html.dark .text-slate-400 { color: #94a3b8; }
 
-html.dark thead tr {
-    background-color: #1e293b;
-}
-
-html.dark thead th {
-    color: #f1f5f9;
-}
-
-/* Table Hover */
-html.dark tbody tr:hover {
-    background-color: rgba(255, 255, 255, 0.035);
-}
-
-/* 7. DARK MODE - TEXT */
-
-html.dark .text-slate-900 {
-    color: #f1f5f9;
-}
-
-html.dark .text-slate-800 {
-    color: #e2e8f0;
-}
-
-html.dark .text-slate-700 {
-    color: #cbd5e1;
-}
-
-html.dark .text-slate-600 {
-    color: #cbd5e1;
-}
-
-html.dark .text-slate-500 {
-    color: #94a3b8;
-}
-
-html.dark .text-slate-400 {
-    color: #94a3b8;
-}
-
-/* 8. DARK MODE - INPUT FIELDS */
-
-html.dark input,
+html.dark input:not([readonly]),
 html.dark select,
 html.dark textarea {
-    color: #f1f5f9;
+    color: #f8fafc;
     border-color: rgba(255, 255, 255, 0.15);
 }
 
 html.dark input::placeholder,
 html.dark textarea::placeholder {
-    color: #94a3b8;
+    color: #64748b;
 }
 
-/* Select Dropdown */
 html.dark select option {
     background-color: #151e32;
-    color: #f1f5f9;
+    color: #f8fafc;
 }
 
-/* 9. DARK MODE - CARD SHADOW */
+/* Thermal Receipt Paper Always White */
+#receipt-print-area,
+#receipt-print-area * {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
 
+/* 6. CARD SHADOWS & POS HOVER */
 html.dark .shadow,
 html.dark .shadow-sm,
 html.dark .shadow-md,
 html.dark .shadow-lg {
-    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.45);
 }
 
-/* 10. POS PRODUCT CARD */
-
 .product-card {
-    transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
+    transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.product-card:active {
+    transform: scale(0.98);
 }
 
 html.dark .product-card:hover {
     border-color: #10b981;
-    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
 }
 
-/* 11. BUTTON & KEYBOARD ACCESSIBILITY */
-
+/* 7. KEYBOARD ACCESSIBILITY */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
     outline: 2px solid #10b981;
-    outline-offset: 2px;
+    outline-offset: 1px;
 }
 
 /* ============================================================
-   12. THERMAL RECEIPT PRINTER - 80MM
+   8. THERMAL RECEIPT (80MM) & STATEMENT PRINT ENGINE
    ============================================================ */
-
 @media print {
-
     @page {
         size: 80mm auto;
         margin: 0;
@@ -255,17 +289,19 @@ textarea:focus-visible {
 
     html,
     body {
-        width: 80mm !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
+        height: auto !important;
+        overflow: visible !important;
     }
 
     body * {
         visibility: hidden !important;
     }
 
+    /* 80mm POS Receipt Print */
     #receipt-print-area,
     #receipt-print-area * {
         visibility: visible !important;
@@ -286,44 +322,53 @@ textarea:focus-visible {
         overflow: visible !important;
     }
 
-    #receipt-print-area * {
+    /* Customer / Supplier Statement Print Support */
+    #customer-ledger-modal:not(.hidden),
+    #customer-ledger-modal:not(.hidden) * {
+        visibility: visible !important;
         color: #000000 !important;
-        text-shadow: none !important;
-        box-shadow: none !important;
+        background: #ffffff !important;
+    }
+
+    #customer-ledger-modal:not(.hidden) {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        padding: 0 !important;
     }
 
     .no-print,
     #toast-container,
-    #global-confirm-dialog {
+    #global-confirm-dialog,
+    #btn-export-ledger-csv,
+    #btn-print-ledger,
+    #btn-close-ledger-modal {
         display: none !important;
     }
 }
-
-/* ============================================================
-   END OF GLOBAL CSS
-   ============================================================ */
-</style>
+    </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased select-none overflow-hidden h-screen w-screen relative">
 
     <!-- Global Toast Notification Container -->
-    <div id="toast-container" class="fixed top-5 right-5 z-[100] space-y-3 flex flex-col items-end pointer-events-none no-print"></div>
+    <div id="toast-container" class="fixed top-5 right-5 z-[100] space-y-2.5 flex flex-col items-end pointer-events-none no-print"></div>
 
     <!-- Global Confirm Dialog Container -->
-    <div id="global-confirm-dialog" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4 no-print">
+    <div id="global-confirm-dialog" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[110] flex items-center justify-center p-4 no-print">
         <div id="confirm-box" class="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden scale-90 opacity-0 transition-all duration-200">
-            <div class="p-6 text-center space-y-4">
-                <div id="confirm-icon-box" class="w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl">
+            <div class="p-6 text-center space-y-3.5">
+                <div id="confirm-icon-box" class="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-2xl">
                     <i id="confirm-icon" class="fa-solid fa-circle-exclamation"></i>
                 </div>
-                <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900 dark:text-white">အတည်ပြုပါ</h3>
-                <p id="confirm-message" class="text-sm text-slate-500 dark:text-slate-400 font-semibold"></p>
+                <h3 id="confirm-title" class="text-base font-extrabold text-slate-900 dark:text-white">အတည်ပြုပါ</h3>
+                <p id="confirm-message" class="text-xs text-slate-500 dark:text-slate-400 font-semibold leading-relaxed"></p>
             </div>
-            <div class="p-4 bg-slate-50 dark:bg-slate-950/50 border-t border-slate-100 dark:border-slate-800 flex gap-3">
-                <button type="button" id="btn-confirm-cancel" class="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition cursor-pointer">
-                    မလုပ်ပါ
+            <div class="p-3.5 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800 flex gap-2.5">
+                <button type="button" id="btn-confirm-cancel" class="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition cursor-pointer active:scale-95">
+                    မလုပ်ပါ (Esc)
                 </button>
-                <button type="button" id="btn-confirm-ok" class="flex-1 py-2.5 rounded-xl font-bold text-sm text-white transition shadow-md cursor-pointer">
+                <button type="button" id="btn-confirm-ok" class="flex-1 py-2.5 rounded-xl font-extrabold text-xs text-white transition shadow-md cursor-pointer active:scale-95">
                     အတည်ပြုမည်
                 </button>
             </div>
@@ -341,7 +386,7 @@ textarea:focus-visible {
             <div class="flex flex-col h-full overflow-hidden">
                 <!-- Brand Logo & Shop Name -->
                 <div class="h-16 flex items-center gap-3 px-5 border-b border-slate-800/80 shrink-0">
-                    <div class="w-11 h-11 rounded-xl shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
+                    <div class="w-10 h-10 rounded-xl shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="w-full h-full">
                             <defs>
                                 <linearGradient id="emerald" x1="0" y1="0" x2="1" y2="1">
@@ -393,31 +438,31 @@ textarea:focus-visible {
                     <div class="space-y-0.5">
                         <div class="px-3 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Inventory & Materials</div>
                         
-                        <!-- 🚚 Purchases -->
+                        <!-- Purchases -->
                         <button type="button" data-view="purchases" class="nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                             <i class="fa-solid fa-truck-ramp-box w-5 text-center text-base"></i>
                             <span>Purchases</span>
                         </button>
 
-                        <!-- 📦 Stock Balances -->
+                        <!-- Stock Balances -->
                         <button type="button" data-view="inventory" class="nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                             <i class="fa-solid fa-boxes-stacked w-5 text-center text-base"></i>
                             <span>Stock Balances</span>
                         </button>
 
-                        <!-- 📜 Yarn Balances -->
+                        <!-- Yarn Balances -->
                         <button type="button" data-view="yarn" class="nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                             <i class="fa-solid fa-scroll w-5 text-center text-base"></i>
                             <span>Yarn Balances</span>
                         </button>
 
-                        <!-- 🪂 Stock Transfers -->
+                        <!-- Stock Transfers -->
                         <button type="button" data-view="transfers" class="nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                             <i class="fa-solid fa-parachute-box w-5 text-center text-base text-purple-400"></i>
                             <span>Stock Transfers</span>
                         </button>
 
-                        <!-- 🗑️ Damage & Waste -->
+                        <!-- Damage & Waste -->
                         <button type="button" data-view="waste" class="nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer">
                             <i class="fa-solid fa-box-open w-5 text-center text-base text-amber-500"></i>
                             <span>Damage & Waste</span>
@@ -511,13 +556,13 @@ textarea:focus-visible {
                 </div>
             </header>
 
-            <!-- 2. Updated 4-Box KPI Summary Bar -->
-            <section id="global-kpi-bar" class="px-6 pt-4 pb-2 shrink-0">
+            <!-- 2. 4-Box KPI Summary Bar -->
+            <section id="global-kpi-bar" class="px-6 pt-3.5 pb-1.5 shrink-0">
                 <div class="grid grid-cols-4 gap-4">
                     <!-- KPI Box 1 -->
-                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-1-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Today Sale (Cash)</div>
+                            <div id="kpi-1-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">Today Sale (Cash)</div>
                             <div id="kpi-1-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0">
@@ -526,9 +571,9 @@ textarea:focus-visible {
                     </div>
 
                     <!-- KPI Box 2 -->
-                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-2-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Today Sale (Bank)</div>
+                            <div id="kpi-2-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">Today Sale (Bank)</div>
                             <div id="kpi-2-value" class="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg shrink-0">
@@ -537,9 +582,9 @@ textarea:focus-visible {
                     </div>
 
                     <!-- KPI Box 3 -->
-                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-3-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Today Sale</div>
+                            <div id="kpi-3-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">Total Today Sale</div>
                             <div id="kpi-3-value" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-lg shrink-0">
@@ -548,9 +593,9 @@ textarea:focus-visible {
                     </div>
 
                     <!-- KPI Box 4 -->
-                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
+                    <div class="bg-white dark:bg-slate-800/90 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm flex items-center justify-between">
                         <div>
-                            <div id="kpi-4-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Total Sale Items</div>
+                            <div id="kpi-4-label" class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-0.5">Total Sale Items</div>
                             <div id="kpi-4-value" class="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">0</div>
                         </div>
                         <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg shrink-0">
@@ -560,8 +605,8 @@ textarea:focus-visible {
                 </div>
             </section>
 
-            <!-- 3. Dynamic View Workspace -->
-            <main id="view-container" class="flex-1 overflow-hidden px-6 pt-2 pb-0 relative"></main>
+            <!-- 3. Dynamic View Workspace (Balanced Padding) -->
+            <main id="view-container" class="flex-1 overflow-hidden px-6 pt-2 pb-3.5 relative"></main>
         </div>
     </div>
 

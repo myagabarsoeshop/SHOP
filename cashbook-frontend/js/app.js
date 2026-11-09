@@ -146,18 +146,21 @@ function showAppLayout() {
     document.getElementById("app-layout")?.classList.remove("hidden");
 
     const user = state.user || {};
-    const displayName = user.fullName || user.username || "User";
+    
+    // Admin ဖြစ်ပါက "Admin" ဟုသာ ပြရန်၊ အခြား User ဆိုလျှင် ၎င်းတို့၏ နာမည်နှင့် Role ကို ပြရန်
+    const isOwnerAdmin = String(user.role || "").toLowerCase() === "admin";
+    const displayName = isOwnerAdmin ? "Admin" : (user.fullName || user.username || "User");
+    const displayRole = isOwnerAdmin ? "Admin" : (user.role || "cashier");
 
     const nameEl = document.getElementById("user-name");
     const roleEl = document.getElementById("user-role");
     const initEl = document.getElementById("user-initial");
 
     if (nameEl) nameEl.textContent = displayName;
-    if (roleEl) roleEl.textContent = user.role || "cashier";
+    if (roleEl) roleEl.textContent = displayRole;
     if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
 
     // Admin တစ်ဦးတည်းသာ Product Master နှင့် System Setting မြင်ရမည်
-    const isOwnerAdmin = String(user.role || "").toLowerCase() === "admin";
     const masterMenu = document.getElementById("nav-master-products");
     const settingMenu = document.getElementById("nav-system-setting");
 

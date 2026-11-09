@@ -1,9 +1,9 @@
 // cashbook-frontend/js/modules/master_products.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Import Professional UI (Toast)
+import { ui } from "../core/ui.js";
 import { PaginationController } from "../core/pagination.js";
-import { setKPI } from "../app.js"; // Optional: KPI update for Master
+import { setKPI, getLocalTodayDate } from "../app.js";
 
 let masterProducts = [];
 let currentFilteredMaster = [];
@@ -25,6 +25,49 @@ function escapeCsv(val) {
     let str = String(val ?? "").trim();
     if (/^[=+@-]/.test(str)) str = "'" + str;
     return `"${str.replace(/"/g, '""')}"`;
+}
+
+/**
+ * မြန်မာဂဏန်း (၀-၉) နှင့် ကော်မာများကို ဖယ်ရှားပြီး Number ပြောင်းပေးသည့် Helper
+ */
+function parseAnyNumber(val, isInteger = true) {
+    if (!val && val !== 0) return 0;
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let cleanStr = String(val).replace(/,/g, "").trim();
+    myanmarDigits.forEach((d, idx) => {
+        cleanStr = cleanStr.replaceAll(d, String(idx));
+    });
+    const num = parseFloat(cleanStr);
+    if (isNaN(num)) return 0;
+    return isInteger ? Math.round(num) : Math.round(num * 1000) / 1000;
+}
+
+/**
+ * CSV စာကြောင်းတစ်ကြောင်းကို ကွက်လပ်အလွတ် (Empty Column) များ မပျောက်စေဘဲ အတိအကျ ခွဲထုတ်ပေးသည့် Parser
+ */
+function parseCsvLine(line) {
+    const result = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch === "," && !inQuotes) {
+            result.push(current.trim());
+            current = "";
+        } else {
+            current += ch;
+        }
+    }
+    result.push(current.trim());
+    return result;
 }
 
 export async function initMasterProducts() {
@@ -52,7 +95,7 @@ function bindEvents() {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
             await loadMasterProducts();
-            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            setTimeout(() => icon?.classList.remove("fa-spin"), 400);
             ui.toast.info("ဗဟိုစာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
         });
     }
@@ -72,19 +115,33 @@ async function loadMasterProducts() {
     }
 
     try {
-        // Fetch all products (master logic handles sum of stocks across branches if needed, or just pulls main products table)
-        const res = await api.get("/products");
+        // branch_id = ALL ဖြင့် ဆိုင်ခွဲအားလုံးရှိ စုစုပေါင်း လက်ကျန်ပေါင်းလဒ်ကို ဆွဲယူမည်
+        const res = await api.get("/products", { branch_id: "ALL" });
         masterProducts = res.data || [];
         currentFilteredMaster = [...masterProducts];
-        
+
         populateCategoryFilter();
-        pagination.reset();
-        renderMasterTable();
+        updateMasterKPIs();
+        filterAndRenderMaster();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="11" class="p-12 text-center text-rose-500 font-bold text-xs">ဗဟိုစာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
         }
     }
+}
+
+function updateMasterKPIs() {
+    const totalItems = masterProducts.length;
+    const uniqueCats = new Set(masterProducts.map(p => p.category).filter(Boolean)).size;
+    const totalAllStock = masterProducts.reduce((sum, p) => sum + Number(p.current_stock || p.quantity || 0), 0);
+    const totalValuation = masterProducts.reduce((sum, p) => {
+        return sum + Math.round(Number(p.current_stock || p.quantity || 0) * Number(p.cost_price || 0));
+    }, 0);
+
+    setKPI(1, "Master Items", totalItems, "fa-boxes-packing", "blue");
+    setKPI(2, "Categories", uniqueCats, "fa-layer-group", "purple");
+    setKPI(3, "All-Branch Stock", totalAllStock, "fa-cubes", "emerald");
+    setKPI(4, "Total Valuation", totalValuation, "fa-vault", "amber");
 }
 
 function populateCategoryFilter() {
@@ -93,9 +150,12 @@ function populateCategoryFilter() {
     const currentVal = select.value;
     const cats = [...new Set(masterProducts.map(p => p.category).filter(Boolean))];
     
-    select.innerHTML = `<option value="">All Categories</option>`;
+    select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${masterProducts.length})</option>`;
     cats.forEach(c => {
-        select.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        select.appendChild(opt);
     });
     if (cats.includes(currentVal)) select.value = currentVal;
 }
@@ -116,7 +176,7 @@ function filterAndRenderMaster() {
 }
 
 /**
- * Master Table Rendering (11 Columns - Flat Design, Plain Number for Total Qty)
+ * Master Table Rendering (11 Columns - Pro Typography & Edit/Delete Actions)
  */
 function renderMasterTable() {
     const tbody = document.getElementById("master-table-body");
@@ -141,9 +201,8 @@ function renderMasterTable() {
 
     pageItems.forEach((item, idx) => {
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
 
-        // current_stock သို့မဟုတ် quantity ကို မှန်ကန်စွာ ဖော်ပြရန်
         const stock = Number(item.current_stock || item.quantity || 0);
         const unit = item.size || "ထည်";
 
@@ -152,39 +211,44 @@ function renderMasterTable() {
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
             <!-- 2. BARCODE -->
-            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
             
             <!-- 3. CATEGORY -->
-            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
             
             <!-- 4. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
             
-            <!-- 5. SIZE -->
+            <!-- 5. UNIT -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
             
             <!-- 6. COLOR -->
-            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
             
-            <!-- 7. TOTAL QTY (နောက်ခံကာလာဖြုတ်ပြီး ဂဏန်းသီးသန့် Flat Design သို့ ပြောင်းခြင်း) -->
-            <td class="py-2 px-4 text-right font-mono font-black text-base text-blue-600 dark:text-blue-400 w-28">
+            <!-- 7. TOTAL QTY -->
+            <td class="py-2 px-4 text-center font-mono font-black text-sm text-blue-600 dark:text-blue-400 w-28">
                 ${stock.toLocaleString()}
             </td>
 
             <!-- 8. PURCHASE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
             
             <!-- 9. WHOLESALE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
             
             <!-- 10. RETAIL -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
             
-            <!-- 11. ACTION -->
-            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-20">
-                <button type="button" data-id="${item.id}" title="Edit Master Info" class="btn-edit-master w-7 h-7 inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-pen-to-square text-xs"></i>
-                </button>
+            <!-- 11. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
+                <div class="flex items-center justify-center gap-1.5">
+                    <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" class="btn-edit-master w-7 h-7 inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" class="btn-delete-master w-7 h-7 inline-flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
             </td>
         `;
         tbody.appendChild(tr);
@@ -194,6 +258,12 @@ function renderMasterTable() {
         btn.onclick = () => {
             const prod = masterProducts.find(p => p.id === Number(btn.dataset.id));
             if (prod) openMasterModal(prod);
+        };
+    });
+
+    tbody.querySelectorAll(".btn-delete-master").forEach(btn => {
+        btn.onclick = () => {
+            deleteMasterProduct(Number(btn.dataset.id));
         };
     });
 
@@ -233,7 +303,7 @@ function openMasterModal(prod = null) {
     }
 
     modal?.classList.remove("hidden");
-    document.getElementById("master-prod-sku")?.focus();
+    document.getElementById("master-prod-name")?.focus();
 }
 
 async function submitMasterProduct(e) {
@@ -251,9 +321,9 @@ async function submitMasterProduct(e) {
         pattern: document.getElementById("master-prod-pattern")?.value.trim() || null,
         color: document.getElementById("master-prod-color")?.value.trim() || null,
         size: document.getElementById("master-prod-size")?.value.trim() || "ထည်",
-        costPrice: parseFloat(document.getElementById("master-prod-cost")?.value) || 0,
-        retailPrice: parseFloat(document.getElementById("master-prod-retail")?.value) || 0,
-        wholesalePrice: parseFloat(document.getElementById("master-prod-wholesale")?.value) || 0
+        costPrice: parseAnyNumber(document.getElementById("master-prod-cost")?.value, true),
+        retailPrice: parseAnyNumber(document.getElementById("master-prod-retail")?.value, true),
+        wholesalePrice: parseAnyNumber(document.getElementById("master-prod-wholesale")?.value, true)
     };
 
     try {
@@ -277,6 +347,19 @@ async function submitMasterProduct(e) {
     }
 }
 
+async function deleteMasterProduct(id) {
+    const confirmed = await ui.confirm("ဤပစ္စည်းကို ဗဟိုကုန်ပစ္စည်းစာရင်းမှ အမှန်တကယ် ပယ်ဖျက်လိုပါသလား?", "error");
+    if (!confirmed) return;
+
+    try {
+        await api.delete(`/products/${id}`);
+        ui.toast.success("ဗဟိုစာရင်းမှ ပယ်ဖျက်ပြီးပါပြီ။");
+        await loadMasterProducts();
+    } catch (err) {
+        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
+    }
+}
+
 // --- CSV Export & Import Logic ---
 function exportMasterProductsToCSV() {
     const dataToExport = currentFilteredMaster.length > 0 ? currentFilteredMaster : masterProducts;
@@ -284,8 +367,7 @@ function exportMasterProductsToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်း မရှိပါ။");
     }
 
-    const currentYear = new Date().getFullYear();
-    let csvContent = "NO,BARCODE,CATEGORY,ITEM NAME,SIZE,COLOR,PATTERN,TOTAL QTY,PURCHASE,WHOLESALE,RETAIL\n";
+    let csvContent = "NO,BARCODE,CATEGORY,ITEM NAME,UNIT,COLOR,PATTERN,TOTAL QTY,PURCHASE,WHOLESALE,RETAIL\n";
 
     dataToExport.forEach((p, idx) => {
         const no = idx + 1;
@@ -294,7 +376,7 @@ function exportMasterProductsToCSV() {
             escapeCsv(p.barcode || p.sku),
             escapeCsv(p.category),
             escapeCsv(p.item_name),
-            escapeCsv(p.size || 'ထည်'),
+            escapeCsv(p.size || "ထည်"),
             escapeCsv(p.color),
             escapeCsv(p.pattern),
             p.current_stock || 0,
@@ -309,16 +391,17 @@ function exportMasterProductsToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Master_Products_List_${currentYear}.csv`;
+    link.download = `Master_Products_List_${getLocalTodayDate()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
 function triggerImportMaster() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv";
     input.onchange = async e => {
         const file = e.target.files[0];
         if (!file) return;
@@ -333,42 +416,65 @@ function triggerImportMaster() {
 }
 
 async function processMasterImport(csvText) {
-    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+    const lines = String(csvText || "").split(/\r?\n/).filter(line => line.trim() !== "");
     if (lines.length <= 1) {
         return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
-    
-    let successCount = 0;
-    
+
+    const headerCols = parseCsvLine(lines[0]).map(h => h.toUpperCase());
+    const isStockBalancesFormat = headerCols[0] === "SKU" && headerCols[1] === "BARCODE";
+
+    const bulkItems = [];
     for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || lines[i].split(',');
-        if (row.length < 4) continue; 
-        
-        // Expected Format: NO, BARCODE/SKU, CATEGORY, ITEM NAME, SIZE, COLOR, PATTERN, QTY, PURCHASE, WHOLESALE, RETAIL
-        const payload = {
-            sku: row[1] || null,
-            barcode: row[1] || null,
-            category: row[2] || "အထည်",
-            itemName: row[3] || "Imported Item",
-            size: row[4] || "ထည်",
-            color: row[5] || null,
-            pattern: row[6] || null,
-            initialStock: parseInt(row[7], 10) || 0,
-            quantity: parseInt(row[7], 10) || 0,
-            costPrice: parseFloat(row[8]) || 0,
-            wholesalePrice: parseFloat(row[9]) || 0,
-            retailPrice: parseFloat(row[10]) || 0,
-            targetBranchId: 1,
-            branchId: 1
-        };
-        
-        try {
-            await api.post("/products", payload);
-            successCount++;
-        } catch (e) {
-            console.error("Import error line " + i, e);
+        const row = parseCsvLine(lines[i]);
+        if (row.length < 4) continue;
+
+        if (isStockBalancesFormat) {
+            // Format: SKU, Barcode, Category, Item Name, Pattern, Color, Unit/Size, Cost Price, Retail Price, Wholesale Price
+            const itemName = row[3] || "";
+            if (!itemName) continue;
+            bulkItems.push({
+                sku: row[0] || null,
+                barcode: row[1] || null,
+                category: row[2] || "အထည်",
+                itemName,
+                pattern: row[4] || null,
+                color: row[5] || null,
+                size: row[6] || "ထည်",
+                costPrice: parseAnyNumber(row[7], true),
+                retailPrice: parseAnyNumber(row[8], true),
+                wholesalePrice: parseAnyNumber(row[9] || row[8], true)
+            });
+        } else {
+            // Format: NO, BARCODE/SKU, CATEGORY, ITEM NAME, UNIT/SIZE, COLOR, PATTERN, TOTAL QTY, PURCHASE, WHOLESALE, RETAIL
+            const itemName = row[3] || "";
+            if (!itemName) continue;
+            bulkItems.push({
+                sku: row[1] || null,
+                barcode: row[1] || null,
+                category: row[2] || "အထည်",
+                itemName,
+                size: row[4] || "ထည်",
+                color: row[5] || null,
+                pattern: row[6] || null,
+                costPrice: parseAnyNumber(row[8], true),
+                wholesalePrice: parseAnyNumber(row[9], true),
+                retailPrice: parseAnyNumber(row[10] || row[9], true)
+            });
         }
     }
-    ui.toast.success(`ပစ္စည်းအသစ် ${successCount} မျိုး အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`);
-    await loadMasterProducts();
+
+    if (bulkItems.length === 0) {
+        return ui.toast.warning("သွင်းယူနိုင်သော ပစ္စည်းအချက်အလက် မတွေ့ပါ။");
+    }
+
+    try {
+        ui.toast.info(`ပစ္စည်း (${bulkItems.length}) မျိုး ဗဟိုစာရင်းသို့ သွင်းယူနေပါသည်...`);
+        const res = await api.post("/products/bulk", { items: bulkItems });
+        const count = res.data?.count ?? bulkItems.length;
+        ui.toast.success(`ပစ္စည်းအသစ် (${count}) မျိုး အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`);
+        await loadMasterProducts();
+    } catch (err) {
+        ui.toast.error("CSV သွင်းယူမှု မအောင်မြင်ပါ: " + err.message);
+    }
 }

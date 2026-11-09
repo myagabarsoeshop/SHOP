@@ -1,8 +1,8 @@
 // cashbook-frontend/js/modules/waste.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Import Professional UI (Toast & Confirm)
-import { setKPI } from "../app.js";
+import { ui } from "../core/ui.js";
+import { setKPI, getLocalTodayDate } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let wasteLogs = [];
@@ -28,10 +28,27 @@ function escapeCsv(val) {
     return `"${str.replace(/"/g, '""')}"`;
 }
 
+/**
+ * မြန်မာဂဏန်း (၀-၉) နှင့် ကော်မာများကို ဖယ်ရှားပြီး Number ပြောင်းပေးသည့် Helper
+ */
+function parseAnyNumber(val, isInteger = false) {
+    if (!val && val !== 0) return 0;
+    const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
+    let cleanStr = String(val).replace(/,/g, "").trim();
+    myanmarDigits.forEach((d, idx) => {
+        cleanStr = cleanStr.replaceAll(d, String(idx));
+    });
+    const num = parseFloat(cleanStr);
+    if (isNaN(num)) return 0;
+    return isInteger ? Math.round(num) : Math.round(num * 1000) / 1000;
+}
+
 export async function initWaste() {
     bindEvents();
-    await loadProductsForWaste();
-    await loadWasteLogs();
+    await Promise.all([
+        loadProductsForWaste(),
+        loadWasteLogs()
+    ]);
 }
 
 function bindEvents() {
@@ -48,9 +65,11 @@ function bindEvents() {
         refreshBtn.addEventListener("click", async () => {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
-            await loadProductsForWaste();
-            await loadWasteLogs();
-            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            await Promise.all([
+                loadProductsForWaste(),
+                loadWasteLogs()
+            ]);
+            setTimeout(() => icon?.classList.remove("fa-spin"), 400);
             ui.toast.info("အလေအလွင့် မှတ်တမ်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
         });
     }
@@ -62,7 +81,14 @@ function bindEvents() {
     });
     document.getElementById("create-waste-form")?.addEventListener("submit", submitCreateWaste);
     document.getElementById("create-waste-prod-id")?.addEventListener("change", (e) => {
-        updateCreateWasteStockHint(Number(e.target.value));
+        const pid = Number(e.target.value);
+        updateCreateWasteStockHint(pid);
+        if (pid) {
+            const qtyInput = document.getElementById("create-waste-qty");
+            if (qtyInput && !qtyInput.value) qtyInput.value = 1;
+            qtyInput?.focus();
+            qtyInput?.select();
+        }
     });
 
     // Edit Modal Events
@@ -96,9 +122,7 @@ async function loadWasteLogs() {
         currentFilteredWaste = [...wasteLogs];
 
         populateCategoryFilter();
-        updateWasteKPIs();
-        pagination.reset();
-        renderTable();
+        filterAndRender();
     } catch (err) {
         if (tbody) {
             tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
@@ -112,7 +136,7 @@ function populateCategoryFilter() {
     const current = select.value;
     const cats = [...new Set(wasteLogs.map(w => w.category).filter(Boolean))];
     
-    select.innerHTML = `<option value="">All Categories</option>`;
+    select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${wasteLogs.length})</option>`;
     cats.forEach(c => {
         const opt = document.createElement("option");
         opt.value = c;
@@ -122,11 +146,11 @@ function populateCategoryFilter() {
     if (cats.includes(current)) select.value = current;
 }
 
-function updateWasteKPIs() {
-    const totalWasteValue = wasteLogs.reduce((sum, w) => sum + (Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
-    const uniqueCategories = new Set(wasteLogs.map(w => w.category).filter(Boolean)).size;
-    const totalItems = wasteLogs.reduce((sum, w) => sum + Number(w.quantity || 0), 0);
-    const totalEntries = wasteLogs.length;
+function updateWasteKPIs(list = wasteLogs) {
+    const totalWasteValue = list.reduce((sum, w) => sum + Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
+    const uniqueCategories = new Set(list.map(w => w.category).filter(Boolean)).size;
+    const totalItems = list.reduce((sum, w) => sum + Number(w.quantity || 0), 0);
+    const totalEntries = list.length;
 
     setKPI(1, "Total Waste Value", totalWasteValue, "fa-vault", "rose");
     setKPI(2, "Total Category", uniqueCategories, "fa-tags", "blue");
@@ -145,12 +169,13 @@ function filterAndRender() {
         return hay.includes(kw);
     });
 
+    updateWasteKPIs(currentFilteredWaste);
     pagination.reset();
     renderTable();
 }
 
 /**
- * Waste Table Rendering (13 Columns - Ref No moved to end, REASON only)
+ * Waste Table Rendering (13 Columns - Pro Typography & Sticky Right Action)
  */
 function renderTable() {
     const tbody = document.getElementById("waste-table-body");
@@ -175,70 +200,70 @@ function renderTable() {
 
     pageItems.forEach((w, idx) => {
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
-        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
+        const subtotal = Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0));
 
         const actionButtons = state.isAdmin() ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${w.id}" title="Edit" class="btn-edit-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${w.id}" title="ပြင်ဆင်မည်" class="btn-edit-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
-                <button type="button" data-id="${w.id}" title="Delete (Return to Stock)" class="btn-delete-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${w.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်သွင်းမည်" class="btn-delete-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
         ` : `<span class="text-xs text-slate-400 font-mono">-</span>`;
 
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         tr.innerHTML = `
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
             <!-- 2. DATE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
             <!-- 3. BARCODE -->
-            <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(w.barcode || w.sku || "-")}">${escapeHtml(w.barcode || w.sku || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(w.barcode || w.sku || "-")}">${escapeHtml(w.barcode || w.sku || "-")}</td>
             
             <!-- 4. CATEGORY -->
-            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(w.category || "-")}">${escapeHtml(w.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(w.category || "-")}">${escapeHtml(w.category || "-")}</td>
             
             <!-- 5. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(w.item_name || "-")}">${escapeHtml(w.item_name || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(w.item_name || "-")}">${escapeHtml(w.item_name || "-")}</td>
             
             <!-- 6. COLOR -->
-            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(w.color || "-")}">${escapeHtml(w.color || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(w.color || "-")}">${escapeHtml(w.color || "-")}</td>
             
-            <!-- 7. SIZE -->
+            <!-- 7. UNIT -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(w.size || "ထည်")}</td>
             
-            <!-- 8. DEMIT QTY -->
-            <td class="py-2 px-4 text-center font-mono font-black text-base text-rose-600 dark:text-rose-400 w-32">
+            <!-- 8. DAMAGE QTY -->
+            <td class="py-2 px-4 text-center font-mono font-black text-sm text-rose-600 dark:text-rose-400 w-32">
                 -${Number(w.quantity || 0).toLocaleString()}
             </td>
 
             <!-- 9. PURCHASE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">
                 ${Number(w.unit_cost || 0).toLocaleString()}
             </td>
             
             <!-- 10. WASTE VALUE -->
-            <td class="py-2 px-4 text-right font-mono font-black text-base text-rose-600 dark:text-rose-400 w-32">
+            <td class="py-2 px-4 text-right font-mono font-black text-sm text-rose-600 dark:text-rose-400 w-32">
                 ${subtotal.toLocaleString()}
             </td>
             
             <!-- 11. REASON -->
-            <td class="py-2 px-4 text-xs font-medium text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(w.reason || '')}">
+            <td class="py-2 px-4 text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(w.reason || "")}">
                 ${escapeHtml(w.reason || "-")}
             </td>
 
-            <!-- 12. REF NO (Moved to right end) -->
-            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate">
+            <!-- 12. REF NO -->
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate" title="${escapeHtml(w.reference_no || "-")}">
                 ${escapeHtml(w.reference_no || "-")}
             </td>
             
-            <!-- 13. ACTION -->
-            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
+            <!-- 13. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
                 ${actionButtons}
             </td>
         `;
@@ -298,7 +323,7 @@ async function submitCreateWaste(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-create-waste");
     const prodId = Number(document.getElementById("create-waste-prod-id")?.value);
-    const qty = parseFloat(document.getElementById("create-waste-qty")?.value) || 0;
+    const qty = parseAnyNumber(document.getElementById("create-waste-qty")?.value, false);
     const reason = document.getElementById("create-waste-reason")?.value.trim();
     const branchId = state.currentBranch?.id || 1;
 
@@ -325,8 +350,10 @@ async function submitCreateWaste(e) {
         await api.post("/waste", payload);
         document.getElementById("create-waste-modal")?.classList.add("hidden");
         ui.toast.success("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
-        await loadProductsForWaste();
-        await loadWasteLogs();
+        await Promise.all([
+            loadProductsForWaste(),
+            loadWasteLogs()
+        ]);
     } catch (err) {
         ui.toast.error("စာရင်းသွင်း၍မရပါ: " + err.message);
     } finally {
@@ -341,14 +368,16 @@ function openEditWasteModal(log) {
     document.getElementById("edit-waste-reason").value = log.reason || "";
 
     document.getElementById("waste-edit-modal")?.classList.remove("hidden");
-    document.getElementById("edit-waste-qty")?.focus();
+    const qtyEl = document.getElementById("edit-waste-qty");
+    qtyEl?.focus();
+    qtyEl?.select();
 }
 
 async function submitEditWaste(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-save-waste-edit");
     const id = document.getElementById("edit-waste-id")?.value;
-    const qty = parseInt(document.getElementById("edit-waste-qty")?.value, 10);
+    const qty = parseAnyNumber(document.getElementById("edit-waste-qty")?.value, false);
     const reason = document.getElementById("edit-waste-reason")?.value.trim();
 
     if (!qty || qty <= 0) {
@@ -361,8 +390,10 @@ async function submitEditWaste(e) {
         await api.put(`/waste/${id}`, { quantity: qty, reason });
         document.getElementById("waste-edit-modal")?.classList.add("hidden");
         ui.toast.success("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
-        await loadProductsForWaste();
-        await loadWasteLogs();
+        await Promise.all([
+            loadProductsForWaste(),
+            loadWasteLogs()
+        ]);
     } catch (err) {
         ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
     } finally {
@@ -377,8 +408,10 @@ async function deleteWasteLog(id) {
     try {
         await api.delete(`/waste/${id}`);
         ui.toast.success("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
-        await loadProductsForWaste();
-        await loadWasteLogs();
+        await Promise.all([
+            loadProductsForWaste(),
+            loadWasteLogs()
+        ]);
     } catch (err) {
         ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
@@ -389,13 +422,13 @@ function exportWasteToCSV() {
     if (dataToExport.length === 0) {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမှတ်တမ်း မရှိသေးပါ။");
     }
-    const currentYear = new Date().getFullYear();
-    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,SIZE,DEMIT QTY,PURCHASE,WASTE VALUE,REASON,REF NO\n";
+
+    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT,DAMAGE QTY,PURCHASE,WASTE VALUE,REASON,REF NO\n";
 
     dataToExport.forEach((w, idx) => {
         const no = idx + 1;
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
-        const subtotal = Number(w.quantity || 0) * Number(w.unit_cost || 0);
+        const subtotal = Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0));
 
         const row = [
             no,
@@ -404,7 +437,7 @@ function exportWasteToCSV() {
             escapeCsv(w.category),
             escapeCsv(w.item_name),
             escapeCsv(w.color),
-            escapeCsv(w.size || 'ထည်'),
+            escapeCsv(w.size || "ထည်"),
             w.quantity || 0,
             w.unit_cost || 0,
             subtotal,
@@ -418,8 +451,9 @@ function exportWasteToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Damage_Waste_Logs_FY${currentYear}.csv`);
+    link.setAttribute("download", `Damage_Waste_Logs_${getLocalTodayDate()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }

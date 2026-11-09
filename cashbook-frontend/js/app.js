@@ -106,11 +106,15 @@ function setupTopKpiClickEvents() {
 }
 
 function setActiveNavButton(viewName) {
+    const isOwnerAdmin = String(state.user?.role || "").toLowerCase() === "admin";
     document.querySelectorAll(".nav-item").forEach(b => {
+        const isRestricted = b.id === "nav-master-products" || b.id === "nav-system-setting";
+        const hideClass = (isRestricted && !isOwnerAdmin) ? "hidden " : "";
+
         if (b.dataset.view === viewName) {
-            b.className = "nav-item active flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer";
+            b.className = `${hideClass}nav-item active flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer`;
         } else {
-            b.className = "nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer";
+            b.className = `${hideClass}nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer`;
         }
     });
 }
@@ -152,13 +156,16 @@ function showAppLayout() {
     if (roleEl) roleEl.textContent = user.role || "cashier";
     if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
 
+    // Admin တစ်ဦးတည်းသာ Product Master နှင့် System Setting မြင်ရမည်
+    const isOwnerAdmin = String(user.role || "").toLowerCase() === "admin";
     const masterMenu = document.getElementById("nav-master-products");
+    const settingMenu = document.getElementById("nav-system-setting");
+
     if (masterMenu) {
-        if (state.isAdmin()) {
-            masterMenu.classList.remove("hidden");
-        } else {
-            masterMenu.classList.add("hidden");
-        }
+        masterMenu.classList.toggle("hidden", !isOwnerAdmin);
+    }
+    if (settingMenu) {
+        settingMenu.classList.toggle("hidden", !isOwnerAdmin);
     }
 }
 
@@ -309,9 +316,22 @@ export async function navigateTo(viewName) {
 }
 
 function startClock() {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const update = () => {
         const clock = document.getElementById("live-clock");
-        if (clock) clock.textContent = new Date().toLocaleTimeString("en-US", { hour12: false });
+        if (!clock) return;
+
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, "0");
+        const mon = months[now.getMonth()];
+        const yr = String(now.getFullYear()).slice(-2);
+
+        let hr = now.getHours();
+        const min = String(now.getMinutes()).padStart(2, "0");
+        const ampm = hr >= 12 ? "PM" : "AM";
+        hr = hr % 12 || 12;
+
+        clock.textContent = `${day} ${mon} ${yr} | ${hr}:${min} ${ampm}`;
     };
     update();
     setInterval(update, 1000);

@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 1 OF 5: cashbook-api/utils.js
 // SHARED HELPERS, KYAT/QTY MATH, FULL D1 AUTO-MIGRATION GUARD & CRYPTO/JWT AUTH
-// Version: 3.1.1 (Auto-Migrates Missing Columns on Existing Live D1 Databases)
+// Version: 3.2.0 (Includes users.plain_password Auto-Migration for Admin View)
 // =============================================================================
 
 export const corsHeaders = {
@@ -91,7 +91,7 @@ export function roundQty(val) {
 }
 
 // =============================================================================
-// LOGIN BRUTE-FORCE RATE LIMITER (IP တစ်ခုလျှင် ၁ မိနစ်အတွင်း ၅ ကြိမ်ထက်ပိုမှားပါက ပိတ်မည်)
+// LOGIN BRUTE-FORCE RATE LIMITER
 // =============================================================================
 const loginAttempts = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -152,7 +152,6 @@ export function recordLoginAttempt(request, isSuccess) {
 
 // =============================================================================
 // ONE-TIME LAZY SCHEMA & COLUMN AUTO-MIGRATION GUARD
-// (D1 Database အဟောင်းတွင် လိုအပ်နေသော ဇယားနှင့် ကော်လံအသစ်အားလုံးကို ၁ ကြိမ်တည်း အလိုအလျောက် ဖြည့်စွက်ပေးမည်)
 // =============================================================================
 let schemaVerified = false;
 
@@ -264,7 +263,12 @@ export async function ensureSchemaOnce(db) {
             db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (11, 'ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)', 'EXPENSE', 1, 1)`)
         ]).catch(() => {});
 
-        // 3. ရှိပြီးသား ဇယားအဟောင်းများတွင် လိုအပ်နေသော ကော်လံအသစ်များ အလိုအလျောက် ထပ်ပေါင်းထည့်ပေးခြင်း
+        // 3. users ဇယားတွင် Admin ကြည့်ရှုနိုင်ရန် plain_password ကော်လံ ထည့်သွင်းခြင်း
+        await ensureColumns(db, "users", {
+            plain_password: "TEXT"
+        });
+
+        // 4. ရှိပြီးသား ဇယားအဟောင်းများတွင် လိုအပ်နေသော ကော်လံအသစ်များ အလိုအလျောက် ထပ်ပေါင်းထည့်ပေးခြင်း
         await ensureColumns(db, "cashbook_entries", {
             sale_id: "INTEGER",
             purchase_id: "INTEGER",
@@ -321,7 +325,7 @@ export async function ensureSchemaOnce(db) {
             notes: "TEXT"
         });
 
-        // 4. D1 Read Quota သက်သာစေမည့် အရေးကြီး Index များ သေချာစေခြင်း
+        // 5. D1 Read Quota သက်သာစေမည့် အရေးကြီး Index များ သေချာစေခြင်း
         await db.batch([
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)"),
             db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id, purchase_id)"),

@@ -93,15 +93,20 @@ export default {
                 // Clear failed login attempts on success
                 recordLoginAttempt(request, true);
 
-                // Auto-upgrade legacy seed password hash to PBKDF2 on first successful login
+                // Auto-upgrade legacy seed password hash & sync plain_password for Admin view
                 if (user.password_hash && !String(user.password_hash).startsWith("pbkdf2:")) {
                     const upgradedHash = await hashPassword(String(password));
-                    await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
-                        .bind(upgradedHash, user.id)
+                    await env.DB.prepare("UPDATE users SET password_hash = ?, plain_password = ? WHERE id = ?")
+                        .bind(upgradedHash, String(password), user.id)
+                        .run()
+                        .catch(() => {});
+                } else {
+                    await env.DB.prepare("UPDATE users SET plain_password = ? WHERE id = ?")
+                        .bind(String(password), user.id)
                         .run()
                         .catch(() => {});
                 }
-
+            
                 const secret = getJwtSecret(env);
                 const token = await signToken({
                     uid: user.id,
@@ -142,7 +147,7 @@ export default {
                 return errorResponse("ဤမှတ်တမ်းအား ဖျက်ပစ်ခွင့် မရှိပါ (Admin / Manager Role လိုအပ်ပါသည်)", 403);
             }
 
-            // 2.1. Password Change
+            // 2.1. Password Change (Self)
             if (path === "/api/auth/change-password" && method === "POST") {
                 const body = await request.json().catch(() => ({}));
                 const { oldPassword, newPassword } = body;
@@ -155,9 +160,60 @@ export default {
                     return errorResponse("မူလ စကားဝှက် မှားယွင်းနေပါသည်", 400);
                 }
 
-                const secureHash = await hashPassword(newPassword);
-                await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(secureHash, currentUserId).run();
+                const secureHash = await hashPassword(String(newPassword).trim());
+                await env.DB.prepare("UPDATE users SET password_hash = ?, plain_password = ? WHERE id = ?")
+                    .bind(secureHash, String(newPassword).trim(), currentUserId)
+                    .run();
                 return jsonResponse({ message: "စကားဝှက် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ" });
+            }
+
+            // 2.2. Admin Only: Get All Users & Current Passwords (For System Setting)
+            if (path === "/api/system/users" && method === "GET") {
+                if (currentUserRole !== "admin") {
+                    return errorResponse("အသုံးပြုသူစာရင်း ကြည့်ရှုခွင့်ကို Admin သာ ခွင့်ပြုပါသည်", 403);
+                }
+
+                const { results } = await env.DB.prepare(`
+                    SELECT u.id, u.username, u.full_name, u.role, u.branch_id,
+                           COALESCE(u.plain_password, '123456') AS current_password,
+                           b.name AS branch_name, b.code AS branch_code
+                    FROM users u
+                    LEFT JOIN branches b ON u.branch_id = b.id
+                    WHERE u.is_active = 1
+                    ORDER BY u.id ASC
+                `).all();
+
+                return jsonResponse(results || []);
+            }
+
+            // 2.3. Admin Only: Direct Password Reset for Any User (Without Old Password)
+            if (path === "/api/system/reset-password" && method === "POST") {
+                if (currentUserRole !== "admin") {
+                    return errorResponse("စကားဝှက် ပြောင်းလဲပေးခွင့်ကို Admin သာ ခွင့်ပြုပါသည်", 403);
+                }
+
+                const body = await request.json().catch(() => ({}));
+                const targetUserId = Number(body.user_id || body.userId);
+                const newPassword = String(body.new_password || body.newPassword || "").trim();
+
+                if (!targetUserId || newPassword.length < 4) {
+                    return errorResponse("အသုံးပြုသူ ရွေးချယ်ပြီး စကားဝှက်အသစ် (အနည်းဆုံး ၄ လုံး) ထည့်သွင်းပေးပါ", 400);
+                }
+
+                const targetUser = await env.DB.prepare("SELECT id, username, full_name FROM users WHERE id = ?").bind(targetUserId).first();
+                if (!targetUser) {
+                    return errorResponse("အသုံးပြုသူ ရှာမတွေ့ပါ", 404);
+                }
+
+                const secureHash = await hashPassword(newPassword);
+                await env.DB.prepare("UPDATE users SET password_hash = ?, plain_password = ? WHERE id = ?")
+                    .bind(secureHash, newPassword, targetUserId)
+                    .run();
+
+                return jsonResponse({
+                    message: `${targetUser.full_name || targetUser.username} အတွက် စကားဝှက်အသစ် ပြောင်းလဲသိမ်းဆည်းပြီးပါပြီ`,
+                    current_password: newPassword
+                });
             }
 
             // =================================================================

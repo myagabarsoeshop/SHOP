@@ -9,7 +9,8 @@ import {
     errorResponse,
     getMyanmarTodayDate,
     roundKyat,
-    roundQty
+    roundQty,
+    getQueryYear
 } from "./utils.js";
 
 export async function handleTransactionRoutes(request, env, url, path, method, auth) {
@@ -22,6 +23,9 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
     // =========================================================================
     if (path === "/api/purchases" && method === "GET") {
         const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const targetYear = getQueryYear(url);
+        const yearStart = `${targetYear}-01-01`;
+        const yearEnd = `${targetYear}-12-31 23:59:59`;
 
         const sql = `
             SELECT 
@@ -57,10 +61,10 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             FROM purchases p
             INNER JOIN purchase_items pi ON p.id = pi.purchase_id
             INNER JOIN products pr ON pi.product_id = pr.id
-            WHERE p.branch_id = ?
-            ORDER BY p.id DESC, pi.id DESC LIMIT 300
+            WHERE p.branch_id = ? AND p.created_at >= ? AND p.created_at <= ?
+            ORDER BY p.id DESC, pi.id DESC LIMIT 2000
         `;
-        const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all();
+        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStart, yearEnd).all();
         return jsonResponse(results || []);
     }
 

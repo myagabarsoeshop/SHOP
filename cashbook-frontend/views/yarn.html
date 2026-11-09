@@ -1,7 +1,7 @@
 <!-- cashbook-frontend/views/yarn.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Action Toolbar (Stock Balances စံနှုန်းအတိုင်း အတိအကျ ညီညာစေခြင်း) -->
+    <!-- Top Action Toolbar (Standardized Pro Layout) -->
     <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
         <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown နှင့် Search Box -->
@@ -33,7 +33,7 @@
                 <span class="hidden sm:inline">Export CSV</span>
             </button>
 
-            <button type="button" id="btn-import-csv" title="CSV ဖြင့် အချက်အလက်သစ်များ သွင်းမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
+            <button type="button" id="btn-import-csv" data-module="yarn" title="CSV ဖြင့် အချက်အလက်သစ်များ သွင်းမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-file-import text-amber-500 text-xs"></i>
                 <span class="hidden lg:inline">Import CSV</span>
             </button>
@@ -87,25 +87,25 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Modal: ရက်ကန်းသို့ ချည်ထုတ်ပေးမည် (Pro Form Standard)                -->
+<!-- Modal 1: ရက်ကန်းသို့ ချည်ထုတ်ပေးမည် (Pro Entry Form Standard)          -->
 <!-- ===================================================================== -->
 <div id="yarn-issue-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
-        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-            <div class="text-sm font-extrabold flex items-center gap-2.5">
-                <i class="fa-solid fa-scroll text-emerald-400 opacity-90"></i>
-                <span>ချည်အသစ်သွင်း / ရက်ကန်းထုတ်ပေးခြင်း</span>
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-xs font-extrabold flex items-center gap-2">
+                <i class="fa-solid fa-scroll text-emerald-400"></i>
+                <span>ရက်ကန်းသို့ ချည်ထုတ်ပေးခြင်း</span>
             </div>
             <button type="button" id="btn-close-yarn-issue-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <form id="yarn-issue-form" class="p-6 space-y-4">
+        <form id="yarn-issue-form" class="p-5 space-y-3.5">
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ထုတ်ပေးမည့် ချည်အမျိုးအစား *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ထုတ်ပေးမည့် ချည်အမျိုးအစား *</label>
                 <div class="relative">
-                    <select id="issue-yarn-id" required class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none">
+                    <select id="issue-yarn-id" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer appearance-none">
                         <!-- Dynamic Options -->
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
@@ -114,25 +114,25 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ရက်ကန်းသမား အမည် *</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ရက်ကန်းသမား အမည် *</label>
                 <input type="text" id="issue-weaver-name" required placeholder="ဥပမာ - ဒေါ်လှရီ (စက်ရုံခွဲ-၁)" 
-                    class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ထုတ်ပေးမည့် ပမာဏ (ပေါင် / လုံး) *</label>
-                <input type="number" id="issue-quantity" min="1" step="any" required placeholder="0" 
-                    class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-emerald-600 dark:text-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ထုတ်ပေးမည့် ပမာဏ (ပေါင် / လိပ် / ထုပ်) *</label>
+                <input type="number" id="issue-quantity" min="0.1" step="any" required placeholder="0" 
+                    class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-1.5 text-emerald-600 dark:text-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ရက်လုပ်မည့် အထည် / မှတ်ချက်</label>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ရက်လုပ်မည့် အထည် / မှတ်ချက်</label>
                 <input type="text" id="issue-notes" placeholder="ဥပမာ - မန္တလေးချည်ပုဆိုး ၃၀ ထည်စာ" 
-                    class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" id="btn-submit-yarn-issue" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                <button type="submit" id="btn-submit-yarn-issue" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
                     <span>အတည်ပြု၍ စာရင်းသွင်းမည်</span>
                 </button>
@@ -142,13 +142,13 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Modal: ချည်အချက်အလက် ပြင်ဆင်မည် (Pro Form Standard - Edit Modal)     -->
+<!-- Modal 2: ချည်အချက်အလက် ပြင်ဆင်မည် (Pro Entry Form Standard)           -->
 <!-- ===================================================================== -->
 <div id="yarn-edit-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
-        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-            <div class="text-sm font-extrabold flex items-center gap-2.5">
-                <i class="fa-solid fa-pen-to-square text-blue-400 opacity-90"></i>
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-xs font-extrabold flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square text-blue-400"></i>
                 <span>ချည်အချက်အလက်နှင့် ဈေးနှုန်း ပြင်ဆင်မည်</span>
             </div>
             <button type="button" id="btn-close-yarn-edit-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
@@ -156,47 +156,60 @@
             </button>
         </div>
 
-        <form id="yarn-edit-form" class="p-6 space-y-4">
+        <form id="yarn-edit-form" class="p-5 space-y-3.5">
             <input type="hidden" id="edit-yarn-id">
-            <div class="grid grid-cols-2 gap-3.5">
+
+            <div class="grid grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ချည်ကုတ် (SKU)</label>
-                    <input type="text" id="edit-yarn-sku" class="w-full text-sm font-bold font-mono bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ချည်ကုတ် (SKU)</label>
+                    <input type="text" id="edit-yarn-sku" placeholder="ဥပမာ - YN-001" class="w-full text-xs font-bold font-mono bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ချည်အမည် *</label>
-                    <input type="text" id="edit-yarn-name" required class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Barcode နံပါတ်</label>
+                    <input type="text" id="edit-yarn-barcode" placeholder="Scanner ဖြင့် ဖတ်ရန်" class="w-full text-xs font-bold font-mono bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3.5">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ချည်အမည် (Item Name) *</label>
+                <input type="text" id="edit-yarn-name" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အရောင်</label>
-                    <input type="text" id="edit-yarn-color" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အဆင် / အမျိုးအစား</label>
+                    <input type="text" id="edit-yarn-pattern" placeholder="ပိုးချည် / ဝါချည်" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ယူနစ်</label>
-                    <input type="text" id="edit-yarn-unit" value="lb" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အရောင် (Color)</label>
+                    <input type="text" id="edit-yarn-color" placeholder="အနီ / ရွှေဝါ" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ယူနစ် (Unit)</label>
+                    <input type="text" id="edit-yarn-unit" list="yarn-unit-suggestions" value="lb" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <datalist id="yarn-unit-suggestions">
+                        <option value="ပေါင်"><option value="lb"><option value="လိပ်"><option value="ထုပ်"><option value="ကီလို">
+                    </datalist>
                 </div>
             </div>
 
             <div class="grid grid-cols-3 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အရင်းဝယ်ဈေး</label>
-                    <input type="number" id="edit-yarn-cost" class="w-full text-sm font-bold font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အရင်းဝယ်ဈေး</label>
+                    <input type="number" id="edit-yarn-cost" min="0" step="any" class="w-full text-sm font-black font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">လက်လီဈေး *</label>
-                    <input type="number" id="edit-yarn-retail" required class="w-full text-sm font-bold font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2.5 text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လက်လီဈေး *</label>
+                    <input type="number" id="edit-yarn-retail" required min="0" step="any" class="w-full text-sm font-black font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">လက်ကားဈေး *</label>
-                    <input type="number" id="edit-yarn-wholesale" required class="w-full text-sm font-bold font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လက်ကားဈေး *</label>
+                    <input type="number" id="edit-yarn-wholesale" required min="0" step="any" class="w-full text-sm font-black font-mono text-right bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3 py-2 text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" id="btn-save-yarn-edit" class="w-full py-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                <button type="submit" id="btn-save-yarn-edit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
                     <span>အချက်အလက် ပြင်ဆင်ချက် သိမ်းမည်</span>
                 </button>

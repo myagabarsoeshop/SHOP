@@ -69,6 +69,14 @@ export function getMyanmarTodayDate() {
 }
 
 /**
+ * [အသစ်ထည့်သွင်းရန်] URL မှ Year ကို ဖမ်းယူရန် သို့မဟုတ် လက်ရှိနှစ်ကို Default ယူရန်
+ */
+export function getQueryYear(url, defaultYear = null) {
+    if (!url || !url.searchParams) return String(defaultYear || new Date().getFullYear());
+    return url.searchParams.get("year") || String(defaultYear || new Date().getFullYear());
+}
+
+/**
  * ငွေပမာဏများကို Floating-point အမှားမပါစေရန် Kyat ကိန်းပြည့်သို့ နီးစပ်ရာယူခြင်း
  */
 export function roundKyat(val) {

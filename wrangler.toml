@@ -22,6 +22,7 @@ database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
 # 💡 2. ENVIRONMENT VARIABLES
 [vars]
 ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
+ADMIN_EMAIL = "myagabarsoeshop@gmail.com"
 
 # 💡 3. AUTOMATED CRON TRIGGERS (မြန်မာစံတော်ချိန် ည ၁၂ နာရီတိတိ / UTC 17:30)
 [triggers]

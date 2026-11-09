@@ -1,7 +1,7 @@
 <!-- cashbook-frontend/views/waste.html -->
 <div class="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
     
-    <!-- Top Action Toolbar -->
+    <!-- Top Action Toolbar (Standardized Pro Layout) -->
     <div class="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
         
         <!-- ဘယ်ဘက်ခြမ်း: Category Dropdown + Search Box -->
@@ -9,7 +9,7 @@
             <div class="relative w-44 md:w-48 shrink-0">
                 <i class="fa-solid fa-layer-group text-amber-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                 <select id="waste-category-filter" class="w-full pl-8 pr-7 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none shadow-sm">
-                    <option value="">All Categories</option>
+                    <option value="">အမျိုးအစား အားလုံး</option>
                 </select>
                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
             </div>
@@ -42,7 +42,7 @@
         </div>
     </div>
 
-    <!-- Table (13 Columns - Ref No moved to end, Reason only) -->
+    <!-- Waste Logs Table (13 Columns - Fixed DAMAGE QTY Header) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
         <table class="w-full text-left border-collapse min-w-[1300px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
@@ -53,8 +53,8 @@
                     <th class="py-2.5 px-4 w-32 text-left">CATEGORY</th>
                     <th class="py-2.5 px-4 min-w-[180px] text-left">ITEM NAME</th>
                     <th class="py-2.5 px-3 w-24 text-left">COLOR</th>
-                    <th class="py-2.5 px-3 w-20 text-left">SIZE</th>
-                    <th class="py-2.5 px-4 w-32 text-center">DEMIT QTY</th>
+                    <th class="py-2.5 px-3 w-20 text-left">UNIT</th>
+                    <th class="py-2.5 px-4 w-32 text-center">DAMAGE QTY</th>
                     <th class="py-2.5 px-4 w-28 text-right">PURCHASE</th>
                     <th class="py-2.5 px-4 w-32 text-right">WASTE VALUE</th>
                     <th class="py-2.5 px-4 min-w-[160px] text-left">REASON</th>
@@ -80,14 +80,23 @@
     <div id="waste-pagination" class="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50"></div>
 </div>
 
+<!-- Common Waste Reasons Datalist -->
+<datalist id="waste-reason-datalist">
+    <option value="အရောင်စွန်းပေခြင်း">
+    <option value="ရက်ကန်းချို့ယွင်းချက် (အပေါက်/အပြဲ)">
+    <option value="ကြွက်ကိုက် / ပိုးကိုက် ပျက်စီးခြင်း">
+    <option value="ရေစိုပျက်စီးခြင်း">
+    <option value="စတော့စစ်ဆေးချိန် လျော့နည်း/ပျောက်ဆုံး">
+</datalist>
+
 <!-- ===================================================================== -->
-<!-- Create Waste Modal                                                    -->
+<!-- Create Waste Modal (Pro Form Standard)                                -->
 <!-- ===================================================================== -->
 <div id="create-waste-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
-        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-            <div class="text-sm font-extrabold flex items-center gap-2.5">
-                <i class="fa-solid fa-box-open text-amber-400 opacity-90"></i>
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-xs font-extrabold flex items-center gap-2">
+                <i class="fa-solid fa-box-open text-amber-400"></i>
                 <span>အလေအလွင့် / ပျက်စီး စာရင်းအသစ်သွင်းမည်</span>
             </div>
             <button type="button" id="btn-close-create-waste" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
@@ -95,11 +104,11 @@
             </button>
         </div>
 
-        <form id="create-waste-form" class="p-6 space-y-4 overflow-y-auto">
+        <form id="create-waste-form" class="p-5 space-y-4 overflow-y-auto">
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပျက်စီး/ဆုံးရှုံးသော ပစ္စည်း ရွေးချယ်ပါ *</label>
                 <div class="relative">
-                    <select id="create-waste-prod-id" required class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none">
+                    <select id="create-waste-prod-id" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl pl-3.5 pr-8 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer appearance-none">
                         <!-- Dynamic Options -->
                     </select>
                     <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
@@ -114,17 +123,17 @@
 
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက် (Reason) *</label>
-                <input type="text" id="create-waste-reason" required placeholder="ဥပမာ - ကြွက်ကိုက် / အရောင်စွန်း / ပျောက်ဆုံး" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <input type="text" id="create-waste-reason" list="waste-reason-datalist" required placeholder="ဥပမာ - ကြွက်ကိုက် / အရောင်စွန်း / ပျောက်ဆုံး" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
             </div>
 
-            <div class="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 rounded-xl mt-2">
+            <div class="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 rounded-xl">
                 <p class="text-[11px] text-rose-700 dark:text-rose-400 font-bold leading-relaxed">
-                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> သတိပြုရန်: အတည်ပြုပြီးပါက လက်ကျန်စာရင်းမှ ချက်ချင်း အပြီးတိုင် နှုတ်သွားမည်ဖြစ်ပါသည်။
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> သတိပြုရန်: အတည်ပြုပြီးပါက လက်ကျန်စာရင်းမှ ချက်ချင်း နှုတ်သွားမည်ဖြစ်ပါသည်။
                 </p>
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" id="btn-submit-create-waste" class="w-full py-3 bg-amber-600 hover:bg-amber-500 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                <button type="submit" id="btn-submit-create-waste" class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
                     <span>အတည်ပြု၍ စာရင်းမှနှုတ်မည်</span>
                 </button>
@@ -134,13 +143,13 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- Edit Waste Modal (Admin Only)                                         -->
+<!-- Edit Waste Modal (Admin Only - Pro Form Standard)                     -->
 <!-- ===================================================================== -->
 <div id="waste-edit-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
-        <div class="p-5 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-            <div class="text-sm font-extrabold flex items-center gap-2.5">
-                <i class="fa-solid fa-pen-to-square text-amber-400 opacity-90"></i>
+        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+            <div class="text-xs font-extrabold flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square text-amber-400"></i>
                 <span>ပျက်စီးစာရင်း ပြင်ဆင်မည်</span>
             </div>
             <button type="button" id="btn-close-waste-edit-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
@@ -148,12 +157,12 @@
             </button>
         </div>
 
-        <form id="waste-edit-form" class="p-6 space-y-4">
+        <form id="waste-edit-form" class="p-5 space-y-4">
             <input type="hidden" id="edit-waste-id">
 
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ပစ္စည်းအမည်</label>
-                <input type="text" id="edit-waste-name" readonly class="w-full text-sm font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
+                <input type="text" id="edit-waste-name" readonly class="w-full text-xs font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
             </div>
 
             <div>
@@ -162,12 +171,12 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက်</label>
-                <input type="text" id="edit-waste-reason" class="w-full text-sm font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">အကြောင်းပြချက် *</label>
+                <input type="text" id="edit-waste-reason" list="waste-reason-datalist" required class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" id="btn-save-waste-edit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-white font-extrabold text-sm rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
+                <button type="submit" id="btn-save-waste-edit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
                     <span>ပြင်ဆင်ချက် သိမ်းဆည်းမည်</span>
                 </button>

@@ -23,6 +23,6 @@ database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
 [vars]
 ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
 
-# 💡 3. AUTOMATED CRON TRIGGERS
+# 💡 3. AUTOMATED CRON TRIGGERS (မြန်မာစံတော်ချိန် ည ၁၂ နာရီတိတိ / UTC 17:30)
 [triggers]
-crons = ["0 0 * * *"]
+crons = ["30 17 * * *"]

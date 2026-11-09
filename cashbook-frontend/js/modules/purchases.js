@@ -1,8 +1,8 @@
 // cashbook-frontend/js/modules/purchases.js
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
-import { ui } from "../core/ui.js"; // Standardized UI components (Toast, Confirm, escapeHtml, escapeCsv)
-import { setKPI } from "../app.js";
+import { ui } from "../core/ui.js";
+import { setKPI, getLocalTodayDate } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let purchasesList = [];
@@ -10,6 +10,7 @@ let currentFilteredPurchases = [];
 let masterProducts = [];
 let supplierList = [];
 let selectedOrderItems = [];
+let outsideClickBound = false;
 
 // စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
@@ -18,7 +19,7 @@ const pagination = new PaginationController({
 });
 
 /**
- * မြန်မာဂဏန်း (၀-၉) မှ အင်္ဂလိပ်ဂဏန်း (0-9) သို့ အလိုအလျောက် ချက်ချင်း ပြောင်းပေးသည့် Helper
+ * မြန်မာဂဏန်း (၀-၉) မှ အင်္ဂလိပ်ဂဏန်း (0-9) သို့ အလိုအလျောက် ပြောင်းပေးသည့် Helper
  */
 function normalizeDigits(val) {
     if (!val && val !== 0) return "";
@@ -30,10 +31,11 @@ function normalizeDigits(val) {
     return cleanStr;
 }
 
-function parseAnyNumber(val) {
+function parseAnyNumber(val, isInteger = true) {
     const clean = normalizeDigits(val);
     const num = parseFloat(clean);
-    return isNaN(num) ? 0 : num;
+    if (isNaN(num)) return 0;
+    return isInteger ? Math.round(num) : Math.round(num * 1000) / 1000;
 }
 
 /**
@@ -41,6 +43,7 @@ function parseAnyNumber(val) {
  */
 function formatVRNo(pur, index) {
     if (pur.vr_no && /^\d{6}-\d{2,}$/.test(pur.vr_no)) return pur.vr_no;
+    if (pur.purchase_no && /^\d{6}-\d{2,}$/.test(pur.purchase_no)) return pur.purchase_no;
     
     const d = pur.created_at ? new Date(pur.created_at) : new Date();
     const dd = String(d.getDate()).padStart(2, "0");
@@ -55,18 +58,21 @@ function formatVRNo(pur, index) {
 
 export async function initPurchases() {
     bindEvents();
-    await loadMasterProducts();
-    await loadSuppliers();
-    await loadPurchases();
+    await Promise.all([
+        loadMasterProducts(),
+        loadSuppliers(),
+        loadPurchases()
+    ]);
 }
 
 function bindEvents() {
-    // Toolbar Buttons
+    // Toolbar Buttons & Filters
     document.getElementById("btn-add-purchase")?.addEventListener("click", () => openPurchaseModal());
     document.getElementById("btn-close-purchase-modal")?.addEventListener("click", closePurchaseModal);
     document.getElementById("btn-cancel-purchase")?.addEventListener("click", closePurchaseModal);
     document.getElementById("btn-submit-purchase")?.addEventListener("click", submitPurchase);
     document.getElementById("pur-search")?.addEventListener("input", filterAndRenderPurchases);
+    document.getElementById("pur-category-filter")?.addEventListener("change", filterAndRenderPurchases);
 
     // Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-purchases");
@@ -74,10 +80,12 @@ function bindEvents() {
         refreshBtn.addEventListener("click", async () => {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
-            await loadMasterProducts();
-            await loadSuppliers();
-            await loadPurchases();
-            setTimeout(() => icon?.classList.remove("fa-spin"), 500);
+            await Promise.all([
+                loadMasterProducts(),
+                loadSuppliers(),
+                loadPurchases()
+            ]);
+            setTimeout(() => icon?.classList.remove("fa-spin"), 400);
             ui.toast.info("အဝယ်စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
         });
     }
@@ -122,7 +130,7 @@ function bindEvents() {
         });
     }
 
-    // Quick Search Input Events
+    // Quick Search Input Events (With Barcode Scanner Enter Key Auto-Add)
     const searchInput = document.getElementById("pur-quick-search-input");
     const catFilter = document.getElementById("pur-quick-cat-filter");
     const clearBtn = document.getElementById("btn-clear-quick-search");
@@ -133,6 +141,23 @@ function bindEvents() {
         renderQuickSuggestions();
     });
     searchInput?.addEventListener("focus", renderQuickSuggestions);
+    searchInput?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const kw = searchInput.value.trim().toLowerCase();
+            if (!kw) return;
+            const exact = masterProducts.find(p =>
+                (p.barcode && String(p.barcode).toLowerCase() === kw) ||
+                (p.sku && String(p.sku).toLowerCase() === kw)
+            );
+            if (exact) {
+                addOrderItem(exact);
+                searchInput.value = "";
+                clearBtn?.classList.add("hidden");
+                document.getElementById("pur-quick-suggestions")?.classList.add("hidden");
+            }
+        }
+    });
     catFilter?.addEventListener("change", renderQuickSuggestions);
 
     clearBtn?.addEventListener("click", () => {
@@ -142,12 +167,15 @@ function bindEvents() {
         searchInput?.focus();
     });
 
-    // Close Dropdown on outside click
-    document.addEventListener("click", (e) => {
-        if (!e.target.closest("#pur-quick-suggestions") && !e.target.closest("#pur-quick-search-input") && !e.target.closest("#pur-quick-cat-filter")) {
-            document.getElementById("pur-quick-suggestions")?.classList.add("hidden");
-        }
-    });
+    // Close Dropdown on outside click (Bound only once globally)
+    if (!outsideClickBound) {
+        document.addEventListener("click", (e) => {
+            if (!e.target.closest("#pur-quick-suggestions") && !e.target.closest("#pur-quick-search-input") && !e.target.closest("#pur-quick-cat-filter")) {
+                document.getElementById("pur-quick-suggestions")?.classList.add("hidden");
+            }
+        });
+        outsideClickBound = true;
+    }
 
     // Dedicated New Product Sub-Modal Events
     document.getElementById("btn-open-create-prod-modal")?.addEventListener("click", () => openNewProductModal());
@@ -156,7 +184,8 @@ function bindEvents() {
     });
     document.getElementById("new-prod-form")?.addEventListener("submit", submitNewProductSubModal);
     document.getElementById("sub-cat")?.addEventListener("input", (e) => {
-        document.getElementById("sub-sku").value = generateAutoSKU(e.target.value.trim());
+        const skuEl = document.getElementById("sub-sku");
+        if (skuEl) skuEl.value = generateAutoSKU(e.target.value.trim());
     });
 
     // Dedicated Quick New Supplier Sub-Modal Events
@@ -246,13 +275,23 @@ async function submitQuickSupplierForm(e) {
 
 function populateCategoryFilters() {
     const categories = [...new Set(masterProducts.map(p => (p.category || "").trim()).filter(Boolean))];
-    const catSelect = document.getElementById("pur-quick-cat-filter");
+    const mainCatSelect = document.getElementById("pur-category-filter");
+    const quickCatSelect = document.getElementById("pur-quick-cat-filter");
     const datalist = document.getElementById("sub-cat-datalist");
 
-    if (catSelect) {
-        catSelect.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${categories.length})</option>`;
+    if (mainCatSelect) {
+        const prev = mainCatSelect.value;
+        mainCatSelect.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${categories.length})</option>`;
         categories.forEach(c => {
-            catSelect.innerHTML += `<option value="${ui.escapeHtml(c)}">${ui.escapeHtml(c)}</option>`;
+            mainCatSelect.innerHTML += `<option value="${ui.escapeHtml(c)}">${ui.escapeHtml(c)}</option>`;
+        });
+        if (categories.includes(prev)) mainCatSelect.value = prev;
+    }
+
+    if (quickCatSelect) {
+        quickCatSelect.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${categories.length})</option>`;
+        categories.forEach(c => {
+            quickCatSelect.innerHTML += `<option value="${ui.escapeHtml(c)}">${ui.escapeHtml(c)}</option>`;
         });
     }
 
@@ -269,7 +308,7 @@ async function loadPurchases() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="17" class="p-16 text-center text-slate-400">
+                <td colspan="18" class="p-16 text-center text-slate-400">
                     <i class="fa-solid fa-spinner fa-spin text-2xl mb-3 text-emerald-500"></i>
                     <div class="font-bold text-xs">အဝယ်စာရင်းများ ဆွဲယူနေပါသည်...</div>
                 </td>
@@ -290,7 +329,7 @@ async function loadPurchases() {
         let creditPurchasesTotal = 0;
 
         purchasesList.forEach(p => {
-            const lineAmt = Number(p.subtotal || (Number(p.quantity || 0) * Number(p.unit_cost || 0)));
+            const lineAmt = Number(p.subtotal || Math.round(Number(p.quantity || 0) * Number(p.unit_cost || 0)));
             const method = String(p.payment_method || "cash").toLowerCase();
             const paidAmt = Number(p.paid_amount !== undefined ? p.paid_amount : p.total_amount);
 
@@ -306,19 +345,20 @@ async function loadPurchases() {
         setKPI(3, "Cash Purchases", cashPurchasesTotal, "fa-money-bill-wave", "purple");
         setKPI(4, "Credit Purchases", creditPurchasesTotal, "fa-hand-holding-dollar", "amber");
 
-        pagination.reset();
-        renderPurchasesTable();
+        filterAndRenderPurchases();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="17" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="18" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
 
 function filterAndRenderPurchases() {
+    const cat = document.getElementById("pur-category-filter")?.value || "";
     const kw = (document.getElementById("pur-search")?.value || "").trim().toLowerCase();
 
     currentFilteredPurchases = purchasesList.filter(p => {
+        if (cat && p.category !== cat) return false;
         if (!kw) return true;
         const hay = `${p.purchase_no || ""} ${p.ref_no || ""} ${p.sku || ""} ${p.barcode || ""} ${p.item_name || ""} ${p.category || ""} ${p.color || ""} ${p.supplier_name || ""}`.toLowerCase();
         return hay.includes(kw);
@@ -329,7 +369,7 @@ function filterAndRenderPurchases() {
 }
 
 /**
- * Purchases History Table Rendering (၁၇ ကော်လံစနစ်)
+ * Purchases History Table Rendering (QTY အပါအဝင် ၁၈ ကော်လံစနစ်)
  */
 function renderPurchasesTable() {
     const tbody = document.getElementById("pur-table-body");
@@ -339,7 +379,7 @@ function renderPurchasesTable() {
     if (currentFilteredPurchases.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="17" class="p-16 text-center text-slate-400 text-xs font-bold">
+                <td colspan="18" class="p-16 text-center text-slate-400 text-xs font-bold">
                     <i class="fa-solid fa-cart-flatbed text-3xl mb-3 opacity-30"></i>
                     <div>အဝယ်စာရင်း မှတ်တမ်း မရှိသေးပါ</div>
                 </td>
@@ -353,7 +393,8 @@ function renderPurchasesTable() {
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
     pageItems.forEach((pur, idx) => {
-        const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
+        const rawDate = pur.purchase_date || (pur.created_at ? pur.created_at.split("T")[0] : "");
+        const dateStr = rawDate ? new Date(rawDate).toLocaleDateString("en-GB") : "-";
         const vrNo = formatVRNo(pur, startIdx + idx);
         const barcodeStr = pur.barcode || pur.sku || "-";
         const refNo = pur.ref_no || "-";
@@ -379,7 +420,7 @@ function renderPurchasesTable() {
 
         const unitCost = Number(pur.unit_cost || 0);
         const qty = Number(pur.quantity || 0);
-        const amount = Number(pur.subtotal || (unitCost * qty));
+        const amount = Number(pur.subtotal || Math.round(unitCost * qty));
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
 
@@ -405,13 +446,13 @@ function renderPurchasesTable() {
         `;
 
         const row = document.createElement("tr");
-        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-12 whitespace-nowrap";
+        row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         row.innerHTML = `
             <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
             
             <!-- 2. DATE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-medium text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
             <!-- 3. VR NO -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
@@ -420,45 +461,48 @@ function renderPurchasesTable() {
             <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
             
             <!-- 5. CATEGORY -->
-            <td class="py-2 px-4 text-left text-base font-semibold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(pur.category || "-")}">${ui.escapeHtml(pur.category || "-")}</td>
             
             <!-- 6. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-base font-bold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(pur.item_name || "-")}">${ui.escapeHtml(pur.item_name || "-")}</td>
             
             <!-- 7. COLOR -->
-            <td class="py-2 px-3 text-left text-base font-medium text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
             
-            <!-- 8. UNIT PRICE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
+            <!-- 8. QTY (အသစ်ထည့်သွင်းထားသော အရေအတွက်ကော်လံ) -->
+            <td class="py-2 px-3 text-center font-mono text-sm font-black text-blue-600 dark:text-blue-400 w-20">${qty.toLocaleString()}</td>
+
+            <!-- 9. UNIT PRICE -->
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">${unitCost.toLocaleString()}</td>
             
-            <!-- 9. AMOUNT -->
-            <td class="py-2 px-4 text-right font-mono text-base font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
+            <!-- 10. AMOUNT -->
+            <td class="py-2 px-4 text-right font-mono text-sm font-black text-rose-600 dark:text-rose-400 w-32">${amount.toLocaleString()}</td>
             
-            <!-- 10. METHOD -->
+            <!-- 11. METHOD -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${methodStr}</td>
             
-            <!-- 11. TYPE -->
+            <!-- 12. TYPE -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold w-20 ${typeColorClass}">${typeStr}</td>
             
-            <!-- 12. WHOLESALE -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
+            <!-- 13. WHOLESALE -->
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-blue-600 dark:text-blue-400 w-28">${wholesalePrice.toLocaleString()}</td>
             
-            <!-- 13. RETAIL -->
-            <td class="py-2 px-4 text-right font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
+            <!-- 14. RETAIL -->
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400 w-28">${retailPrice.toLocaleString()}</td>
             
-            <!-- 14. SUPPLIER -->
-            <td class="py-2 px-4 text-left text-base font-semibold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
+            <!-- 15. SUPPLIER -->
+            <td class="py-2 px-4 text-left text-xs font-bold text-slate-800 dark:text-slate-200 min-w-[160px] truncate" title="${ui.escapeHtml(pur.supplier_name || "-")}">${ui.escapeHtml(pur.supplier_name || "-")}</td>
             
-            <!-- 15. REF -->
+            <!-- 16. REF -->
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(refNo)}">${ui.escapeHtml(refNo)}</td>
 
-            <!-- 16. SURPLUS & DEFICIT -->
+            <!-- 17. SURPLUS & DEFICIT -->
             <td class="py-2 px-3 text-center font-mono text-xs w-28">
                 ${diffBadge}
             </td>
 
-            <!-- 17. ACTION (Sticky Right) -->
-            <td class="py-2 px-3 text-center sticky right-0 bg-white dark:bg-[#151e32] z-10 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] w-24">
+            <!-- 18. ACTION (Sticky Right) -->
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
                 ${actionButtons}
             </td>
         `;
@@ -486,6 +530,7 @@ function generateAutoSKU(categoryName = "") {
     else if (cat.includes("အင်္ကျီ") || cat.includes("shirt")) prefix = "SHRT";
     else if (cat.includes("ပုဆိုး") || cat.includes("pasho")) prefix = "PASHO";
     else if (cat.includes("လုံချည်") || cat.includes("lon")) prefix = "LON";
+    else if (cat.includes("ပိုး")) prefix = "SILK";
 
     const rand = Math.floor(1000 + Math.random() * 9000);
     return `${prefix}-${rand}`;
@@ -502,7 +547,7 @@ function openPurchaseModal(pur = null) {
     const infoGrid = document.getElementById("pur-info-grid");
 
     if (pur) {
-        title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
+        title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
         editIdInput.value = pur.purchase_id || pur.id;
         document.getElementById("pur-supplier").value = pur.supplier_name || "";
         document.getElementById("pur-ref-no").value = pur.ref_no || "";
@@ -519,9 +564,8 @@ function openPurchaseModal(pur = null) {
             infoGrid?.classList.add("md:grid-cols-4");
         }
 
-        if (pur.created_at) {
-            document.getElementById("pur-date").value = pur.created_at.split("T")[0];
-        }
+        const dateVal = pur.purchase_date || (pur.created_at ? pur.created_at.split("T")[0] : getLocalTodayDate());
+        document.getElementById("pur-date").value = dateVal;
 
         selectedOrderItems = purchasesList
             .filter(p => (p.purchase_id || p.id) == (pur.purchase_id || pur.id))
@@ -540,14 +584,14 @@ function openPurchaseModal(pur = null) {
                 wholesale_price: Number(p.wholesale_price || 0),
                 retail_margin_pct: p.unit_cost > 0 && p.retail_price > p.unit_cost ? Math.round(((p.retail_price - p.unit_cost) / p.unit_cost) * 100) : 0,
                 wholesale_margin_pct: p.unit_cost > 0 && p.wholesale_price > p.unit_cost ? Math.round(((p.wholesale_price - p.unit_cost) / p.unit_cost) * 100) : 0,
-                subtotal: Number(p.subtotal || (p.quantity * p.unit_cost))
+                subtotal: Number(p.subtotal || Math.round(p.quantity * p.unit_cost))
             }));
 
         const paidAmt = pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount;
         document.getElementById("pur-actual-paid").value = paidAmt;
 
     } else {
-        title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
+        title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
         editIdInput.value = "";
         document.getElementById("pur-supplier").value = "";
         document.getElementById("pur-ref-no").value = "";
@@ -557,9 +601,7 @@ function openPurchaseModal(pur = null) {
         infoGrid?.classList.remove("md:grid-cols-5");
         infoGrid?.classList.add("md:grid-cols-4");
 
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-        document.getElementById("pur-date").value = todayStr;
+        document.getElementById("pur-date").value = getLocalTodayDate();
 
         selectedOrderItems = [];
         document.getElementById("pur-actual-paid").value = "";
@@ -619,13 +661,13 @@ function renderQuickSuggestions() {
                     <div>
                         <div class="font-extrabold text-slate-900 dark:text-white text-xs">${ui.escapeHtml(p.item_name)}</div>
                         <div class="text-[11px] text-slate-400 font-mono">
-                            ${ui.escapeHtml(p.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(p.category || "-")}</span> ${p.color ? `• ${ui.escapeHtml(p.color)}` : ''}
+                            ${ui.escapeHtml(p.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(p.category || "-")}</span> ${p.color ? `• ${ui.escapeHtml(p.color)}` : ""}
                         </div>
                     </div>
                 </div>
                 <div class="text-right">
                     <div class="font-mono font-bold text-slate-700 dark:text-slate-300 text-xs">ဝယ်ရင်း: ${Number(p.cost_price || 0).toLocaleString()} Ks</div>
-                    <div class="text-[10px] text-slate-400">လက်ရှိစတော့: ${Number(p.current_stock || 0).toLocaleString()} ${ui.escapeHtml(p.size || 'ထည်')}</div>
+                    <div class="text-[10px] text-slate-400">လက်ရှိစတော့: ${Number(p.current_stock || 0).toLocaleString()} ${ui.escapeHtml(p.size || "ထည်")}</div>
                 </div>
             `;
             card.onclick = () => {
@@ -645,7 +687,7 @@ function addOrderItem(prod, isNew = false) {
     const existing = selectedOrderItems.find(it => !it.is_new && it.product_id === prod.id);
     if (existing) {
         existing.quantity += 1;
-        existing.subtotal = existing.quantity * existing.unit_cost;
+        existing.subtotal = Math.round(existing.quantity * existing.unit_cost);
     } else {
         const cost = Number(prod.cost_price || 0);
         const retail = Number(prod.retail_price || 0);
@@ -711,7 +753,7 @@ function renderOrderItemsTable() {
             <td class="py-1 px-3">
                 <div class="font-extrabold text-slate-900 dark:text-white text-xs truncate max-w-[220px]" title="${ui.escapeHtml(item.item_name)}">${ui.escapeHtml(item.item_name)}</div>
                 <div class="text-[10px] text-slate-400 font-mono truncate max-w-[220px]">
-                    ${ui.escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(item.category || "-")}</span> ${item.color ? `• ${ui.escapeHtml(item.color)}` : ''} (${ui.escapeHtml(item.size || 'ထည်')})
+                    ${ui.escapeHtml(item.sku || "-")} • <span class="text-emerald-500 font-bold">${ui.escapeHtml(item.category || "-")}</span> ${item.color ? `• ${ui.escapeHtml(item.color)}` : ""} (${ui.escapeHtml(item.size || "ထည်")})
                 </div>
             </td>
 
@@ -733,7 +775,7 @@ function renderOrderItemsTable() {
                     <input type="text" inputmode="numeric" value="${item.retail_price}" data-idx="${index}" placeholder="ရောင်းဈေး"
                         class="item-retail w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                     <div class="flex items-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-1.5 h-7">
-                        <input type="text" inputmode="numeric" value="${item.retail_margin_pct || ''}" placeholder="0" data-idx="${index}"
+                        <input type="text" inputmode="numeric" value="${item.retail_margin_pct || ""}" placeholder="0" data-idx="${index}"
                             class="item-retail-pct w-8 text-[11px] font-mono text-right bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none">
                         <span class="text-[10px] text-slate-400 ml-0.5">%</span>
                     </div>
@@ -746,7 +788,7 @@ function renderOrderItemsTable() {
                     <input type="text" inputmode="numeric" value="${item.wholesale_price}" data-idx="${index}" placeholder="လက်ကား"
                         class="item-wholesale w-24 h-7 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-2 text-right text-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500">
                     <div class="flex items-center bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-1.5 h-7">
-                        <input type="text" inputmode="numeric" value="${item.wholesale_margin_pct || ''}" placeholder="0" data-idx="${index}"
+                        <input type="text" inputmode="numeric" value="${item.wholesale_margin_pct || ""}" placeholder="0" data-idx="${index}"
                             class="item-wholesale-pct w-8 text-[11px] font-mono text-right bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none">
                         <span class="text-[10px] text-slate-400 ml-0.5">%</span>
                     </div>
@@ -783,9 +825,9 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const qty = parseAnyNumber(e.target.value);
+            const qty = parseAnyNumber(e.target.value, false);
             selectedOrderItems[idx].quantity = qty;
-            selectedOrderItems[idx].subtotal = qty * selectedOrderItems[idx].unit_cost;
+            selectedOrderItems[idx].subtotal = Math.round(qty * selectedOrderItems[idx].unit_cost);
 
             tr.querySelector(".line-subtotal").textContent = Number(selectedOrderItems[idx].subtotal).toLocaleString();
             updateOrderSummary();
@@ -799,7 +841,7 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const cost = parseAnyNumber(e.target.value);
+            const cost = parseAnyNumber(e.target.value, true);
             selectedOrderItems[idx].unit_cost = cost;
 
             if (selectedOrderItems[idx].retail_margin_pct > 0) {
@@ -813,7 +855,7 @@ function attachRowEvents() {
                 tr.querySelector(".item-wholesale").value = newWholesale;
             }
 
-            selectedOrderItems[idx].subtotal = selectedOrderItems[idx].quantity * cost;
+            selectedOrderItems[idx].subtotal = Math.round(selectedOrderItems[idx].quantity * cost);
             tr.querySelector(".line-subtotal").textContent = Number(selectedOrderItems[idx].subtotal).toLocaleString();
             updateOrderSummary();
         };
@@ -826,7 +868,7 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const retail = parseAnyNumber(e.target.value);
+            const retail = parseAnyNumber(e.target.value, true);
             selectedOrderItems[idx].retail_price = retail;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && retail > cost) {
@@ -844,7 +886,7 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const pct = parseAnyNumber(e.target.value);
+            const pct = parseAnyNumber(e.target.value, false);
             selectedOrderItems[idx].retail_margin_pct = pct;
             const newRetail = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
             selectedOrderItems[idx].retail_price = newRetail;
@@ -859,7 +901,7 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const wholesale = parseAnyNumber(e.target.value);
+            const wholesale = parseAnyNumber(e.target.value, true);
             selectedOrderItems[idx].wholesale_price = wholesale;
             const cost = selectedOrderItems[idx].unit_cost;
             if (cost > 0 && wholesale > cost) {
@@ -877,7 +919,7 @@ function attachRowEvents() {
 
             const tr = e.target.closest("tr");
             const idx = Number(e.target.dataset.idx);
-            const pct = parseAnyNumber(e.target.value);
+            const pct = parseAnyNumber(e.target.value, false);
             selectedOrderItems[idx].wholesale_margin_pct = pct;
             const newWholesale = Math.round(selectedOrderItems[idx].unit_cost * (1 + pct / 100));
             selectedOrderItems[idx].wholesale_price = newWholesale;
@@ -915,7 +957,7 @@ function updateDifference() {
 
     if (!paidInput || !diffAmount || !diffLabel) return;
 
-    const actualPaid = parseAnyNumber(paidInput.value);
+    const actualPaid = parseAnyNumber(paidInput.value, true);
     
     if (paidInput.value === "") {
         diffLabel.textContent = "Surplus / Deficit";
@@ -993,6 +1035,7 @@ function submitNewProductSubModal(e) {
 // --- Submit Purchase Order to Backend API ---
 async function submitPurchase() {
     const supplier = document.getElementById("pur-supplier")?.value.trim();
+    const purchaseDate = document.getElementById("pur-date")?.value || getLocalTodayDate();
     const refNo = document.getElementById("pur-ref-no")?.value.trim() || null;
     const paymentMethod = document.getElementById("pur-payment-method")?.value || "cash";
     const bankName = document.getElementById("pur-bank-name")?.value.trim();
@@ -1024,7 +1067,7 @@ async function submitPurchase() {
     if (paymentMethod === "credit") {
         paidAmount = 0;
     } else if (paidInputVal !== undefined && paidInputVal !== null && paidInputVal !== "") {
-        paidAmount = parseAnyNumber(paidInputVal);
+        paidAmount = parseAnyNumber(paidInputVal, true);
     } else {
         paidAmount = itemsTotal;
     }
@@ -1068,6 +1111,7 @@ async function submitPurchase() {
     const payload = {
         branch_id: branchId,
         supplier_name: supplier,
+        purchase_date: purchaseDate,
         ref_no: refNo,
         items_total: itemsTotal,
         total_amount: itemsTotal,
@@ -1090,12 +1134,14 @@ async function submitPurchase() {
             ui.toast.success("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
         } else {
             const res = await api.post("/purchases", payload);
-            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (VR: ${res.data?.purchaseNo || 'OK'})`);
+            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (VR: ${res.data?.purchaseNo || "OK"})`);
         }
         closePurchaseModal();
-        await loadMasterProducts();
-        await loadSuppliers();
-        await loadPurchases();
+        await Promise.all([
+            loadMasterProducts(),
+            loadSuppliers(),
+            loadPurchases()
+        ]);
     } catch (err) {
         ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
@@ -1107,12 +1153,12 @@ async function submitPurchase() {
 }
 
 async function deletePurchase(id) {
-    const confirmed = await ui.confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းမှလည်း ပြန်နုတ်ပေးပါမည်)", "error");
+    const confirmed = await ui.confirm("ဤအဝယ်စာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲမှ ပစ္စည်းအရေအတွက်များ ပြန်နုတ်ပြီး ငွေစာရင်းနှင့် ပွဲရုံအကြွေးစာရင်းမှလည်း ပြန်နုတ်ပေးပါမည်)", "error");
     if (!confirmed) return;
 
     try {
         await api.delete(`/purchases/${id}`);
-        ui.toast.success("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့နှင့် ငွေစာရင်း ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့၊ ငွေစာရင်းနှင့် ပွဲရုံအကြွေး ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
         await loadPurchases();
     } catch (err) {
         ui.toast.error("ဖျက်၍မရပါ: " + err.message);
@@ -1120,7 +1166,7 @@ async function deletePurchase(id) {
 }
 
 /**
- * Purchases စာရင်းအား CSV Export ထုတ်ယူခြင်း
+ * Purchases စာရင်းအား CSV Export ထုတ်ယူခြင်း (QTY အပါအဝင် ၁၇ ကော်လံ)
  */
 function exportPurchasesToCSV() {
     const listToExport = currentFilteredPurchases.length > 0 ? currentFilteredPurchases : purchasesList;
@@ -1129,18 +1175,20 @@ function exportPurchasesToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် အဝယ်စာရင်း မရှိသေးပါ။");
     }
 
-    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER,REF,SURPLUS_DEFICIT\n";
+    let csvContent = "NO,DATE,VR NO,BARCODE,CATEGORY,ITEM NAME,COLOR,QTY,UNIT PRICE,AMOUNT,METHOD,TYPE,WHOLESALE,RETAIL,SUPPLIER,REF,SURPLUS_DEFICIT\n";
 
     listToExport.forEach((pur, idx) => {
         const no = idx + 1;
-        const dateStr = pur.created_at ? new Date(pur.created_at).toLocaleDateString("en-GB") : "-";
+        const rawDate = pur.purchase_date || (pur.created_at ? pur.created_at.split("T")[0] : "");
+        const dateStr = rawDate ? new Date(rawDate).toLocaleDateString("en-GB") : "-";
         const vrNo = formatVRNo(pur, idx);
         const barcodeStr = pur.barcode || pur.sku || "-";
         const categoryStr = pur.category || "-";
         const itemName = pur.item_name || "-";
         const color = pur.color || "-";
+        const qty = Number(pur.quantity || 0);
         const unitCost = Number(pur.unit_cost || 0);
-        const amount = Number(pur.subtotal || (unitCost * Number(pur.quantity || 0)));
+        const amount = Number(pur.subtotal || Math.round(unitCost * qty));
 
         const rawMethod = String(pur.payment_method || "cash").toLowerCase();
         const paidAmount = Number(pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount);
@@ -1167,6 +1215,7 @@ function exportPurchasesToCSV() {
             ui.escapeCsv(categoryStr),
             ui.escapeCsv(itemName),
             ui.escapeCsv(color),
+            qty,
             unitCost,
             amount,
             ui.escapeCsv(methodStr),
@@ -1184,7 +1233,7 @@ function exportPurchasesToCSV() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Purchases_Summary_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `Purchases_Summary_${getLocalTodayDate()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
 }

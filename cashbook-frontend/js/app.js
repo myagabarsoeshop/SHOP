@@ -18,18 +18,18 @@ import { initStockReport } from "./modules/stock_report.js";
 import { initSystemSetting } from "./modules/system_setting.js";
 
 const VIEW_TITLES = {
-    dashboard: "Dashboard (လုပ်ငန်းအနှစ်ချုပ်)",
+    dashboard: "Dashboard",
     pos: "Sale Counter (POS)",
-    cashbook: "Cash Book (နေ့စဉ်ငွေစာရင်း)",
-    inventory: "Stock Balances (အထည်လက်ကျန်)",
-    purchases: "Purchases (အဝယ်နှင့် စတော့အဝင်)",
-    waste: "Damage & Waste (ပျက်စီး/အလေအလွင့်)",
-    transfers: "Stock Transfers (ဆိုင်ခွဲစတော့လွှဲပြောင်းမှု)",
-    stock_report: "Stock Report (လစဉ်စတော့လှုပ်ရှားမှုနှင့် လက်ကျန်မက်ထရစ်)",
-    master_products: "Product Master (ဗဟို ကုန်ပစ္စည်းစာရင်း)",
-    yarn: "Yarn Balances (ချည်စတိုနှင့် ရက်ကန်း)",
-    customers: "Customers & Suppliers (ဖောက်သည်နှင့် ပွဲရုံကြွေးမြီစာရင်း)",
-    system_setting: "System Setting (စနစ် ဆက်တင်နှင့် အရင်းအမြစ်)"
+    cashbook: "Cash Book",
+    inventory: "Stock Balances",
+    purchases: "Purchases",
+    waste: "Damage & Waste",
+    transfers: "Stock Transfers",
+    stock_report: "Stock Report",
+    master_products: "Product Master",
+    yarn: "Yarn Balances",
+    customers: "Customers & Suppliers",
+    system_setting: "System Setting"
 };
 
 let currentActiveView = "dashboard";

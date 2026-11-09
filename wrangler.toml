@@ -1,6 +1,6 @@
 # ==============================================================================
 # MYA GABAR SOE SHOP - CLOUDFLARE WORKER CONFIGURATION
-# File: wrangler.toml   
+# File: wrangler.toml
 # ==============================================================================
 
 name = "shop"

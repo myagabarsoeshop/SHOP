@@ -1,97 +1,175 @@
 <!-- cashbook-frontend/views/system_setting.html -->
-<div class="h-full w-full flex flex-col gap-6 p-6 overflow-y-auto">
-    <!-- Header Card -->
-    <div class="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <h2 class="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <i class="fa-solid fa-sliders text-emerald-600"></i>
-                စနစ် ဆက်တင်နှင့် အရင်းအမြစ် စောင့်ကြည့်မှု (SYSTEM SETTING)
-            </h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Cloudflare D1 Quota သုံးစွဲမှုနှင့် အလိုအလျောက် အီးမေးလ်ပို့ခြင်း စနစ်
-            </p>
+<div class="h-full w-full flex flex-col gap-3.5 overflow-y-auto pr-1">
+    
+    <!-- 1. Header Card -->
+    <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div class="flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-sliders"></i>
+            </div>
+            <div>
+                <h2 class="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                    စနစ် ဆက်တင်နှင့် အရင်းအမြစ် စောင့်ကြည့်မှု (SYSTEM SETTING)
+                </h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                    Cloudflare D1 Free Tier သုံးစွဲမှု၊ နှစ်ချုပ် Excel Backup နှင့် အကောင့်လုံခြုံရေး စီမံခန့်ခွဲမှု
+                </p>
+            </div>
         </div>
-        <button type="button" id="btn-refresh-quota" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer shadow-sm">
-            <i class="fa-solid fa-arrows-rotate"></i>
+        <button type="button" id="btn-refresh-quota" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-xl border border-slate-200 dark:border-slate-700 transition flex items-center gap-2 cursor-pointer shadow-sm active:scale-95">
+            <i class="fa-solid fa-arrows-rotate text-emerald-500"></i>
             <span>ဒေတာ Refresh မည်</span>
         </button>
     </div>
 
-    <!-- D1 Quota Resource Monitor Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-bold text-slate-500">D1 Read Operations</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Safe</span>
+    <!-- 2. D1 Quota Resource Monitor Cards (4-Grid) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 shrink-0">
+        <!-- Reads -->
+        <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">D1 Read Operations</span>
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">Optimized</span>
             </div>
-            <div id="quota-reads-val" class="text-2xl font-black font-mono text-slate-800 dark:text-slate-100 mb-2">0 / 100k</div>
+            <div id="quota-reads-val" class="text-xl font-black font-mono text-slate-900 dark:text-white mb-2.5">0 / 5M</div>
             <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div id="quota-reads-bar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                <div id="quota-reads-bar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 2%"></div>
             </div>
         </div>
 
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-bold text-slate-500">D1 Write Operations</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">Normal</span>
+        <!-- Writes -->
+        <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">D1 Write Operations</span>
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-500/15 text-blue-600 dark:text-blue-400">Batched</span>
             </div>
-            <div id="quota-writes-val" class="text-2xl font-black font-mono text-slate-800 dark:text-slate-100 mb-2">0 / 100k</div>
+            <div id="quota-writes-val" class="text-xl font-black font-mono text-slate-900 dark:text-white mb-2.5">0 / 100k</div>
             <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div id="quota-writes-bar" class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                <div id="quota-writes-bar" class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style="width: 2%"></div>
             </div>
         </div>
 
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-bold text-slate-500">Database Storage</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">Free Tier</span>
+        <!-- Storage -->
+        <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Database Storage</span>
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-purple-500/15 text-purple-600 dark:text-purple-400">Free Tier</span>
             </div>
-            <div id="quota-storage-val" class="text-2xl font-black font-mono text-slate-800 dark:text-slate-100 mb-2">0 MB / 5 GB</div>
+            <div id="quota-storage-val" class="text-xl font-black font-mono text-slate-900 dark:text-white mb-2.5">0 MB / 5 GB</div>
             <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div id="quota-storage-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                <div id="quota-storage-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 1%"></div>
             </div>
         </div>
 
-        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-bold text-slate-500">Cloudflare D1 Plan</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">Active</span>
+        <!-- Plan Status -->
+        <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Cloudflare D1 Plan</span>
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400">Active</span>
             </div>
-            <div class="text-xl font-black text-emerald-600 mb-1">Free Tier</div>
-            <div class="text-[11px] text-slate-400">လုံလောက်မှု အခြေအနေ: ကောင်းမွန်</div>
+            <div class="my-1">
+                <div class="text-lg font-black text-emerald-600 dark:text-emerald-400">Free Tier (v3.0)</div>
+                <div class="text-[11px] font-semibold text-slate-400">Composite Indexes & Batching Enabled</div>
+            </div>
         </div>
     </div>
 
-    <!-- Automated Email Report Dispatcher Section -->
-    <div class="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-2">
-            <i class="fa-solid fa-envelope text-emerald-600"></i>
-            နှစ်အလိုက် အစီရင်ခံစာများ အလိုအလျောက် အီးမေးလ်ပို့ခြင်း (Excel Auto-Email)
-        </h3>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-6">
-            သတ်မှတ်ထားသော နှစ်အလိုက် Financial & Stock Reports များကို Excel ဖိုင်ဖြင့် တိုက်ရိုက် အီးမေးလ်ပို့မည်
-        </p>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+    <!-- 3. Bottom Two-Column Section: Email Backup & Password Security -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 flex-1 min-h-0">
+        
+        <!-- Left Card: Automated Email Report Dispatcher Section -->
+        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">အစီရင်ခံမည့် နှစ် (Year) *</label>
-                <select id="setting-report-year" class="w-full px-3 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100">
-                    <!-- Loaded dynamically -->
-                </select>
+                <div class="flex items-center gap-2.5 mb-2">
+                    <div class="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm shrink-0">
+                        <i class="fa-solid fa-file-excel"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">
+                            နှစ်အလိုက် အစီရင်ခံစာ အီးမေးလ်ပို့ခြင်း (Excel Backup)
+                        </h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                            Database ရှိ ဇယား (၇) ခုလုံးကို Sheet အလိုက် ခွဲ၍ Excel (.xls) ဖိုင်ဖြင့် အီးမေးလ်ပို့ပေးပါမည်
+                        </p>
+                    </div>
+                </div>
+
+                <div class="space-y-3.5 mt-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">အစီရင်ခံမည့် နှစ် (Target Year) *</label>
+                        <div class="relative">
+                            <select id="setting-report-year" class="w-full pl-3.5 pr-8 py-2.5 text-xs font-bold font-mono bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white appearance-none cursor-pointer">
+                                <!-- Loaded dynamically -->
+                            </select>
+                            <i class="fa-solid fa-chevron-down text-xs text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">လက်ခံမည့် အီးမေးလ် (Recipient Email) *</label>
+                        <div class="relative">
+                            <i class="fa-regular fa-envelope text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                            <input type="email" id="setting-recipient-email" value="myagabarsoeshop@gmail.com" placeholder="example@gmail.com"
+                                class="w-full pl-9 pr-3.5 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white">
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">လက်ခံမည့် အီးမေးလ် (Recipient Email) *</label>
-                <input type="email" id="setting-recipient-email" value="myagabarsoeshop@gmail.com" 
-                    class="w-full px-3 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100">
-            </div>
-
-            <div>
-                <button type="button" id="btn-send-auto-email" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
+            <div class="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" id="btn-send-auto-email" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
                     <i class="fa-solid fa-paper-plane"></i>
-                    <span>Excel ဖြင့် အီးမေးလ်ပို့မည်</span>
+                    <span>Excel Backup ဖိုင် အီးမေးလ်ပို့မည်</span>
                 </button>
             </div>
         </div>
+
+        <!-- Right Card: Password Change & Account Security Section -->
+        <div class="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <form id="change-password-form" class="flex flex-col justify-between h-full">
+                <div>
+                    <div class="flex items-center gap-2.5 mb-2">
+                        <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-sm shrink-0">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">
+                                စကားဝှက် ပြောင်းလဲခြင်း (Change Password)
+                            </h3>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                                လက်ရှိဝင်ရောက်ထားသော အကောင့်၏ စကားဝှက်ကို PBKDF2 လုံခြုံရေးစနစ်ဖြင့် ပြောင်းလဲမည်
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3.5 mt-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">မူလ စကားဝှက်အဟောင်း (Current Password) *</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-lock text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                                <input type="password" id="setting-old-password" required placeholder="••••••••"
+                                    class="w-full pl-9 pr-3.5 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">စကားဝှက် အသစ် (New Password - အနည်းဆုံး ၆ လုံး) *</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-key text-emerald-500 text-xs absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                                <input type="password" id="setting-new-password" required minlength="6" placeholder="စကားဝှက်အသစ် ရိုက်ထည့်ပါ..."
+                                    class="w-full pl-9 pr-3.5 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button type="submit" id="btn-change-password" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-check-circle"></i>
+                        <span>စကားဝှက် အသစ်ပြောင်းလဲမည်</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
     </div>
 </div>

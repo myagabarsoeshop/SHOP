@@ -1,4 +1,5 @@
 // cashbook-frontend/js/modules/cashbook.js
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";

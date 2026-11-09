@@ -7,7 +7,8 @@ import {
     jsonResponse,
     errorResponse,
     getMyanmarTodayDate,
-    roundKyat
+    roundKyat,
+    getQueryYear
 } from "./utils.js";
 
 export async function handleFinanceRoutes(request, env, url, path, method, auth) {
@@ -27,10 +28,17 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
 
     if (path === "/api/cashbook/entries" && method === "GET") {
         const branchId = url.searchParams.get("branch_id") || userBranchId;
-        const startDate = url.searchParams.get("start_date") || getMyanmarTodayDate();
-        const endDate = url.searchParams.get("end_date") || startDate;
+        
+        // နှစ်အလိုက် (FY) အလိုအလျောက် စစ်ထုတ်ရန် နှစ်ကို ယူခြင်း (Default သည် လက်ရှိနှစ်)
+        const targetYear = getQueryYear(url);
+        const yearStart = `${targetYear}-01-01`;
+        const yearEnd = `${targetYear}-12-31`;
 
-        // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း (Index မိစေရန် entry_date >= ? AND entry_date <= ? သုံးထားသည်)
+        // User က start_date / end_date သီးသန့်ပေးထားပါက ၎င်းကိုသုံးမည်၊ မပါပါက လက်ရှိနှစ် (FY) ကိုသာ အဓိက ကန့်သတ်မည်
+        const startDate = url.searchParams.get("start_date") || yearStart;
+        const endDate = url.searchParams.get("end_date") || yearEnd;
+
+        // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း
         let sql = `
             SELECT 
                 ce.id, 
@@ -68,16 +76,16 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
             LEFT JOIN customers c ON s.customer_id = c.id
             LEFT JOIN purchases p ON ce.purchase_id = p.id
             LEFT JOIN users u ON ce.created_by = u.id
-            WHERE ce.entry_date >= ? AND ce.entry_date <= ?
+            WHERE ce.entry_date >= ? AND ce.entry_date <= ? AND ce.entry_date >= ? AND ce.entry_date <= ?
         `;
-        const bindings = [startDate, endDate];
+        const bindings = [startDate, endDate, yearStart, yearEnd];
         if (branchId && branchId !== "ALL") {
             sql += " AND ce.branch_id = ?";
             bindings.push(Number(branchId));
         }
         sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
 
-        // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (Cumulative Closing Balance)
+        // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (လက်ရှိ FY အတွင်းသာ)
         let balanceSql = `
             SELECT 
                 COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -85,15 +93,15 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
                                   WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
             FROM cashbook_entries
-            WHERE entry_date <= ?
+            WHERE entry_date <= ? AND entry_date >= ? AND entry_date <= ?
         `;
-        const balanceBindings = [endDate];
+        const balanceBindings = [endDate, yearStart, yearEnd];
         if (branchId && branchId !== "ALL") {
             balanceSql += " AND branch_id = ?";
             balanceBindings.push(Number(branchId));
         }
 
-        // ၃။ ရွေးချယ်ထားသော ရက်စွဲအတွက် စစ်မှန်သော အသုံးစရိတ် (Total Expense) နှင့် ပိုင်ရှင်ထံအပ်ငွေ (Owner Remittance)
+        // ၃။ ရွေးချယ်ထားသော ရက်စွဲအတွက် အသုံးစရိတ် နှင့် ဝင်ငွေ စာရင်းချုပ်
         let summarySql = `
             SELECT 
                 COALESCE(SUM(CASE WHEN ce.entry_type = 'EXPENSE' AND (cc.name LIKE '%ပိုင်ရှင်%' OR cc.name LIKE '%အပ်ငွေ%' OR cc.name LIKE '%လွှဲ%' OR ce.category_id = 10) THEN ce.amount ELSE 0 END), 0) AS today_remittance,
@@ -101,9 +109,9 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 COALESCE(SUM(CASE WHEN ce.entry_type = 'INCOME' THEN ce.amount ELSE 0 END), 0) AS today_income
             FROM cashbook_entries ce
             LEFT JOIN cash_categories cc ON ce.category_id = cc.id
-            WHERE ce.entry_date >= ? AND ce.entry_date <= ?
+            WHERE ce.entry_date >= ? AND ce.entry_date <= ? AND ce.entry_date >= ? AND ce.entry_date <= ?
         `;
-        const summaryBindings = [startDate, endDate];
+        const summaryBindings = [startDate, endDate, yearStart, yearEnd];
         if (branchId && branchId !== "ALL") {
             summarySql += " AND ce.branch_id = ?";
             summaryBindings.push(Number(branchId));

@@ -1,5 +1,5 @@
 -- =============================================================================
--- SEED DATA: INITIAL CONFIGURATION ONLY (NO SENSITIVE CREDENTIALS)
+-- SEED DATA: INITIAL CONFIGURATION (PBKDF2-SHA256 HASHED ACCOUNTS)
 -- =============================================================================
 
 -- ၁။ ဆိုင်ခွဲ (၅) ဆိုင် စာရင်း
@@ -10,15 +10,16 @@ INSERT OR IGNORE INTO branches (id, code, name, type, phone, address) VALUES
 (4, 'SH3', 'Shop 3 (ဆိုင်ခွဲ ၃)', 'branch', '09444444444', 'မန္တလေး'),
 (5, 'SH4', 'Shop 4 (ဆိုင်ခွဲ ၄)', 'branch', '09555555555', 'မန္တလေး');
 
--- ၂။ စနစ်သုံး ငွေစာရင်း ခေါင်းစဉ်များ
-INSERT OR IGNORE INTO cash_categories (id, name, type, is_system) VALUES 
-(1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1),
-(2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1),
-(3, 'အခြားရငွေ (Other Income)', 'INCOME', 0),
-(4, 'ရက်ကန်းလုပ်ခ (Weaving Wages)', 'EXPENSE', 0),
-(5, 'ကုန်ကြမ်း/ချည်ဝယ်ယူစရိတ် (Raw Material Purchase)', 'EXPENSE', 0),
-(6, 'ဝယ်ရောင်းအထည်ဝယ်ယူစရိတ် (Trading Goods Purchase)', 'EXPENSE', 1),
-(7, 'ဆိုင်စရိတ်/စားစရိတ် (Daily Shop Expenses)', 'EXPENSE', 0),
-(8, 'ဆိုင်လခ/အိမ်လခ (Shop Rent)', 'EXPENSE', 0),
-(9, 'လျှပ်စစ်မီးဖိုးနှင့် အထွေထွေစရိတ် (Utilities)', 'EXPENSE', 0),
-(10, 'ပင်မဆိုင်သို့ ငွေလွှဲပေးပို့ခြင်း (Cash Transfer to Main)', 'EXPENSE', 0);
+-- ၂။ စနစ်သုံး ငွေစာရင်း ခေါင်းစဉ်များ (Category 11 အပါအဝင်)
+INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_remittance) VALUES 
+(1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1, 0),
+(2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1, 0),
+(3, 'အခြားရငွေ (Other Income)', 'INCOME', 0, 0),
+(4, 'ရက်ကန်းလုပ်ခ (Weaving Wages)', 'EXPENSE', 0, 0),
+(5, 'ကုန်ကြမ်း/ချည်ဝယ်ယူစရိတ် (Raw Material Purchase)', 'EXPENSE', 0, 0),
+(6, 'ဝယ်ရောင်းအထည်ဝယ်ယူစရိတ် (Trading Goods Purchase)', 'EXPENSE', 1, 0),
+(7, 'ဆိုင်စရိတ်/စားစရိတ် (Daily Shop Expenses)', 'EXPENSE', 0, 0),
+(8, 'ဆိုင်လခ/အိမ်လခ (Shop Rent)', 'EXPENSE', 0, 0),
+(9, 'လျှပ်စစ်မီးဖိုးနှင့် အထွေထွေစရိတ် (Utilities)', 'EXPENSE', 0, 0),
+(10, 'ပင်မဆိုင်သို့ ငွေလွှဲပေးပို့ခြင်း (Cash Transfer to Main)', 'EXPENSE', 1, 1),
+(11, 'ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)', 'EXPENSE', 1, 0);

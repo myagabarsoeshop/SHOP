@@ -210,11 +210,11 @@ function renderAdminDashboard(data) {
     const opex = Number(a.total_expenses || 0);
     const totalPayable = Number(a.total_payable || 0);
 
-    // 4 Top Cards
-    updateCard(1, "တစ်နှစ်တာ ဝင်ငွေ (Revenue)", a.total_revenue || 0, `${selectedYear} ခုနှစ် အရောင်းစုစုပေါင်း`, "fa-sack-dollar", "emerald");
-    updateCard(2, "တစ်နှစ်တာ အမြတ် (Net Profit)", a.net_profit || 0, `ဆိုင်စရိတ် (OPEX): ${opex.toLocaleString()} Ks နှုတ်ပြီး`, "fa-chart-line", Number(a.net_profit || 0) >= 0 ? "blue" : "rose");
-    updateCard(3, "ရရန်ကျန် အကြွေး (Receivables)", a.total_outstanding_debt || 0, `ပွဲရုံပေးရန်ကျန်: ${totalPayable.toLocaleString()} Ks`, "fa-hand-holding-dollar", "purple");
-    updateCard(4, "စတော့ တန်ဖိုး (Valuation)", a.total_stock_value || 0, "ပစ္စည်းရင်းနှီးမြှုပ်နှံမှု တန်ဖိုး", "fa-boxes-stacked", "amber");
+    // 4 Top Cards 
+    updateCard(1, "Total Revenue", a.total_revenue || 0, `${selectedYear} Total Sales`, "fa-sack-dollar", "emerald");
+    updateCard(2, "Net Profit", a.net_profit || 0, `After OPEX: ${opex.toLocaleString()} Ks`, "fa-chart-line", Number(a.net_profit || 0) >= 0 ? "blue" : "rose");
+    updateCard(3, "Receivables", a.total_outstanding_debt || 0, `Supplier Payables: ${totalPayable.toLocaleString()} Ks`, "fa-hand-holding-dollar", "purple");
+    updateCard(4, "Stock Value", a.total_stock_value || 0, "Inventory Investment Value", "fa-boxes-stacked", "amber");
 
     // Admin: Branch Breakdown Table
     const branchTbody = document.getElementById("dash-branch-table-body");

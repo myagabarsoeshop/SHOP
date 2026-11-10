@@ -1,21 +1,27 @@
 // =============================================================================
 // FILE 2 OF 5: cashbook-api/routes-inventory.js
 // BRANCHES, PRODUCTS (WITH BULK CSV), YARN, WASTE LOGS & STOCK TRANSFERS
+// Version: 3.2.0 (RBAC Hardened, Cost-Price Masked, Accurate CSV Count & UTC Indexed)
 // =============================================================================
 
 import {
     jsonResponse,
     errorResponse,
     getMyanmarTodayDate,
+    getMyanmarYearUtcBounds,
     roundKyat,
     roundQty,
-    getQueryYear
+    getQueryYear,
+    resolveBranchId,
+    requireRole,
+    logAudit
 } from "./utils.js";
 
 export async function handleInventoryRoutes(request, env, url, path, method, auth) {
     const currentUserId = auth.uid;
     const currentUserRole = auth.role;
     const userBranchId = auth.branch_id;
+    const isAdminOrFinance = requireRole(auth, ["admin", "finance", "manager"]);
 
     // =========================================================================
     // 1. BRANCHES
@@ -28,10 +34,11 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     // =========================================================================
-    // 2. PRODUCTS & STOCK BALANCES (INDEX-OPTIMIZED JOIN)
+    // 2. PRODUCTS & STOCK BALANCES (INDEX-OPTIMIZED JOIN & RBAC COST MASKING)
     // =========================================================================
     if (path === "/api/products" && method === "GET") {
-        const branchId = url.searchParams.get("branch_id");
+        const requestedBranch = url.searchParams.get("branch_id");
+        const branchId = resolveBranchId(auth, requestedBranch, { allowAllForAdmin: true });
         const search = url.searchParams.get("search")?.trim() || "";
         const category = url.searchParams.get("category")?.trim() || "";
 
@@ -76,12 +83,17 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         sql += " ORDER BY p.item_name ASC, p.id DESC LIMIT 1000";
 
         const { results } = await env.DB.prepare(sql).bind(...bindings).all();
-        return jsonResponse(results || []);
+        const maskedResults = (results || []).map(row => ({
+            ...row,
+            cost_price: isAdminOrFinance ? roundKyat(row.cost_price || 0) : 0
+        }));
+
+        return jsonResponse(maskedResults);
     }
 
     if (path === "/api/products/scan" && method === "GET") {
         const code = url.searchParams.get("code")?.trim();
-        const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
         if (!code) return errorResponse("Barcode ထည့်သွင်းပေးပါ", 400);
 
         const sql = `
@@ -93,10 +105,18 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         `;
         const product = await env.DB.prepare(sql).bind(Number(branchId), code, code).first();
         if (!product) return errorResponse("ပစ္စည်း ရှာမတွေ့ပါ", 404);
+
+        if (!isAdminOrFinance) {
+            product.cost_price = 0;
+        }
         return jsonResponse(product);
     }
 
     if (path === "/api/products" && method === "POST") {
+        if (!isAdminOrFinance) {
+            return errorResponse("ပစ္စည်းအသစ် ထည့်သွင်းခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
+        }
+
         const body = await request.json().catch(() => ({}));
         const itemName = body.itemName || body.item_name;
         if (!body.category || !itemName) {
@@ -110,6 +130,10 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const wholesalePrice = roundKyat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice);
         const initialStock = roundQty(body.initialStock ?? body.quantity ?? 0);
         const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? userBranchId, 10) || 1;
+
+        if (costPrice < 0 || retailPrice < 0 || wholesalePrice < 0 || initialStock < 0) {
+            return errorResponse("ဈေးနှုန်းနှင့် အရေအတွက်များ အနှုတ်ဖြစ်၍ မရပါ", 400);
+        }
 
         const res = await env.DB.prepare(`
             INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
@@ -130,11 +154,24 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             `).bind(targetBranchId, newProductId, initialStock).run();
         }
 
+        await logAudit(env.DB, {
+            branchId: targetBranchId,
+            userId: currentUserId,
+            action: "CREATE_PRODUCT",
+            tableName: "products",
+            recordId: newProductId,
+            details: { sku, itemName, initialStock, costPrice, retailPrice }
+        });
+
         return jsonResponse({ id: newProductId, message: "အထည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
     }
 
-    // BULK CSV IMPORT (Saves 95% of D1 Roundtrips)
+    // BULK CSV IMPORT (Saves 95% of D1 Roundtrips & Reports Exact Inserted vs Skipped Count)
     if (path === "/api/products/bulk" && method === "POST") {
+        if (!isAdminOrFinance) {
+            return errorResponse("CSV ဖြင့် ပစ္စည်းသွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
+        }
+
         const body = await request.json().catch(() => ({}));
         const items = Array.isArray(body.items) ? body.items : [];
         if (items.length === 0) return errorResponse("သွင်းယူမည့် ပစ္စည်းစာရင်း မရှိပါ", 400);
@@ -147,9 +184,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
             const sku = item.sku && String(item.sku).trim() !== "" ? String(item.sku).trim() : null;
             const barcode = item.barcode && String(item.barcode).trim() !== "" ? String(item.barcode).trim() : null;
-            const costPrice = roundKyat(item.costPrice ?? item.cost_price ?? 0);
-            const retailPrice = roundKyat(item.retailPrice ?? item.retail_price ?? 0);
-            const wholesalePrice = roundKyat(item.wholesalePrice ?? item.wholesale_price ?? retailPrice);
+            const costPrice = Math.max(0, roundKyat(item.costPrice ?? item.cost_price ?? 0));
+            const retailPrice = Math.max(0, roundKyat(item.retailPrice ?? item.retail_price ?? 0));
+            const wholesalePrice = Math.max(0, roundKyat(item.wholesalePrice ?? item.wholesale_price ?? retailPrice));
 
             batch.push(
                 env.DB.prepare(`
@@ -165,14 +202,30 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             );
         }
 
+        let insertedCount = 0;
         for (let i = 0; i < batch.length; i += 50) {
-            await env.DB.batch(batch.slice(i, i + 50));
+            const chunkResults = await env.DB.batch(batch.slice(i, i + 50));
+            for (const r of chunkResults) {
+                insertedCount += Number(r?.meta?.changes || 0);
+            }
         }
+        const skippedCount = Math.max(0, batch.length - insertedCount);
 
-        return jsonResponse({ message: `ပစ္စည်း (${batch.length}) မျိုး အောင်မြင်စွာ သွင်းယူပြီးပါပြီ`, count: batch.length }, 201);
+        return jsonResponse({
+            message: skippedCount > 0
+                ? `ပစ္စည်းအသစ် (${insertedCount}) မျိုး သွင်းယူပြီး ကုတ်ထပ်နေသော (${skippedCount}) မျိုးကို ကျော်သွားပါသည်`
+                : `ပစ္စည်း (${insertedCount}) မျိုး အောင်မြင်စွာ သွင်းယူပြီးပါပြီ`,
+            count: insertedCount,
+            insertedCount,
+            skippedCount
+        }, 201);
     }
 
     if (path.startsWith("/api/products/") && method === "PUT") {
+        if (!isAdminOrFinance) {
+            return errorResponse("ပစ္စည်းအချက်အလက်နှင့် ဈေးနှုန်းပြင်ဆင်ခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
+        }
+
         const productId = Number(path.split("/").pop());
         const body = await request.json().catch(() => ({}));
         if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
@@ -207,21 +260,52 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             productId
         ).run();
 
-        if (body.quantity !== undefined && (body.branchId || userBranchId)) {
-            await env.DB.prepare(`
-                INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity
-            `).bind(Number(body.branchId || userBranchId), productId, roundQty(body.quantity)).run();
+        // Only Admin can manually override stock quantity, and it is strictly audited
+        if (body.quantity !== undefined && currentUserRole === "admin" && (body.branchId || userBranchId)) {
+            const targetBranch = Number(body.branchId || userBranchId);
+            const newQty = Math.max(0, roundQty(body.quantity));
+            const oldInv = await env.DB.prepare(
+                "SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?"
+            ).bind(targetBranch, productId).first();
+            const oldQty = roundQty(oldInv?.quantity || 0);
+
+            if (oldQty !== newQty) {
+                await env.DB.prepare(`
+                    INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
+                    ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                `).bind(targetBranch, productId, newQty).run();
+
+                await logAudit(env.DB, {
+                    branchId: targetBranch,
+                    userId: currentUserId,
+                    action: "MANUAL_STOCK_ADJUST",
+                    tableName: "branch_inventory",
+                    recordId: productId,
+                    details: { productId, branchId: targetBranch, oldQty, newQty }
+                });
+            }
         }
 
         return jsonResponse({ message: "ပစ္စည်းအချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
     }
 
     if (path.startsWith("/api/products/") && method === "DELETE") {
+        if (!isAdminOrFinance) {
+            return errorResponse("ပစ္စည်းဖျက်သိမ်းခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
+        }
+
         const productId = Number(path.split("/").pop());
         if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
 
         await env.DB.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(productId).run();
+        await logAudit(env.DB, {
+            branchId: userBranchId,
+            userId: currentUserId,
+            action: "DELETE_PRODUCT",
+            tableName: "products",
+            recordId: productId,
+            details: "Soft-deleted product (is_active = 0)"
+        });
         return jsonResponse({ message: "အထည်စာရင်းမှ အောင်မြင်စွာ ဖျက်ပြီးပါပြီ" });
     }
 
@@ -229,7 +313,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     // 3. YARN BALANCES & PRODUCTION ISSUE
     // =========================================================================
     if (path === "/api/yarns" && method === "GET") {
-        const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
         const search = url.searchParams.get("search")?.trim() || "";
 
         let sql = `
@@ -255,12 +339,16 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         sql += ` ORDER BY p.id DESC LIMIT 500`;
         const { results } = await env.DB.prepare(sql).bind(...bindings).all().catch(() => ({ results: [] }));
-        return jsonResponse(results || []);
+        const masked = (results || []).map(r => ({
+            ...r,
+            cost_price: isAdminOrFinance ? roundKyat(r.cost_price || 0) : 0
+        }));
+        return jsonResponse(masked);
     }
 
     if (path === "/api/yarns/issue" && method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branchId || userBranchId);
+        const branchId = resolveBranchId(auth, body.branchId);
         const yarnId = Number(body.yarnId || body.product_id);
         const weaverName = String(body.weaverName || body.weaver_name || "").trim();
         const qty = roundQty(body.quantity);
@@ -298,7 +386,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     if (path === "/api/yarns/issues" && method === "GET") {
-        const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
 
         const sql = `
             SELECT 
@@ -317,30 +405,43 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
     if (path.startsWith("/api/yarns/issues/") && method === "DELETE") {
         const id = Number(path.split("/").pop());
-        const issue = await env.DB.prepare("SELECT yarn_id, branch_id, quantity FROM yarn_issues WHERE id = ?").bind(id).first();
+        const issue = await env.DB.prepare("SELECT yarn_id, branch_id, quantity, weaver_name FROM yarn_issues WHERE id = ?").bind(id).first();
         if (!issue) return errorResponse("ချည်ထုတ်ပေးမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+        const targetBranch = Number(issue.branch_id || userBranchId);
+        if (!isAdminOrFinance && targetBranch !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ပယ်ဖျက်ခွင့် မရှိပါ", 403);
+        }
 
         await env.DB.batch([
             env.DB.prepare(`
                 INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
                 ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-            `).bind(Number(issue.branch_id || userBranchId), Number(issue.yarn_id), roundQty(issue.quantity)),
+            `).bind(targetBranch, Number(issue.yarn_id), roundQty(issue.quantity)),
             env.DB.prepare("DELETE FROM yarn_issues WHERE id = ?").bind(id)
         ]);
+
+        await logAudit(env.DB, {
+            branchId: targetBranch,
+            userId: currentUserId,
+            action: "VOID_YARN_ISSUE",
+            tableName: "yarn_issues",
+            recordId: id,
+            details: { yarn_id: issue.yarn_id, quantity: issue.quantity, weaver_name: issue.weaver_name }
+        });
 
         return jsonResponse({ message: "ချည်ထုတ်ပေးမှုမှတ်တမ်း ပယ်ဖျက်ပြီး လက်ကျန်ပြန်ပေါင်းပြီးပါပြီ" });
     }
 
     // =========================================================================
-    // 4. DAMAGE & WASTE LOGS (FY/Year Filter Optimized)
+    // 4. DAMAGE & WASTE LOGS (UTC Index Optimized & Branch Scoped)
     // =========================================================================
     if (path === "/api/waste" && method === "GET") {
-        const branchId = url.searchParams.get("branch_id") || userBranchId;
+        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
         const targetYear = getQueryYear(url);
-        const yearStart = `${targetYear}-01-01`;
-        const yearEnd = `${targetYear}-12-31 23:59:59`;
+        const { startUtc: yearStartUtc, endUtc: yearEndUtc } = getMyanmarYearUtcBounds(targetYear);
 
-        let sql = `
+        const sql = `
             SELECT 
                 w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
                 p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
@@ -348,16 +449,19 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             FROM waste_logs w
             INNER JOIN products p ON w.product_id = p.id
             LEFT JOIN users u ON w.recorded_by = u.id
-            WHERE w.branch_id = ? AND w.created_at >= ? AND w.created_at <= ?
+            WHERE w.branch_id = ? 
+              AND w.created_at >= ? 
+              AND w.created_at <= ?
+              AND COALESCE(w.status, 'completed') != 'cancelled'
             ORDER BY w.id DESC LIMIT 300
         `;
-        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStart, yearEnd).all().catch(() => ({ results: [] }));
+        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStartUtc, yearEndUtc).all().catch(() => ({ results: [] }));
         return jsonResponse(results || []);
     }
 
     if (path === "/api/waste" && method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const branchId = currentUserRole === "cashier" ? userBranchId : Number(body.branch_id || userBranchId);
+        const branchId = resolveBranchId(auth, body.branch_id);
         const productId = Number(body.product_id || body.productId);
         const quantity = roundQty(body.quantity);
         const unitCost = roundKyat(body.unit_cost ?? body.unitCost ?? 0);
@@ -382,8 +486,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         await env.DB.batch([
             env.DB.prepare(`
-                INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, recorded_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, status, recorded_by)
+                VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
             `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ချည်/အထည် ပျက်စီးအလေအလွင့်", currentUserId),
 
             env.DB.prepare(`
@@ -407,8 +511,14 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("မှန်ကန်သော အရေအတွက်/ပမာဏ ထည့်သွင်းပါ", 400);
         }
 
-        const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity, unit_cost FROM waste_logs WHERE id = ?").bind(id).first();
-        if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+        const oldLog = await env.DB.prepare(
+            "SELECT branch_id, product_id, quantity, unit_cost, status FROM waste_logs WHERE id = ?"
+        ).bind(id).first();
+        if (!oldLog || oldLog.status === "cancelled") return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+        if (!isAdminOrFinance && Number(oldLog.branch_id) !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ပြင်ဆင်ခွင့် မရှိပါ", 403);
+        }
 
         const diff = roundQty(Number(oldLog.quantity) - newQty);
 
@@ -435,26 +545,41 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
     if (path.startsWith("/api/waste/") && method === "DELETE") {
         const id = Number(path.split("/").pop());
-        const oldLog = await env.DB.prepare("SELECT branch_id, product_id, quantity FROM waste_logs WHERE id = ?").bind(id).first();
-        if (!oldLog) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+        const oldLog = await env.DB.prepare(
+            "SELECT reference_no, branch_id, product_id, quantity, status FROM waste_logs WHERE id = ?"
+        ).bind(id).first();
+        if (!oldLog || oldLog.status === "cancelled") return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+        if (!isAdminOrFinance && Number(oldLog.branch_id) !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
+        }
 
         await env.DB.batch([
             env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
                 .bind(roundQty(oldLog.quantity), Number(oldLog.branch_id), Number(oldLog.product_id)),
-            env.DB.prepare("DELETE FROM waste_logs WHERE id = ?").bind(id)
+            env.DB.prepare("UPDATE waste_logs SET status = 'cancelled' WHERE id = ?").bind(id)
         ]);
+
+        await logAudit(env.DB, {
+            branchId: oldLog.branch_id,
+            userId: currentUserId,
+            action: "VOID_WASTE_LOG",
+            tableName: "waste_logs",
+            recordId: id,
+            details: { reference_no: oldLog.reference_no, product_id: oldLog.product_id, quantity: oldLog.quantity }
+        });
 
         return jsonResponse({ message: "မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲသို့ အပြည့်အဝ ပြန်လည် ထည့်သွင်းပြီးပါပြီ။" });
     }
 
     // =========================================================================
-    // 5. INTER-BRANCH STOCK TRANSFERS (FY/Year Filter Optimized)
+    // 5. INTER-BRANCH STOCK TRANSFERS (UTC Index Optimized & RBAC Scoped)
     // =========================================================================
     if (path === "/api/transfers" && method === "GET") {
-        const branchId = url.searchParams.get("branch_id");
+        const requestedBranch = url.searchParams.get("branch_id");
+        const branchId = resolveBranchId(auth, requestedBranch, { allowAllForAdmin: true });
         const targetYear = getQueryYear(url);
-        const yearStart = `${targetYear}-01-01`;
-        const yearEnd = `${targetYear}-12-31 23:59:59`;
+        const { startUtc: yearStartUtc, endUtc: yearEndUtc } = getMyanmarYearUtcBounds(targetYear);
 
         let sql = `
             SELECT 
@@ -469,8 +594,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             LEFT JOIN products p ON t.product_id = p.id
             LEFT JOIN users u ON t.created_by = u.id
             WHERE t.created_at >= ? AND t.created_at <= ?
+              AND COALESCE(t.status, 'received') != 'cancelled'
         `;
-        const bindings = [yearStart, yearEnd];
+        const bindings = [yearStartUtc, yearEndUtc];
         if (branchId && branchId !== "ALL") {
             sql += ` AND (t.from_branch_id = ? OR t.to_branch_id = ?) `;
             bindings.push(Number(branchId), Number(branchId));
@@ -483,7 +609,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
     if (path === "/api/transfers" && method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const fromBranchId = Number(body.fromBranchId || body.from_branch_id);
+        const fromBranchId = currentUserRole === "cashier"
+            ? Number(userBranchId)
+            : Number(body.fromBranchId || body.from_branch_id);
         const toBranchId = Number(body.toBranchId || body.to_branch_id);
         const productId = Number(body.productId || body.product_id);
         const quantity = roundQty(body.quantity);
@@ -544,7 +672,11 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         }
 
         const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
-        if (!trf) return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+        if (!trf || trf.status === "cancelled") return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+        if (!isAdminOrFinance && Number(trf.from_branch_id) !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ လွှဲပြောင်းမှုမှတ်တမ်းအား ပြင်ဆင်ခွင့် မရှိပါ", 403);
+        }
 
         const oldQty = roundQty(trf.quantity || 0);
         const diff = roundQty(newQty - oldQty);
@@ -585,7 +717,11 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     if (path.startsWith("/api/transfers/") && method === "DELETE") {
         const id = Number(path.split("/").pop());
         const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
-        if (!trf) return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+        if (!trf || trf.status === "cancelled") return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
+        if (!isAdminOrFinance && Number(trf.from_branch_id) !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ လွှဲပြောင်းမှုမှတ်တမ်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
+        }
 
         const destInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
             .bind(Number(trf.to_branch_id), Number(trf.product_id)).first();
@@ -600,8 +736,17 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 .bind(roundQty(trf.quantity), Number(trf.from_branch_id), Number(trf.product_id)),
             env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
                 .bind(roundQty(trf.quantity), Number(trf.to_branch_id), Number(trf.product_id)),
-            env.DB.prepare("DELETE FROM stock_transfers WHERE id = ?").bind(id)
+            env.DB.prepare("UPDATE stock_transfers SET status = 'cancelled' WHERE id = ?").bind(id)
         ]);
+
+        await logAudit(env.DB, {
+            branchId: trf.from_branch_id,
+            userId: currentUserId,
+            action: "VOID_STOCK_TRANSFER",
+            tableName: "stock_transfers",
+            recordId: id,
+            details: { transfer_no: trf.transfer_no, product_id: trf.product_id, quantity: trf.quantity }
+        });
 
         return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်းကို ပယ်ဖျက်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်ညှိပြီးပါပြီ" });
     }

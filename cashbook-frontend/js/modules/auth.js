@@ -21,7 +21,6 @@ export function initAuth() {
         }
     }
 
-    // အသုံးပြုသူ ရွေးချယ်လိုက်သည်နှင့် Password အကွက်သို့ အလိုအလျောက် Focus ပို့ပေးခြင်း
     if (userSelect) {
         userSelect.addEventListener("change", () => {
             errorBox?.classList.add("hidden");
@@ -81,18 +80,14 @@ export function initAuth() {
 
             try {
                 const response = await api.post("/auth/login", { username, password });
+                const payload = response?.data || response;
 
-                if (response?.success && response?.data) {
+                if (payload && payload.token) {
                     localStorage.setItem("pos_last_username", username);
+                    localStorage.setItem("pos_token", payload.token);
 
-                    // 1. Token သိမ်းဆည်းခြင်း
-                    if (response.data.token) {
-                        localStorage.setItem("pos_token", response.data.token);
-                    }
-
-                    // 2. User နှင့် သက်ဆိုင်ရာ ဆိုင်ခွဲ (Branch) အတိအကျ သတ်မှတ်ခြင်း
-                    if (response.data.user) {
-                        const u = response.data.user;
+                    if (payload.user) {
+                        const u = payload.user;
                         state.setUser(u);
                         if (u.branchId) {
                             localStorage.setItem("pos_branch_id", String(u.branchId));
@@ -106,7 +101,6 @@ export function initAuth() {
                         }
                     }
 
-                    // 3. Login အောင်မြင်ပါက စနစ်မျက်နှာပြင်သို့ ဝင်ရောက်ခြင်း
                     window.location.reload();
                 } else {
                     throw new Error(response?.error || "Login ဝင်ရောက်၍ မရပါ");
@@ -114,7 +108,7 @@ export function initAuth() {
             } catch (err) {
                 if (errorBox && errorText) {
                     errorBox.classList.remove("hidden");
-                    errorText.textContent = err.message || "စကားဝှက် မှားယွင်းနေပါသည်";
+                    errorText.textContent = err.message || "အသုံးပြုသူအမည် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်";
                 }
                 passInput?.focus();
                 passInput?.select();

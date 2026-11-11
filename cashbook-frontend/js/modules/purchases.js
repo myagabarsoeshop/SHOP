@@ -39,11 +39,11 @@ function parseAnyNumber(val, isInteger = true) {
 }
 
 /**
- * VR NO အား DDMMYY-01 ပုံစံသို့ စနစ်တကျ ပြောင်းလဲဖော်ပြသည့် Helper
+ * VR NO အား B1-DDMMYYYY-01 သို့မဟုတ် DDMMYY-01 ပုံစံအတိုင်း တိကျစွာ ဖော်ပြသည့် Helper
  */
 function formatVRNo(pur, index) {
-    if (pur.vr_no && /^\d{6}-\d{2,}$/.test(pur.vr_no)) return pur.vr_no;
-    if (pur.purchase_no && /^\d{6}-\d{2,}$/.test(pur.purchase_no)) return pur.purchase_no;
+    if (pur.vr_no && String(pur.vr_no).trim() !== "") return String(pur.vr_no).trim();
+    if (pur.purchase_no && String(pur.purchase_no).trim() !== "") return String(pur.purchase_no).trim();
     
     const d = pur.created_at ? new Date(pur.created_at) : new Date();
     const dd = String(d.getDate()).padStart(2, "0");
@@ -57,12 +57,27 @@ function formatVRNo(pur, index) {
 }
 
 export async function initPurchases() {
+    ensureProductionMethodOption();
     bindEvents();
     await Promise.all([
         loadMasterProducts(),
         loadSuppliers(),
         loadPurchases()
     ]);
+}
+
+/**
+ * purchases.html ရှိ #pur-payment-method တွင် "ကိုယ်ပိုင်ထုတ် (OWN PRODUCTION)" မပါသေးပါက အလိုအလျောက် ထည့်ပေးခြင်း
+ */
+function ensureProductionMethodOption() {
+    const methodSelect = document.getElementById("pur-payment-method");
+    if (!methodSelect) return;
+    if (!methodSelect.querySelector('option[value="production"]')) {
+        const opt = document.createElement("option");
+        opt.value = "production";
+        opt.textContent = "ကိုယ်ပိုင်ထုတ် / စာရင်းဖွင့် (OWN PRODUCTION)";
+        methodSelect.appendChild(opt);
+    }
 }
 
 function bindEvents() {
@@ -93,13 +108,15 @@ function bindEvents() {
     // Export CSV Button
     document.getElementById("btn-export-purchases-csv")?.addEventListener("click", exportPurchasesToCSV);
 
-    // Payment Method Change (Dynamic 4-Col vs 5-Col Grid)
+    // Payment Method Change (Dynamic 4-Col vs 5-Col Grid + Own Production Handling)
     document.getElementById("pur-payment-method")?.addEventListener("change", (e) => {
+        const method = e.target.value;
         const bankContainer = document.getElementById("pur-bank-container");
         const infoGrid = document.getElementById("pur-info-grid");
         const paidInput = document.getElementById("pur-actual-paid");
+        const suppInput = document.getElementById("pur-supplier");
 
-        if (e.target.value === "bank") {
+        if (method === "bank") {
             bankContainer?.classList.remove("hidden");
             infoGrid?.classList.remove("md:grid-cols-4");
             infoGrid?.classList.add("md:grid-cols-5");
@@ -112,8 +129,28 @@ function bindEvents() {
             if (bankInput) bankInput.value = "";
         }
 
-        if (e.target.value === "credit" && paidInput) {
-            paidInput.value = "0";
+        if (method === "production") {
+            if (suppInput && !suppInput.value.trim()) {
+                suppInput.value = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
+            }
+            if (paidInput) {
+                paidInput.value = "0";
+                paidInput.disabled = true;
+                paidInput.classList.add("opacity-50", "cursor-not-allowed");
+            }
+            updateDifference();
+        } else if (method === "credit") {
+            if (paidInput) {
+                paidInput.disabled = false;
+                paidInput.classList.remove("opacity-50", "cursor-not-allowed");
+                paidInput.value = "0";
+            }
+            updateDifference();
+        } else {
+            if (paidInput) {
+                paidInput.disabled = false;
+                paidInput.classList.remove("opacity-50", "cursor-not-allowed");
+            }
             updateDifference();
         }
     });
@@ -225,9 +262,11 @@ async function loadSuppliers() {
         
         const datalist = document.getElementById("pur-supplier-datalist");
         if (datalist) {
-            datalist.innerHTML = "";
+            datalist.innerHTML = `<option value="ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု">`;
             supplierList.forEach(name => {
-                datalist.innerHTML += `<option value="${ui.escapeHtml(name)}">`;
+                if (name !== "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု") {
+                    datalist.innerHTML += `<option value="${ui.escapeHtml(name)}">`;
+                }
             });
         }
     } catch (err) {
@@ -317,7 +356,8 @@ async function loadPurchases() {
     }
 
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const rawBranch = state.currentBranch?.id;
+        const branchId = (!rawBranch || String(rawBranch) === "ALL") ? 1 : Number(rawBranch);
         const res = await api.get("/purchases", { branch_id: branchId });
         purchasesList = res.data || [];
         currentFilteredPurchases = [...purchasesList];
@@ -333,6 +373,10 @@ async function loadPurchases() {
             const method = String(p.payment_method || "cash").toLowerCase();
             const paidAmt = Number(p.paid_amount !== undefined ? p.paid_amount : p.total_amount);
 
+            if (method === "production") {
+                // Own production does not count as Cash Expense or Credit Debt
+                return;
+            }
             if (method === "credit" || paidAmt === 0) {
                 creditPurchasesTotal += lineAmt;
             } else {
@@ -404,18 +448,24 @@ function renderPurchasesTable() {
         const totalAmount = Number(pur.items_total || pur.total_amount || 0);
 
         let methodStr = "-";
-        if (paidAmount > 0) {
-            methodStr = rawMethod === "bank" ? "BANK" : "CASH";
-        }
-
         let typeStr = "PAID";
         let typeColorClass = "text-emerald-600 dark:text-emerald-400";
-        if (paidAmount === 0 || rawMethod === "credit") {
-            typeStr = "CREDIT";
-            typeColorClass = "text-rose-500";
-        } else if (paidAmount > 0 && paidAmount < totalAmount) {
-            typeStr = "PARTIAL";
-            typeColorClass = "text-amber-500";
+
+        if (rawMethod === "production") {
+            methodStr = "PROD";
+            typeStr = "OWN PROD";
+            typeColorClass = "text-blue-600 dark:text-blue-400";
+        } else {
+            if (paidAmount > 0) {
+                methodStr = rawMethod === "bank" ? "BANK" : "CASH";
+            }
+            if (paidAmount === 0 || rawMethod === "credit") {
+                typeStr = "CREDIT";
+                typeColorClass = "text-rose-500";
+            } else if (paidAmount > 0 && paidAmount < totalAmount) {
+                typeStr = "PARTIAL";
+                typeColorClass = "text-amber-500";
+            }
         }
 
         const unitCost = Number(pur.unit_cost || 0);
@@ -426,10 +476,12 @@ function renderPurchasesTable() {
 
         const diff = Number(pur.diff_amount || 0);
         let diffBadge = `<span class="text-slate-400 font-mono text-xs">-</span>`;
-        if (diff > 0) {
-            diffBadge = `<span class="text-amber-500 font-mono font-bold text-xs" title="ပွဲရုံထံ ပိုပေးငွေ / ပြန်ရရန်">+${diff.toLocaleString()}</span>`;
-        } else if (diff < 0) {
-            diffBadge = `<span class="text-rose-500 font-mono font-bold text-xs" title="ပေးရန်ကျန် အကြွေး">${diff.toLocaleString()}</span>`;
+        if (rawMethod !== "production") {
+            if (diff > 0) {
+                diffBadge = `<span class="text-amber-500 font-mono font-bold text-xs" title="ပွဲရုံထံ ပိုပေးငွေ / ပြန်ရရန်">+${diff.toLocaleString()}</span>`;
+            } else if (diff < 0) {
+                diffBadge = `<span class="text-rose-500 font-mono font-bold text-xs" title="ပေးရန်ကျန် အကြွေး">${diff.toLocaleString()}</span>`;
+            }
         }
 
         const actionButtons = `
@@ -455,7 +507,7 @@ function renderPurchasesTable() {
             <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
             
             <!-- 3. VR NO -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28">${vrNo}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-28">${ui.escapeHtml(vrNo)}</td>
             
             <!-- 4. BARCODE -->
             <td class="py-2 px-3 text-left font-mono text-xs text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(barcodeStr)}">${ui.escapeHtml(barcodeStr)}</td>
@@ -469,7 +521,7 @@ function renderPurchasesTable() {
             <!-- 7. COLOR -->
             <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(pur.color || "-")}">${ui.escapeHtml(pur.color || "-")}</td>
             
-            <!-- 8. QTY (အသစ်ထည့်သွင်းထားသော အရေအတွက်ကော်လံ) -->
+            <!-- 8. QTY -->
             <td class="py-2 px-3 text-center font-mono text-sm font-black text-blue-600 dark:text-blue-400 w-20">${qty.toLocaleString()}</td>
 
             <!-- 9. UNIT PRICE -->
@@ -541,10 +593,12 @@ function generateAutoSKU(categoryName = "") {
 // =========================================================================
 
 function openPurchaseModal(pur = null) {
+    ensureProductionMethodOption();
     const modal = document.getElementById("purchase-modal");
     const editIdInput = document.getElementById("pur-edit-id");
     const title = document.getElementById("purchase-modal-title");
     const infoGrid = document.getElementById("pur-info-grid");
+    const paidInput = document.getElementById("pur-actual-paid");
 
     if (pur) {
         title.innerHTML = `<span>အဝယ်စာရင်း ပြင်ဆင်ခြင်း</span> <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Edit Order</span>`;
@@ -588,7 +642,17 @@ function openPurchaseModal(pur = null) {
             }));
 
         const paidAmt = pur.paid_amount !== undefined ? pur.paid_amount : pur.total_amount;
-        document.getElementById("pur-actual-paid").value = paidAmt;
+        if (paidInput) {
+            if (pur.payment_method === "production") {
+                paidInput.value = "0";
+                paidInput.disabled = true;
+                paidInput.classList.add("opacity-50", "cursor-not-allowed");
+            } else {
+                paidInput.disabled = false;
+                paidInput.classList.remove("opacity-50", "cursor-not-allowed");
+                paidInput.value = paidAmt;
+            }
+        }
 
     } else {
         title.innerHTML = `<span>ကုန်ပစ္စည်းအဝယ်နှင့် စတော့အဝင် မှတ်တမ်းသွင်းခြင်း</span> <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono">Purchase Order</span>`;
@@ -604,7 +668,11 @@ function openPurchaseModal(pur = null) {
         document.getElementById("pur-date").value = getLocalTodayDate();
 
         selectedOrderItems = [];
-        document.getElementById("pur-actual-paid").value = "";
+        if (paidInput) {
+            paidInput.disabled = false;
+            paidInput.classList.remove("opacity-50", "cursor-not-allowed");
+            paidInput.value = "";
+        }
     }
 
     renderOrderItemsTable();
@@ -951,11 +1019,19 @@ function updateOrderSummary() {
 
 function updateDifference() {
     const grandTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
+    const paymentMethod = document.getElementById("pur-payment-method")?.value || "cash";
     const paidInput = document.getElementById("pur-actual-paid");
     const diffLabel = document.getElementById("pur-diff-label");
     const diffAmount = document.getElementById("pur-diff-amount");
 
     if (!paidInput || !diffAmount || !diffLabel) return;
+
+    if (paymentMethod === "production") {
+        diffLabel.textContent = "Own Production (ကိုယ်ပိုင်ထုတ်)";
+        diffAmount.textContent = "0 Ks (ငွေစာရင်းမထိ)";
+        diffAmount.className = "text-sm font-black font-mono text-blue-500";
+        return;
+    }
 
     const actualPaid = parseAnyNumber(paidInput.value, true);
     
@@ -1034,12 +1110,16 @@ function submitNewProductSubModal(e) {
 
 // --- Submit Purchase Order to Backend API ---
 async function submitPurchase() {
-    const supplier = document.getElementById("pur-supplier")?.value.trim();
+    let supplier = document.getElementById("pur-supplier")?.value.trim();
     const purchaseDate = document.getElementById("pur-date")?.value || getLocalTodayDate();
     const refNo = document.getElementById("pur-ref-no")?.value.trim() || null;
     const paymentMethod = document.getElementById("pur-payment-method")?.value || "cash";
     const bankName = document.getElementById("pur-bank-name")?.value.trim();
     const editId = document.getElementById("pur-edit-id")?.value;
+
+    if (paymentMethod === "production" && !supplier) {
+        supplier = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
+    }
 
     if (!supplier) {
         ui.toast.warning("ပေးသွင်းသူ (ပွဲရုံ) အမည် ထည့်သွင်းပေးပါ။");
@@ -1059,20 +1139,27 @@ async function submitPurchase() {
         return;
     }
 
-    const branchId = state.currentBranch?.id || 1;
+    const rawBranch = state.currentBranch?.id;
+    const branchId = (!rawBranch || String(rawBranch) === "ALL") ? 1 : Number(rawBranch);
     const itemsTotal = selectedOrderItems.reduce((acc, it) => acc + Number(it.subtotal || 0), 0);
     
     const paidInputVal = document.getElementById("pur-actual-paid")?.value;
     let paidAmount = 0;
-    if (paymentMethod === "credit") {
+    let diffAmount = 0;
+
+    if (paymentMethod === "production") {
         paidAmount = 0;
+        diffAmount = 0;
+    } else if (paymentMethod === "credit") {
+        paidAmount = 0;
+        diffAmount = -itemsTotal;
     } else if (paidInputVal !== undefined && paidInputVal !== null && paidInputVal !== "") {
         paidAmount = parseAnyNumber(paidInputVal, true);
+        diffAmount = paidAmount - itemsTotal;
     } else {
         paidAmount = itemsTotal;
+        diffAmount = 0;
     }
-
-    const diffAmount = paidAmount - itemsTotal;
 
     const formattedItems = selectedOrderItems.map(it => {
         if (it.is_new) {
@@ -1134,7 +1221,7 @@ async function submitPurchase() {
             ui.toast.success("အဝယ်စာရင်း အောင်မြင်စွာ ပြင်ဆင်ပြီးပါပြီ။");
         } else {
             const res = await api.post("/purchases", payload);
-            ui.toast.success(`အဝယ်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (VR: ${res.data?.purchaseNo || "OK"})`);
+            ui.toast.success(`စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။ (VR: ${res.data?.purchaseNo || "OK"})`);
         }
         closePurchaseModal();
         await Promise.all([
@@ -1195,17 +1282,21 @@ function exportPurchasesToCSV() {
         const totalAmount = Number(pur.items_total || pur.total_amount || 0);
 
         let methodStr = "-";
-        if (paidAmount > 0) methodStr = rawMethod === "bank" ? "BANK" : "CASH";
-
         let typeStr = "PAID";
-        if (paidAmount === 0 || rawMethod === "credit") typeStr = "CREDIT";
-        else if (paidAmount > 0 && paidAmount < totalAmount) typeStr = "PARTIAL";
+        if (rawMethod === "production") {
+            methodStr = "PROD";
+            typeStr = "OWN PROD";
+        } else {
+            if (paidAmount > 0) methodStr = rawMethod === "bank" ? "BANK" : "CASH";
+            if (paidAmount === 0 || rawMethod === "credit") typeStr = "CREDIT";
+            else if (paidAmount > 0 && paidAmount < totalAmount) typeStr = "PARTIAL";
+        }
 
         const wholesalePrice = Number(pur.wholesale_price || 0);
         const retailPrice = Number(pur.retail_price || 0);
         const supplierName = pur.supplier_name || "-";
         const refNo = pur.ref_no || "-";
-        const diffAmount = Number(pur.diff_amount || 0);
+        const diffAmount = rawMethod === "production" ? 0 : Number(pur.diff_amount || 0);
 
         const row = [
             no,

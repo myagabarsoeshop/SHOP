@@ -14,6 +14,11 @@ const pagination = new PaginationController({
     onPageChange: () => renderTable()
 });
 
+function canManageCatalog() {
+    const role = String(state.user?.role || "").toLowerCase();
+    return state.isAdmin() || role === "finance" || role === "manager";
+}
+
 function escapeHtml(str) {
     return String(str ?? "")
         .replace(/&/g, "&amp;")
@@ -83,8 +88,60 @@ function getYarnUnit(item) {
 }
 
 export async function initYarn() {
+    ensureYarnStockFieldsAndButtons();
     bindEvents();
     await loadYarnInventory();
+}
+
+/**
+ * yarn.html တွင် ချည်လက်ကျန်အရေအတွက် (#edit-yarn-stock) အကွက်နှင့် ရက်ကန်းထုတ်ခလုတ် အလိုအလျောက် ဖြည့်စွက်ပေးခြင်း
+ */
+function ensureYarnStockFieldsAndButtons() {
+    // 1. Add Stock Quantity & Alert Qty inputs into #yarn-edit-form if not present
+    const editForm = document.getElementById("yarn-edit-form");
+    if (editForm && !document.getElementById("edit-yarn-stock")) {
+        const submitContainer = editForm.querySelector("button[type='submit']")?.parentElement;
+        if (submitContainer) {
+            const stockRow = document.createElement("div");
+            stockRow.className = "space-y-3";
+            stockRow.innerHTML = `
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                        <label id="lbl-edit-yarn-stock" class="block text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                            စာရင်းဖွင့် / လက်ရှိ ချည်လက်ကျန်ပမာဏ
+                        </label>
+                        <input type="number" id="edit-yarn-stock" min="0" step="any" value="0" placeholder="0"
+                            class="w-full text-base font-mono font-black bg-emerald-50/50 dark:bg-slate-950 border border-emerald-400 dark:border-emerald-700/80 rounded-xl px-3.5 py-2 text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            စတော့နည်း သတိပေးချက် (Alert Qty)
+                        </label>
+                        <input type="number" id="edit-yarn-alert-qty" min="0" step="any" value="10" placeholder="10"
+                            class="w-full text-base font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl">
+                    <p id="edit-yarn-stock-hint" class="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold leading-relaxed">
+                        <i class="fa-solid fa-circle-info mr-1"></i> ချည်စာရင်းဖွင့်လက်ကျန်ကို ဤနေရာတွင် တိုက်ရိုက်ထည့်သွင်း/ပြင်ဆင်နိုင်ပါသည်။
+                    </p>
+                </div>
+            `;
+            editForm.insertBefore(stockRow, submitContainer);
+        }
+    }
+
+    // 2. Add a dedicated "ချည်ထုတ်ပေးမည်" button next to "+ Add New" in the toolbar if not present
+    const addNewBtn = document.getElementById("btn-open-issue-modal");
+    if (addNewBtn && !document.getElementById("btn-toolbar-issue-yarn")) {
+        const issueBtn = document.createElement("button");
+        issueBtn.type = "button";
+        issueBtn.id = "btn-toolbar-issue-yarn";
+        issueBtn.title = "ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်";
+        issueBtn.className = "px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md shadow-amber-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95";
+        issueBtn.innerHTML = `<i class="fa-solid fa-hand-holding-hand text-xs"></i><span>ချည်ထုတ်ပေးမည်</span>`;
+        addNewBtn.parentElement?.insertBefore(issueBtn, addNewBtn);
+    }
 }
 
 function bindEvents() {
@@ -95,13 +152,25 @@ function bindEvents() {
     // Export CSV
     document.getElementById("btn-export-yarn-csv")?.addEventListener("click", exportYarnToCSV);
     
-    // Import CSV (if admin)
+    // Import CSV & Add New Yarn (Admin / Finance / Manager)
     const importBtn = document.querySelector('#btn-import-csv[data-module="yarn"]') || document.getElementById("btn-import-csv");
-    if (state.isAdmin()) {
+    const addNewBtn = document.getElementById("btn-open-issue-modal");
+    const toolbarIssueBtn = document.getElementById("btn-toolbar-issue-yarn");
+
+    if (canManageCatalog()) {
+        importBtn?.classList.remove("hidden");
         importBtn?.addEventListener("click", triggerImport);
+
+        // "+ Add New" opens New Yarn + Opening Stock modal for Managers/Admin
+        addNewBtn?.addEventListener("click", () => openEditYarnModal(null));
     } else {
         importBtn?.classList.add("hidden");
+        // For Cashiers, "+ Add New" opens Issue Yarn modal
+        addNewBtn?.addEventListener("click", () => openIssueModal());
+        toolbarIssueBtn?.classList.add("hidden");
     }
+
+    toolbarIssueBtn?.addEventListener("click", () => openIssueModal());
 
     // Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-yarn");
@@ -115,8 +184,7 @@ function bindEvents() {
         });
     }
 
-    // Issue/Add Modal Events
-    document.getElementById("btn-open-issue-modal")?.addEventListener("click", () => openIssueModal());
+    // Issue Modal Events
     document.getElementById("btn-close-yarn-issue-modal")?.addEventListener("click", () => {
         document.getElementById("yarn-issue-modal")?.classList.add("hidden");
     });
@@ -128,7 +196,7 @@ function bindEvents() {
         document.getElementById("issue-weaver-name")?.focus();
     });
 
-    // Edit Modal Events
+    // Edit / Add Yarn Modal Events
     document.getElementById("btn-close-yarn-edit-modal")?.addEventListener("click", () => {
         document.getElementById("yarn-edit-modal")?.classList.add("hidden");
     });
@@ -188,14 +256,17 @@ function populateCategoryFilter() {
 }
 
 function updateYarnKPIs() {
+    const isManager = canManageCatalog();
     const totalTypes = yarnList.length;
     const totalStock = yarnList.reduce((sum, y) => sum + Number(y.current_stock || 0), 0);
-    const totalStockValue = yarnList.reduce((sum, y) => sum + Math.round(Number(y.current_stock || 0) * Number(y.cost_price || 0)), 0);
+    const totalStockValue = isManager
+        ? yarnList.reduce((sum, y) => sum + Math.round(Number(y.current_stock || 0) * Number(y.cost_price || 0)), 0)
+        : 0;
     const lowStockCount = yarnList.filter(y => Number(y.current_stock || 0) <= Number(y.alert_quantity || 10)).length;
 
     setKPI(1, "Total Yarn Types", totalTypes, "fa-tags", "blue");
     setKPI(2, "Yarn Balances", totalStock, "fa-scroll", "emerald");
-    setKPI(3, "Yarn Valuation", totalStockValue, "fa-vault", "amber");
+    setKPI(3, "Yarn Valuation", isManager ? totalStockValue : "-", "fa-vault", "amber");
     setKPI(4, "Low Stock Yarns", lowStockCount, "fa-triangle-exclamation", "rose");
 }
 
@@ -235,6 +306,7 @@ function renderTable() {
         return;
     }
 
+    const isManager = canManageCatalog();
     const pageItems = pagination.getPageItems(currentFilteredYarns);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
@@ -242,14 +314,15 @@ function renderTable() {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 10);
         const unit = getYarnUnit(item);
+        const costDisplay = isManager ? Number(item.cost_price || 0).toLocaleString() : "-";
 
-        const actionButtons = state.isAdmin() ? `
+        const actionButtons = isManager ? `
             <div class="flex items-center justify-center gap-1.5">
                 <button type="button" data-id="${item.id}" title="ရက်ကန်းသို့ ချည်ထုတ်ပေးမည်" 
                     class="btn-issue-row w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-hand-holding-hand text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
+                <button type="button" data-id="${item.id}" title="အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်" 
                     class="btn-edit-yarn w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
@@ -296,7 +369,7 @@ function renderTable() {
             <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
             
             <!-- 8. PURCHASE -->
-            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">${Number(item.cost_price || 0).toLocaleString()}</td>
+            <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">${costDisplay}</td>
             
             <!-- 9. WHOLESALE -->
             <td class="py-2 px-4 text-right font-mono text-sm font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
@@ -329,7 +402,7 @@ function renderTable() {
         };
     });
 
-    if (state.isAdmin()) {
+    if (isManager) {
         tbody.querySelectorAll(".btn-edit-yarn").forEach(btn => {
             btn.onclick = () => {
                 const item = yarnList.find(y => y.id === Number(btn.dataset.id));
@@ -347,6 +420,11 @@ function renderTable() {
 
 // --- ရက်ကန်းသို့ ချည်ထုတ်ပေးခြင်း Modal Logic ---
 function openIssueModal(selectedYarnId = null) {
+    const currentBranchId = state.currentBranch?.id || 1;
+    if (String(currentBranchId) === "ALL") {
+        return ui.toast.warning("ရက်ကန်းသို့ ချည်ထုတ်ပေးရန် အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲ/စတိုကို အရင်ရွေးချယ်ပေးပါ။");
+    }
+
     const modal = document.getElementById("yarn-issue-modal");
     const select = document.getElementById("issue-yarn-id");
     document.getElementById("yarn-issue-form")?.reset();
@@ -395,7 +473,8 @@ async function submitYarnIssue(e) {
     const weaverName = document.getElementById("issue-weaver-name")?.value.trim();
     const qty = parseAnyNumber(document.getElementById("issue-quantity")?.value, false);
     const notes = document.getElementById("issue-notes")?.value.trim();
-    const branchId = state.currentBranch?.id || 1;
+    const rawBranch = state.currentBranch?.id;
+    const branchId = (!rawBranch || String(rawBranch) === "ALL") ? 1 : Number(rawBranch);
 
     if (!yarnId || !weaverName || qty <= 0) {
         return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
@@ -430,21 +509,76 @@ async function submitYarnIssue(e) {
     }
 }
 
-// --- ချည်အချက်အလက် ပြင်ဆင်ခြင်း Modal Logic (Admin) ---
-function openEditYarnModal(item) {
-    const unit = getYarnUnit(item);
-    document.getElementById("edit-yarn-id").value = item.id;
-    document.getElementById("edit-yarn-sku").value = item.sku || "";
-    const barcodeEl = document.getElementById("edit-yarn-barcode");
-    if (barcodeEl) barcodeEl.value = item.barcode || "";
-    document.getElementById("edit-yarn-name").value = item.item_name || "";
-    const patternEl = document.getElementById("edit-yarn-pattern");
-    if (patternEl) patternEl.value = item.pattern || "";
-    document.getElementById("edit-yarn-color").value = item.color || "";
-    document.getElementById("edit-yarn-unit").value = unit;
-    document.getElementById("edit-yarn-cost").value = item.cost_price || 0;
-    document.getElementById("edit-yarn-retail").value = item.retail_price || 0;
-    document.getElementById("edit-yarn-wholesale").value = item.wholesale_price || 0;
+// --- ချည်အသစ် သွင်းခြင်း နှင့် ချည်အချက်အလက်/လက်ကျန် ပြင်ဆင်ခြင်း Modal Logic ---
+function openEditYarnModal(item = null) {
+    if (!canManageCatalog()) {
+        return ui.toast.error("ချည်အချက်အလက် ပြင်ဆင်ခွင့် မရှိပါ။");
+    }
+
+    ensureYarnStockFieldsAndButtons();
+    document.getElementById("yarn-edit-form")?.reset();
+
+    const stockInput = document.getElementById("edit-yarn-stock");
+    const stockLabel = document.getElementById("lbl-edit-yarn-stock");
+    const stockHint = document.getElementById("edit-yarn-stock-hint");
+    const alertInput = document.getElementById("edit-yarn-alert-qty");
+
+    const currentBranchId = state.currentBranch?.id || 1;
+    const isAllBranches = String(currentBranchId) === "ALL";
+    const branchName = state.currentBranch?.name || "Main Home Shop";
+
+    if (item) {
+        const unit = getYarnUnit(item);
+        document.getElementById("edit-yarn-id").value = item.id;
+        document.getElementById("edit-yarn-sku").value = item.sku || "";
+        const barcodeEl = document.getElementById("edit-yarn-barcode");
+        if (barcodeEl) barcodeEl.value = item.barcode || "";
+        document.getElementById("edit-yarn-name").value = item.item_name || "";
+        const patternEl = document.getElementById("edit-yarn-pattern");
+        if (patternEl) patternEl.value = item.pattern || "";
+        document.getElementById("edit-yarn-color").value = item.color || "";
+        document.getElementById("edit-yarn-unit").value = unit;
+        document.getElementById("edit-yarn-cost").value = item.cost_price || 0;
+        document.getElementById("edit-yarn-retail").value = item.retail_price || 0;
+        document.getElementById("edit-yarn-wholesale").value = item.wholesale_price || 0;
+        if (alertInput) alertInput.value = item.alert_quantity ?? 10;
+        if (stockInput) stockInput.value = item.current_stock ?? 0;
+
+        if (stockInput) {
+            if (isAllBranches) {
+                stockInput.disabled = true;
+                stockInput.classList.add("opacity-50", "cursor-not-allowed");
+                if (stockLabel) stockLabel.textContent = "စုစုပေါင်း ချည်လက်ကျန် (ဆိုင်အားလုံး)";
+                if (stockHint) {
+                    stockHint.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1 text-amber-500"></i> ချည်လက်ကျန် ပြင်ဆင်လိုပါက အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။`;
+                }
+            } else {
+                stockInput.disabled = false;
+                stockInput.classList.remove("opacity-50", "cursor-not-allowed");
+                if (stockLabel) stockLabel.textContent = `လက်ရှိ ချည်လက်ကျန် (${branchName})`;
+                if (stockHint) {
+                    stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> <b>${escapeHtml(branchName)}</b> အတွက် ချည်လက်ကျန်ပမာဏကို ပြင်ဆင်နိုင်ပါသည်။`;
+                }
+            }
+        }
+    } else {
+        document.getElementById("edit-yarn-id").value = "";
+        document.getElementById("edit-yarn-unit").value = "ပေါင်";
+        document.getElementById("edit-yarn-cost").value = 0;
+        document.getElementById("edit-yarn-retail").value = 0;
+        document.getElementById("edit-yarn-wholesale").value = 0;
+        if (alertInput) alertInput.value = 10;
+        if (stockInput) {
+            stockInput.value = 0;
+            stockInput.disabled = false;
+            stockInput.classList.remove("opacity-50", "cursor-not-allowed");
+            const targetShopName = isAllBranches ? "Main Home Shop" : branchName;
+            if (stockLabel) stockLabel.textContent = `စာရင်းဖွင့် ချည်လက်ကျန်ပမာဏ (${targetShopName})`;
+            if (stockHint) {
+                stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> ချည်အသစ်နှင့် စာရင်းဖွင့်ချည်လက်ကျန်ကို တစ်ခါတည်း ထည့်သွင်းနိုင်ပါသည်။`;
+            }
+        }
+    }
 
     document.getElementById("yarn-edit-modal")?.classList.remove("hidden");
     document.getElementById("edit-yarn-name")?.focus();
@@ -452,19 +586,33 @@ function openEditYarnModal(item) {
 
 async function submitEditYarn(e) {
     e.preventDefault();
+    if (!canManageCatalog()) {
+        return ui.toast.error("ခွင့်ပြုချက် မရှိပါ။");
+    }
+
     const btn = document.getElementById("btn-save-yarn-edit");
     const id = document.getElementById("edit-yarn-id")?.value;
+    const rawBranchId = state.currentBranch?.id;
+    const isAllBranches = !rawBranchId || String(rawBranchId) === "ALL";
+    const targetBranchId = isAllBranches ? 1 : Number(rawBranchId);
+
+    const stockQty = parseAnyNumber(document.getElementById("edit-yarn-stock")?.value, false);
+    const alertQty = parseAnyNumber(document.getElementById("edit-yarn-alert-qty")?.value, false);
 
     const payload = {
         sku: document.getElementById("edit-yarn-sku")?.value.trim() || null,
         barcode: document.getElementById("edit-yarn-barcode")?.value.trim() || null,
+        category: "ချည်",
         itemName: document.getElementById("edit-yarn-name")?.value.trim(),
         pattern: document.getElementById("edit-yarn-pattern")?.value.trim() || null,
         color: document.getElementById("edit-yarn-color")?.value.trim() || null,
         size: document.getElementById("edit-yarn-unit")?.value.trim() || "ပေါင်",
         costPrice: parseAnyNumber(document.getElementById("edit-yarn-cost")?.value, true),
         retailPrice: parseAnyNumber(document.getElementById("edit-yarn-retail")?.value, true),
-        wholesalePrice: parseAnyNumber(document.getElementById("edit-yarn-wholesale")?.value, true)
+        wholesalePrice: parseAnyNumber(document.getElementById("edit-yarn-wholesale")?.value, true),
+        alertQuantity: alertQty,
+        targetBranchId,
+        branchId: targetBranchId
     };
 
     if (!payload.itemName) {
@@ -474,12 +622,22 @@ async function submitEditYarn(e) {
     if (btn) btn.disabled = true;
 
     try {
-        await api.put(`/products/${id}`, payload);
+        if (id) {
+            if (!isAllBranches) {
+                payload.quantity = stockQty;
+            }
+            await api.put(`/products/${id}`, payload);
+            ui.toast.success("ချည်အချက်အလက်နှင့် လက်ကျန်စာရင်း ပြင်ဆင်ပြီးပါပြီ။");
+        } else {
+            payload.initialStock = stockQty;
+            payload.quantity = stockQty;
+            await api.post("/products", payload);
+            ui.toast.success("ချည်အသစ်နှင့် စာရင်းဖွင့်လက်ကျန် သိမ်းဆည်းပြီးပါပြီ။");
+        }
         document.getElementById("yarn-edit-modal")?.classList.add("hidden");
-        ui.toast.success("ချည်အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
         await loadYarnInventory();
     } catch (err) {
-        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
+        ui.toast.error("သိမ်းဆည်း၍မရပါ: " + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -504,6 +662,7 @@ function exportYarnToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် ချည်စာရင်း မရှိပါ။");
     }
 
+    const isManager = canManageCatalog();
     let csvContent = "NO,BARCODE,CATEGORY,ITEM NAME,DESIGN,COLOR,UNIT,PURCHASE,WHOLESALE,RETAIL,TOTAL STOCK,STATUS\n";
 
     dataToExport.forEach((y, idx) => {
@@ -520,7 +679,7 @@ function exportYarnToCSV() {
             escapeCsv(y.pattern),
             escapeCsv(y.color),
             escapeCsv(unit),
-            y.cost_price || 0,
+            isManager ? (y.cost_price || 0) : 0,
             y.wholesale_price || 0,
             y.retail_price || 0,
             stock,
@@ -540,8 +699,12 @@ function exportYarnToCSV() {
     URL.revokeObjectURL(url);
 }
 
-// --- CSV Import Logic (Admin Only - Uses /products/bulk) ---
+// --- CSV Import Logic (Admin/Finance Only - Uses /products/bulk + Imports Stock) ---
 function triggerImport() {
+    if (!canManageCatalog()) {
+        return ui.toast.error("CSV သွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်။");
+    }
+
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".csv";
@@ -563,6 +726,9 @@ async function processImport(csvText) {
     if (lines.length <= 1) {
         return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
+
+    const rawBranchId = state.currentBranch?.id;
+    const targetBranchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
 
     const headerCols = parseCsvLine(lines[0]).map(h => h.toUpperCase());
     const isExportedYarnFormat = headerCols[0] === "NO" && headerCols[1] === "BARCODE";
@@ -586,10 +752,11 @@ async function processImport(csvText) {
                 size: row[6] || "ပေါင်",
                 costPrice: parseAnyNumber(row[7], true),
                 wholesalePrice: parseAnyNumber(row[8], true),
-                retailPrice: parseAnyNumber(row[9] || row[8], true)
+                retailPrice: parseAnyNumber(row[9] || row[8], true),
+                quantity: row[10] !== undefined ? parseAnyNumber(row[10], false) : 0
             });
         } else {
-            // Format: SKU, Barcode, Category, Item Name, Pattern, Color, Unit/Size, Cost Price, Retail Price, Wholesale Price
+            // Format: SKU, Barcode, Category, Item Name, Pattern, Color, Unit/Size, Cost Price, Retail Price, Wholesale Price, Current Stock
             const itemName = row[3] || "";
             if (!itemName) continue;
             bulkItems.push({
@@ -602,7 +769,8 @@ async function processImport(csvText) {
                 size: row[6] || "ပေါင်",
                 costPrice: parseAnyNumber(row[7], true),
                 retailPrice: parseAnyNumber(row[8], true),
-                wholesalePrice: parseAnyNumber(row[9] || row[8], true)
+                wholesalePrice: parseAnyNumber(row[9] || row[8], true),
+                quantity: row[10] !== undefined ? parseAnyNumber(row[10], false) : 0
             });
         }
     }
@@ -613,9 +781,13 @@ async function processImport(csvText) {
 
     try {
         ui.toast.info(`ချည်အမျိုးအစား (${bulkItems.length}) မျိုး သွင်းယူနေပါသည်...`);
-        const res = await api.post("/products/bulk", { items: bulkItems });
-        const count = res.data?.count ?? bulkItems.length;
-        ui.toast.success(`ချည်အချက်အလက် အသစ် (${count}) မျိုး အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`);
+        const res = await api.post("/products/bulk", {
+            branchId: targetBranchId,
+            items: bulkItems
+        });
+        const payload = res?.data || res;
+        const msg = payload?.message || `ချည်အချက်အလက် အသစ် (${payload?.count ?? bulkItems.length}) မျိုး အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`;
+        ui.toast.success(msg);
         await loadYarnInventory();
     } catch (err) {
         ui.toast.error("CSV သွင်းယူမှု မအောင်မြင်ပါ: " + err.message);

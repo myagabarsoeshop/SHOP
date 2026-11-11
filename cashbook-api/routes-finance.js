@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 4 OF 5: cashbook-api/routes-finance.js
 // MULTI-STORE CASHBOOK & CUSTOMERS / SUPPLIERS DEBT & PAYABLE LEDGERS
-// Version: 3.2.0 (Desync-Protected Cashbook, Soft-Delete Aware & Atomic Ledgers)
+// Version: 3.2.0 (Desync-Protected Cashbook, Overpayment Guard & Atomic Ledgers)
 // =============================================================================
 
 import {
@@ -91,7 +91,7 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         }
         sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
 
-        // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (လက်ရှိ FY အတွင်းသာ)
+        // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (သတ်မှတ်ရက်စွဲအထိ စုစုပေါင်းလက်ကျန်အမှန်)
         let balanceSql = `
             SELECT 
                 COALESCE(SUM(CASE WHEN payment_method = 'cash' AND entry_type = 'INCOME' THEN amount 
@@ -99,10 +99,10 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 COALESCE(SUM(CASE WHEN payment_method = 'bank' AND entry_type = 'INCOME' THEN amount 
                                   WHEN payment_method = 'bank' AND entry_type = 'EXPENSE' THEN -amount ELSE 0 END), 0) AS bank_balance
             FROM cashbook_entries
-            WHERE entry_date <= ? AND entry_date >= ? AND entry_date <= ?
+            WHERE entry_date <= ?
               AND COALESCE(status, 'completed') != 'cancelled'
         `;
-        const balanceBindings = [endDate, yearStart, yearEnd];
+        const balanceBindings = [endDate];
         if (branchId && branchId !== "ALL") {
             balanceSql += " AND branch_id = ?";
             balanceBindings.push(Number(branchId));
@@ -356,17 +356,21 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
 
         const newId = res.meta.last_row_id;
 
-        // Atomic opening ledger record (no silent .catch swallowing)
-        if (entityType === "CUSTOMER" && initialDebt > 0) {
-            await env.DB.prepare(`
-                INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
-                VALUES (?, ?, 'DEBIT', ?, ?, 'opening', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', 'completed', ?)
-            `).bind(newId, userBranchId, initialDebt, initialDebt, currentUserId).run();
-        } else if (entityType === "SUPPLIER" && initialPayable > 0) {
-            await env.DB.prepare(`
-                INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
-                VALUES (?, ?, 'PURCHASE_DEBT', ?, ?, 'opening', 'ကနဦး ပေးရန်ကျန်ငွေ (Opening Payable)', 'completed', ?)
-            `).bind(newId, userBranchId, initialPayable, initialPayable, currentUserId).run();
+        try {
+            if (entityType === "CUSTOMER" && initialDebt > 0) {
+                await env.DB.prepare(`
+                    INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                    VALUES (?, ?, 'DEBIT', ?, ?, 'opening', 'ကနဦး အကြွေးလက်ကျန် (Opening Debt)', 'completed', ?)
+                `).bind(newId, userBranchId, initialDebt, initialDebt, currentUserId).run();
+            } else if (entityType === "SUPPLIER" && initialPayable > 0) {
+                await env.DB.prepare(`
+                    INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                    VALUES (?, ?, 'PURCHASE_DEBT', ?, ?, 'opening', 'ကနဦး ပေးရန်ကျန်ငွေ (Opening Payable)', 'completed', ?)
+                `).bind(newId, userBranchId, initialPayable, initialPayable, currentUserId).run();
+            }
+        } catch (err) {
+            await env.DB.prepare("DELETE FROM customers WHERE id = ?").bind(newId).run().catch(() => {});
+            throw new Error(`ကနဦးအကြွေးစာရင်း သိမ်းဆည်းမှု မအောင်မြင်ပါ: ${err.message}`);
         }
 
         return jsonResponse({ id: newId, message: `${entityType === "SUPPLIER" ? "ပွဲရုံ" : "ဖောက်သည်"} အသစ် သိမ်းဆည်းပြီးပါပြီ` }, 201);
@@ -377,11 +381,16 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         const body = await request.json().catch(() => ({}));
         if (!id || !body.name) return errorResponse("အမည် အချက်အလက် လိုအပ်ပါသည်", 400);
 
+        const existing = await env.DB.prepare(
+            "SELECT id, name, entity_type, COALESCE(current_debt, 0) AS current_debt, COALESCE(current_payable, 0) AS current_payable FROM customers WHERE id = ?"
+        ).bind(id).first();
+        if (!existing) return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+
         const cleanPhone = body.phone && String(body.phone).trim() !== "" ? String(body.phone).trim() : null;
         const cleanShop = (body.shopName ?? body.shop_name) ? String(body.shopName ?? body.shop_name).trim() : null;
         const cleanAddr = body.address ? String(body.address).trim() : null;
-        const entityType = body.entityType || body.entity_type ? String(body.entityType || body.entity_type).toUpperCase() : null;
-        const creditLimit = body.creditLimit !== undefined || body.credit_limit !== undefined
+        const entityType = body.entityType || body.entity_type ? String(body.entityType || body.entity_type).toUpperCase() : existing.entity_type;
+        const creditLimit = (isAdminOrFinance && (body.creditLimit !== undefined || body.credit_limit !== undefined))
             ? Math.max(0, roundKyat(body.creditLimit ?? body.credit_limit))
             : null;
 
@@ -406,10 +415,23 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
             id
         ).run();
 
+        await logAudit(env.DB, {
+            branchId: userBranchId,
+            userId: currentUserId,
+            action: "UPDATE_CUSTOMER_OR_SUPPLIER",
+            tableName: "customers",
+            recordId: id,
+            details: { name: String(body.name).trim(), entityType }
+        });
+
         return jsonResponse({ message: "အချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
     }
 
     if (path.startsWith("/api/customers/") && !path.endsWith("/ledger") && !path.endsWith("/repay") && method === "DELETE") {
+        if (!isAdminOrFinance) {
+            return errorResponse("ဖောက်သည်/ပွဲရုံ စာရင်းဖျက်သိမ်းခွင့်ကို Admin / Finance သာ ခွင့်ပြုပါသည်", 403);
+        }
+
         const id = Number(path.split("/").pop());
         if (!id) return errorResponse("ID မမှန်ကန်ပါ", 400);
 
@@ -422,10 +444,20 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         }
 
         await env.DB.prepare("UPDATE customers SET is_active = 0 WHERE id = ?").bind(id).run();
+
+        await logAudit(env.DB, {
+            branchId: userBranchId,
+            userId: currentUserId,
+            action: "DEACTIVATE_CUSTOMER",
+            tableName: "customers",
+            recordId: id,
+            details: { name: cust?.name }
+        });
+
         return jsonResponse({ message: "စာရင်းမှ အောင်မြင်စွာ ပယ်ဖျက်ပြီးပါပြီ" });
     }
 
-    // UNIVERSAL DEBT REPAYMENT POST (ဖောက်သည်အကြွေးဆပ်ငွေ လက်ခံခြင်း / ပွဲရုံသို့ အကြွေးဆပ်ခြင်း)
+    // UNIVERSAL DEBT REPAYMENT POST (ဖောက်သည်အကြွေးဆပ်ငွေ လက်ခံခြင်း / ပွဲရုံသို့ အကြွေးဆပ်ခြင်း - Atomic & Overpayment Guarded)
     if (path === "/api/customers/repay" && method === "POST") {
         const body = await request.json().catch(() => ({}));
         const targetBranch = resolveBranchId(auth, body.branchId);
@@ -451,27 +483,34 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
 
         if (isSupplier) {
             const oldPayable = roundKyat(contact.current_payable || 0);
-            const newPayable = Math.max(0, oldPayable - repayAmt);
+            if (oldPayable <= 0) {
+                return errorResponse(`"${displayName}" အတွက် ပေးရန်ကျန်ငွေ မရှိတော့ပါ`, 400);
+            }
+            if (repayAmt > oldPayable) {
+                return errorResponse(`ပေးချေသည့်ငွေ (${repayAmt.toLocaleString()} Ks) သည် လက်ရှိပေးရန်ကျန်ငွေ (${oldPayable.toLocaleString()} Ks) ထက် ပိုများနေပါသည်`, 400);
+            }
 
-            const slRes = await env.DB.prepare(`
-                INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, status, created_by)
-                VALUES (?, ?, 'PAYMENT', ?, ?, ?, ?, ?, 'completed', ?)
-            `).bind(
-                Number(customerId), targetBranch, repayAmt, newPayable,
-                payMethod, bankAccountName || null,
-                note || `ပွဲရုံသို့ အကြွေးဆပ်ငွေ (${methodLabel})`,
-                currentUserId
-            ).run();
-
-            const supplierLedgerId = slRes.meta.last_row_id;
+            const newPayable = oldPayable - repayAmt;
 
             await env.DB.batch([
+                env.DB.prepare(`
+                    INSERT INTO supplier_ledger (supplier_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, status, created_by)
+                    VALUES (?, ?, 'PAYMENT', ?, ?, ?, ?, ?, 'completed', ?)
+                `).bind(
+                    Number(customerId), targetBranch, repayAmt, newPayable,
+                    payMethod, bankAccountName || null,
+                    note || `ပွဲရုံသို့ အကြွေးဆပ်ငွေ (${methodLabel})`,
+                    currentUserId
+                ),
                 env.DB.prepare("UPDATE customers SET current_payable = ? WHERE id = ?").bind(newPayable, Number(customerId)),
                 env.DB.prepare(`
-                    INSERT INTO cashbook_entries (branch_id, category_id, supplier_ledger_id, entry_type, payment_method, bank_account_name, amount, ref_no, description, entry_date, status, created_by)
-                    VALUES (?, 11, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, 'completed', ?)
+                    INSERT INTO cashbook_entries (
+                        branch_id, category_id, supplier_ledger_id, entry_type, payment_method, bank_account_name, amount, ref_no, description, entry_date, status, created_by
+                    ) VALUES (
+                        ?, 11, (SELECT MAX(id) FROM supplier_ledger WHERE supplier_id = ?), 'EXPENSE', ?, ?, ?, ?, ?, ?, 'completed', ?
+                    )
                 `).bind(
-                    targetBranch, supplierLedgerId, payMethod, bankAccountName || null,
+                    targetBranch, Number(customerId), payMethod, bankAccountName || null,
                     repayAmt, refCode, `${displayName} - ပွဲရုံကြွေးဆပ် (${note || methodLabel})`,
                     today, currentUserId
                 )
@@ -480,27 +519,34 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
             return jsonResponse({ message: "ပွဲရုံသို့ အကြွေးဆပ်ငွေ မှတ်တမ်းတင်ပြီးပါပြီ", newBalance: newPayable });
         } else {
             const oldDebt = roundKyat(contact.current_debt || 0);
-            const newDebt = Math.max(0, oldDebt - repayAmt);
+            if (oldDebt <= 0) {
+                return errorResponse(`"${displayName}" တွင် ရရန်ကျန်အကြွေး မရှိတော့ပါ`, 400);
+            }
+            if (repayAmt > oldDebt) {
+                return errorResponse(`လက်ခံရရှိငွေ (${repayAmt.toLocaleString()} Ks) သည် လက်ရှိအကြွေးလက်ကျန် (${oldDebt.toLocaleString()} Ks) ထက် ပိုများနေပါသည်`, 400);
+            }
 
-            const clRes = await env.DB.prepare(`
-                INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, status, created_by)
-                VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?, 'completed', ?)
-            `).bind(
-                Number(customerId), targetBranch, repayAmt, newDebt,
-                payMethod, bankAccountName || null,
-                note || `အကြွေးဆပ် (${methodLabel})`,
-                currentUserId
-            ).run();
-
-            const customerLedgerId = clRes.meta.last_row_id;
+            const newDebt = oldDebt - repayAmt;
 
             await env.DB.batch([
+                env.DB.prepare(`
+                    INSERT INTO customer_ledger (customer_id, branch_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, status, created_by)
+                    VALUES (?, ?, 'CREDIT', ?, ?, ?, ?, ?, 'completed', ?)
+                `).bind(
+                    Number(customerId), targetBranch, repayAmt, newDebt,
+                    payMethod, bankAccountName || null,
+                    note || `အကြွေးဆပ် (${methodLabel})`,
+                    currentUserId
+                ),
                 env.DB.prepare("UPDATE customers SET current_debt = ? WHERE id = ?").bind(newDebt, Number(customerId)),
                 env.DB.prepare(`
-                    INSERT INTO cashbook_entries (branch_id, category_id, customer_ledger_id, entry_type, payment_method, bank_account_name, amount, ref_no, description, entry_date, status, created_by)
-                    VALUES (?, 2, ?, 'INCOME', ?, ?, ?, ?, ?, ?, 'completed', ?)
+                    INSERT INTO cashbook_entries (
+                        branch_id, category_id, customer_ledger_id, entry_type, payment_method, bank_account_name, amount, ref_no, description, entry_date, status, created_by
+                    ) VALUES (
+                        ?, 2, (SELECT MAX(id) FROM customer_ledger WHERE customer_id = ?), 'INCOME', ?, ?, ?, ?, ?, ?, 'completed', ?
+                    )
                 `).bind(
-                    targetBranch, customerLedgerId, payMethod, bankAccountName || null,
+                    targetBranch, Number(customerId), payMethod, bankAccountName || null,
                     repayAmt, refCode, `${displayName} - အကြွေးဆပ် (${note || methodLabel})`,
                     today, currentUserId
                 )

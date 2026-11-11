@@ -573,7 +573,7 @@ function openEditYarnModal(item = null) {
             stockInput.disabled = false;
             stockInput.classList.remove("opacity-50", "cursor-not-allowed");
             const targetShopName = isAllBranches ? "Main Home Shop" : branchName;
-            if (stockLabel) stockLabel.textContent = `စာရင်းဖွင့် ချည်လက်ကျန်ပမာဏ (${targetShopName})`;
+            if (stockLabel) stockLabel.textContent = `Opening Yarn (${targetShopName})`;
             if (stockHint) {
                 stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> ချည်အသစ်နှင့် စာရင်းဖွင့်ချည်လက်ကျန်ကို တစ်ခါတည်း ထည့်သွင်းနိုင်ပါသည်။`;
             }

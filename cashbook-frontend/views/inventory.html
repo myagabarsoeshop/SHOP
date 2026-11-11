@@ -161,9 +161,27 @@
                 </div>
             </div>
 
-            <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-xl">
-                <p class="text-[11px] text-amber-700 dark:text-amber-400 font-bold leading-relaxed">
-                    <i class="fa-solid fa-circle-info mr-1"></i> မှတ်ချက်: အရေအတွက် (Stock) ကို "Purchases" နှင့် "Damage & Waste" စာမျက်နှာများမှသာ စာရင်းသွင်း/နုတ် ပြုလုပ်ရပါမည်။
+            <!-- စာရင်းဖွင့် / လက်ရှိဆိုင် လက်ကျန်အရေအတွက် နှင့် စတော့နည်း သတိပေးချက် -->
+            <div class="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                    <label id="lbl-prod-stock" class="block text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                        စာရင်းဖွင့် / လက်ရှိဆိုင် လက်ကျန်အရေအတွက်
+                    </label>
+                    <input type="number" id="prod-stock" min="0" step="any" value="0" placeholder="0"
+                        class="w-full text-base font-mono font-black bg-emerald-50/50 dark:bg-slate-950 border border-emerald-400 dark:border-emerald-700/80 rounded-xl px-3.5 py-2 text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        စတော့နည်း သတိပေးချက် (Alert Qty)
+                    </label>
+                    <input type="number" id="prod-alert-qty" min="0" step="any" value="5" placeholder="5"
+                        class="w-full text-base font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+            </div>
+
+            <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl">
+                <p id="prod-stock-hint" class="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold leading-relaxed">
+                    <i class="fa-solid fa-circle-info mr-1"></i> စာရင်းဖွင့်လက်ကျန်ကို ဤနေရာတွင် တိုက်ရိုက်ထည့်သွင်းနိုင်ပါသည်။ လုပ်ငန်းလည်ပတ်စဉ် ကိုယ်ပိုင်ရက်ကန်းအဝင်နှင့် အဝယ်များကို "Purchases" စာမျက်နှာတွင် သွင်းပါ။
                 </p>
             </div>
 

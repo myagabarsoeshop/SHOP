@@ -229,7 +229,7 @@ function renderTable() {
 
         const actionButtons = isManager ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
+                <button type="button" data-id="${item.id}" title="အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်" 
                     class="btn-edit-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
@@ -324,10 +324,14 @@ function safeSetValue(id, value) {
 
 // --- Stock Transfer Logic ---
 function openTransferModal(prod) {
+    const currentBranchId = state.currentBranch?.id || 1;
+    if (String(currentBranchId) === "ALL") {
+        return ui.toast.warning("ပစ္စည်းလွှဲပြောင်းရန် အပေါ်ဆုံးဘားတွင် မူလပေးပို့မည့် ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
+    }
+
     const modal = document.getElementById("transfer-modal");
     document.getElementById("transfer-form")?.reset();
 
-    const currentBranchId = state.currentBranch?.id || 1;
     const destSelect = document.getElementById("transfer-dest-branch");
 
     safeSetValue("transfer-prod-id", prod.id);
@@ -343,7 +347,7 @@ function openTransferModal(prod) {
     if (destSelect) {
         destSelect.innerHTML = `<option value="" disabled selected>-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
-            if (b.id !== currentBranchId) {
+            if (Number(b.id) !== Number(currentBranchId)) {
                 destSelect.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code || "-")})</option>`;
             }
         });
@@ -361,7 +365,8 @@ async function submitStockTransfer(e) {
     const toBranchId = document.getElementById("transfer-dest-branch")?.value;
     const qty = parseAnyNumber(document.getElementById("transfer-qty")?.value, false);
     const notes = document.getElementById("transfer-notes")?.value.trim();
-    const fromBranchId = state.currentBranch?.id || 1;
+    const rawFromBranch = state.currentBranch?.id;
+    const fromBranchId = (!rawFromBranch || String(rawFromBranch) === "ALL") ? 1 : Number(rawFromBranch);
 
     if (!toBranchId) {
         return ui.toast.warning("ကျေးဇူးပြု၍ ပစ္စည်းပို့ဆောင်မည့် ဆိုင်ခွဲကို ရွေးချယ်ပေးပါ။");
@@ -414,6 +419,11 @@ async function deleteProduct(id) {
 
 // --- Waste Modal Logic ---
 function openWasteModal(prod) {
+    const currentBranchId = state.currentBranch?.id || 1;
+    if (String(currentBranchId) === "ALL") {
+        return ui.toast.warning("အလေအလွင့်စာရင်း သွင်းရန် အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
+    }
+
     const modal = document.getElementById("waste-modal");
     document.getElementById("waste-form")?.reset();
 
@@ -437,7 +447,8 @@ async function submitWaste(e) {
     if (btn) btn.disabled = true;
 
     const prodId = document.getElementById("waste-prod-id")?.value;
-    const branchId = state.currentBranch?.id || 1;
+    const rawBranchId = state.currentBranch?.id;
+    const branchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
     const qty = parseAnyNumber(document.getElementById("waste-qty")?.value, false);
     const unitCost = parseAnyNumber(document.getElementById("waste-unit-cost")?.value, true);
     const reason = document.getElementById("waste-reason")?.value.trim();
@@ -467,7 +478,7 @@ async function submitWaste(e) {
     }
 }
 
-// --- Edit Product Logic (Admin / Finance) ---
+// --- Add / Edit Product Logic (With Opening Stock & Multi-Branch Guard) ---
 function openProductModal(prod = null) {
     if (!canManageCatalog()) {
         return ui.toast.error("ပစ္စည်းအချက်အလက် ပြင်ဆင်ခွင့် မရှိပါ။");
@@ -475,10 +486,17 @@ function openProductModal(prod = null) {
 
     const modal = document.getElementById("product-modal");
     const title = document.getElementById("product-modal-title");
+    const stockInput = document.getElementById("prod-stock");
+    const stockLabel = document.getElementById("lbl-prod-stock");
+    const stockHint = document.getElementById("prod-stock-hint");
     document.getElementById("product-form")?.reset();
 
+    const currentBranchId = state.currentBranch?.id || 1;
+    const isAllBranches = String(currentBranchId) === "ALL";
+    const branchName = state.currentBranch?.name || "Main Home Shop";
+
     if (prod) {
-        if (title) title.textContent = "အထည်အချက်အလက် ပြင်ဆင်မည်";
+        if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
         safeSetValue("prod-id", prod.id);
         safeSetValue("prod-sku", prod.sku || "");
         safeSetValue("prod-barcode", prod.barcode || "");
@@ -490,10 +508,45 @@ function openProductModal(prod = null) {
         safeSetValue("prod-cost", prod.cost_price || 0);
         safeSetValue("prod-retail", prod.retail_price || 0);
         safeSetValue("prod-wholesale", prod.wholesale_price || 0);
+        safeSetValue("prod-alert-qty", prod.alert_quantity ?? 5);
+        safeSetValue("prod-stock", prod.current_stock ?? 0);
+
+        if (stockInput) {
+            if (isAllBranches) {
+                stockInput.disabled = true;
+                stockInput.classList.add("opacity-50", "cursor-not-allowed");
+                if (stockLabel) stockLabel.textContent = "စုစုပေါင်း လက်ကျန် (ဆိုင်အားလုံး)";
+                if (stockHint) {
+                    stockHint.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1 text-amber-500"></i> လက်ကျန်အရေအတွက် ပြင်ဆင်လိုပါက အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။`;
+                }
+            } else {
+                stockInput.disabled = false;
+                stockInput.classList.remove("opacity-50", "cursor-not-allowed");
+                if (stockLabel) stockLabel.textContent = `လက်ရှိလက်ကျန် (${branchName})`;
+                if (stockHint) {
+                    stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> <b>${escapeHtml(branchName)}</b> အတွက် စာရင်းဖွင့်/လက်ကျန် အရေအတွက်ကို ပြင်ဆင်နိုင်ပါသည်။ (ငွေစာရင်းနှင့် အကြွေးကို မထိပါ)`;
+                }
+            }
+        }
     } else {
-        if (title) title.textContent = "အထည်အချက်အလက်သစ် မှတ်ပုံတင်မည်";
+        if (title) title.textContent = "အထည်အချက်အလက်သစ်နှင့် စာရင်းဖွင့်လက်ကျန် သွင်းမည်";
         safeSetValue("prod-id", "");
         safeSetValue("prod-size", "ထည်");
+        safeSetValue("prod-cost", 0);
+        safeSetValue("prod-retail", 0);
+        safeSetValue("prod-wholesale", 0);
+        safeSetValue("prod-alert-qty", 5);
+        safeSetValue("prod-stock", 0);
+
+        if (stockInput) {
+            stockInput.disabled = false;
+            stockInput.classList.remove("opacity-50", "cursor-not-allowed");
+            const targetShopName = isAllBranches ? "Main Home Shop" : branchName;
+            if (stockLabel) stockLabel.textContent = `စာရင်းဖွင့် လက်ကျန်အရေအတွက် (${targetShopName})`;
+            if (stockHint) {
+                stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> စာရင်းဖွင့် သို့မဟုတ် ကိုယ်ပိုင်ထုတ် ကနဦးအရေအတွက်ကို တစ်ခါတည်း ထည့်သွင်းနိုင်ပါသည်။`;
+            }
+        }
     }
 
     modal?.classList.remove("hidden");
@@ -510,7 +563,11 @@ async function submitProduct(e) {
     if (btn) btn.disabled = true;
 
     const prodId = document.getElementById("prod-id")?.value;
-    const branchId = state.currentBranch?.id || 1;
+    const rawBranchId = state.currentBranch?.id;
+    const isAllBranches = !rawBranchId || String(rawBranchId) === "ALL";
+    const targetBranchId = isAllBranches ? 1 : Number(rawBranchId);
+    const stockQty = parseAnyNumber(document.getElementById("prod-stock")?.value, false);
+    const alertQty = parseAnyNumber(document.getElementById("prod-alert-qty")?.value, false);
 
     const payload = {
         sku: document.getElementById("prod-sku")?.value.trim() || null,
@@ -523,19 +580,23 @@ async function submitProduct(e) {
         costPrice: parseAnyNumber(document.getElementById("prod-cost")?.value, true),
         retailPrice: parseAnyNumber(document.getElementById("prod-retail")?.value, true),
         wholesalePrice: parseAnyNumber(document.getElementById("prod-wholesale")?.value, true),
-        targetBranchId: branchId,
-        branchId
+        alertQuantity: alertQty,
+        targetBranchId,
+        branchId: targetBranchId
     };
 
     try {
         if (prodId) {
+            if (!isAllBranches) {
+                payload.quantity = stockQty;
+            }
             await api.put(`/products/${prodId}`, payload);
-            ui.toast.success("အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
+            ui.toast.success("အချက်အလက်နှင့် လက်ကျန်စာရင်း ပြင်ဆင်ပြီးပါပြီ။");
         } else {
-            payload.initialStock = 0;
-            payload.quantity = 0;
+            payload.initialStock = stockQty;
+            payload.quantity = stockQty;
             await api.post("/products", payload);
-            ui.toast.success("အထည်အသစ် မှတ်ပုံတင်ပြီးပါပြီ။");
+            ui.toast.success("အထည်အသစ်နှင့် စာရင်းဖွင့်လက်ကျန် မှတ်ပုံတင်ပြီးပါပြီ။");
         }
         document.getElementById("product-modal")?.classList.add("hidden");
         await loadInventory();
@@ -584,7 +645,7 @@ function exportToCSV() {
     URL.revokeObjectURL(url);
 }
 
-// --- CSV Import Logic (Uses D1 Batched /products/bulk Endpoint) ---
+// --- CSV Import Logic (Uses D1 Batched /products/bulk Endpoint + Imports Stock Balance) ---
 function triggerImport() {
     if (!canManageCatalog()) {
         return ui.toast.error("CSV သွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်။");
@@ -612,6 +673,9 @@ async function processImport(csvText) {
         return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
 
+    const rawBranchId = state.currentBranch?.id;
+    const targetBranchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
+
     const bulkItems = [];
     for (let i = 1; i < lines.length; i++) {
         const row = parseCsvLine(lines[i]);
@@ -630,7 +694,8 @@ async function processImport(csvText) {
             size: row[6] || "ထည်",
             costPrice: parseAnyNumber(row[7], true),
             retailPrice: parseAnyNumber(row[8], true),
-            wholesalePrice: parseAnyNumber(row[9] || row[8], true)
+            wholesalePrice: parseAnyNumber(row[9] || row[8], true),
+            quantity: row[10] !== undefined ? parseAnyNumber(row[10], false) : 0
         });
     }
 
@@ -640,7 +705,10 @@ async function processImport(csvText) {
 
     try {
         ui.toast.info(`ပစ္စည်း (${bulkItems.length}) မျိုး သွင်းယူနေပါသည်...`);
-        const res = await api.post("/products/bulk", { items: bulkItems });
+        const res = await api.post("/products/bulk", {
+            branchId: targetBranchId,
+            items: bulkItems
+        });
         const payload = res?.data || res;
         const msg = payload?.message || `အထည်အချက်အလက် အသစ် (${payload?.count ?? bulkItems.length}) မျိုး အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`;
         ui.toast.success(msg);

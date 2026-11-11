@@ -542,7 +542,7 @@ function openProductModal(prod = null) {
             stockInput.disabled = false;
             stockInput.classList.remove("opacity-50", "cursor-not-allowed");
             const targetShopName = isAllBranches ? "Main Home Shop" : branchName;
-            if (stockLabel) stockLabel.textContent = `စာရင်းဖွင့် လက်ကျန်အရေအတွက် (${targetShopName})`;
+            if (stockLabel) stockLabel.textContent = `Opening Stock (${targetShopName})`;
             if (stockHint) {
                 stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> စာရင်းဖွင့် သို့မဟုတ် ကိုယ်ပိုင်ထုတ် ကနဦးအရေအတွက်ကို တစ်ခါတည်း ထည့်သွင်းနိုင်ပါသည်။`;
             }

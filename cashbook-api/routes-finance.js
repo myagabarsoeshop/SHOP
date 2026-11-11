@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 4 OF 5: cashbook-api/routes-finance.js
 // MULTI-STORE CASHBOOK & CUSTOMERS / SUPPLIERS DEBT & PAYABLE LEDGERS
-// Version: 3.2.0 (Desync-Protected Cashbook, Overpayment Guard & Atomic Ledgers)
+// Version: 4.0.0 (Server-Side Pagination & Desync-Protected Ledger)
 // =============================================================================
 
 import {
@@ -41,6 +41,24 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
 
         const startDate = url.searchParams.get("start_date") || yearStart;
         const endDate = url.searchParams.get("end_date") || yearEnd;
+
+        // [NEW] Server-Side Pagination
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const limit = Math.max(1, Number(url.searchParams.get("limit")) || 500); // Max 500 per page for performance
+        const offset = (page - 1) * limit;
+
+        // Count Total Entries for Pagination
+        let countSql = `
+            SELECT COUNT(id) AS total FROM cashbook_entries
+            WHERE entry_date >= ? AND entry_date <= ? 
+              AND entry_date >= ? AND entry_date <= ?
+              AND COALESCE(status, 'completed') != 'cancelled'
+        `;
+        const countBindings = [startDate, endDate, yearStart, yearEnd];
+        if (branchId && branchId !== "ALL") {
+            countSql += " AND branch_id = ?";
+            countBindings.push(Number(branchId));
+        }
 
         // ၁။ စာရင်း အသေးစိတ် ဆွဲယူခြင်း (Soft-deleted/cancelled မှတ်တမ်းများ မပါဝင်စေရ)
         let sql = `
@@ -89,7 +107,8 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
             sql += " AND ce.branch_id = ?";
             bindings.push(Number(branchId));
         }
-        sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT 500";
+        sql += " ORDER BY ce.entry_date DESC, ce.id DESC LIMIT ? OFFSET ?";
+        bindings.push(limit, offset);
 
         // ၂။ ဆိုင်နှင့် ဘဏ် လက်ကျန်ငွေ အစစ်အမှန် (သတ်မှတ်ရက်စွဲအထိ စုစုပေါင်းလက်ကျန်အမှန်)
         let balanceSql = `
@@ -126,7 +145,8 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
             summaryBindings.push(Number(branchId));
         }
 
-        const [entriesRes, balanceRes, summaryRes] = await env.DB.batch([
+        const [countRes, entriesRes, balanceRes, summaryRes] = await env.DB.batch([
+            env.DB.prepare(countSql).bind(...countBindings),
             env.DB.prepare(sql).bind(...bindings),
             env.DB.prepare(balanceSql).bind(...balanceBindings),
             env.DB.prepare(summarySql).bind(...summaryBindings)
@@ -140,6 +160,7 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         }));
         const balanceRow = (balanceRes.results || [])[0] || {};
         const todaySummaryRow = (summaryRes.results || [])[0] || {};
+        const totalItems = (countRes.results || [])[0]?.total || 0;
 
         return jsonResponse({
             summary: {
@@ -149,7 +170,10 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 today_remittance: roundKyat(todaySummaryRow.today_remittance || 0),
                 today_income: roundKyat(todaySummaryRow.today_income || 0)
             },
-            entries
+            entries,
+            total: totalItems,
+            page,
+            limit
         });
     }
 
@@ -562,6 +586,11 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         const customerId = Number(parts[3]);
         if (!customerId) return errorResponse("ID မမှန်ကန်ပါ", 400);
 
+        // [NEW] Server-Side Pagination
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const limit = Math.max(1, Number(url.searchParams.get("limit")) || 300); // Usually 300 is enough for a statement
+        const offset = (page - 1) * limit;
+
         const contact = await env.DB.prepare(
             "SELECT COALESCE(entity_type, 'CUSTOMER') AS entity_type FROM customers WHERE id = ?"
         ).bind(customerId).first();
@@ -569,6 +598,10 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         const isSupplier = contact && String(contact.entity_type).toUpperCase() === "SUPPLIER";
 
         if (isSupplier) {
+            const countSql = `SELECT COUNT(id) AS total FROM supplier_ledger WHERE supplier_id = ? AND COALESCE(status, 'completed') != 'cancelled'`;
+            const countRes = await env.DB.prepare(countSql).bind(customerId).first();
+            const totalItems = countRes?.total || 0;
+
             const sql = `
                 SELECT 
                     sl.id, sl.supplier_id AS customer_id, sl.branch_id, sl.purchase_id,
@@ -580,11 +613,21 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 LEFT JOIN purchases p ON sl.purchase_id = p.id
                 LEFT JOIN users u ON sl.created_by = u.id
                 WHERE sl.supplier_id = ? AND COALESCE(sl.status, 'completed') != 'cancelled'
-                ORDER BY sl.id DESC LIMIT 300
+                ORDER BY sl.id DESC LIMIT ? OFFSET ?
             `;
-            const { results } = await env.DB.prepare(sql).bind(customerId).all();
-            return jsonResponse(results || []);
+            const { results } = await env.DB.prepare(sql).bind(customerId, limit, offset).all();
+            
+            return jsonResponse({
+                items: results || [],
+                total: totalItems,
+                page,
+                limit
+            });
         } else {
+            const countSql = `SELECT COUNT(id) AS total FROM customer_ledger WHERE customer_id = ? AND COALESCE(status, 'completed') != 'cancelled'`;
+            const countRes = await env.DB.prepare(countSql).bind(customerId).first();
+            const totalItems = countRes?.total || 0;
+
             const sql = `
                 SELECT 
                     cl.id, cl.customer_id, cl.branch_id, cl.sale_id,
@@ -596,10 +639,16 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
                 LEFT JOIN sales s ON cl.sale_id = s.id
                 LEFT JOIN users u ON cl.created_by = u.id
                 WHERE cl.customer_id = ? AND COALESCE(cl.status, 'completed') != 'cancelled'
-                ORDER BY cl.id DESC LIMIT 300
+                ORDER BY cl.id DESC LIMIT ? OFFSET ?
             `;
-            const { results } = await env.DB.prepare(sql).bind(customerId).all();
-            return jsonResponse(results || []);
+            const { results } = await env.DB.prepare(sql).bind(customerId, limit, offset).all();
+            
+            return jsonResponse({
+                items: results || [],
+                total: totalItems,
+                page,
+                limit
+            });
         }
     }
 

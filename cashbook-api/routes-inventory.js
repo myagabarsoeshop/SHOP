@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 2 OF 5: cashbook-api/routes-inventory.js
-// BRANCHES, PRODUCTS (WITH BULK CSV), YARN, WASTE LOGS & STOCK TRANSFERS
-// Version: 3.2.0 (RBAC Hardened, Cost-Price Masked, Accurate CSV Count & UTC Indexed)
+// BRANCHES, PRODUCTS (OPENING STOCK & BULK CSV), YARN, WASTE LOGS & STOCK TRANSFERS
+// Version: 3.2.0 (RBAC Hardened, Cost-Price Masked, CSV Stock Sync & UTC Indexed)
 // =============================================================================
 
 import {
@@ -123,12 +123,17 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("အမျိုးအစားနှင့် ပစ္စည်းအမည် ထည့်သွင်းပေးပါ", 400);
         }
 
+        const cleanCategory = String(body.category).trim();
         const sku = body.sku && String(body.sku).trim() !== "" ? String(body.sku).trim() : null;
         const barcode = body.barcode && String(body.barcode).trim() !== "" ? String(body.barcode).trim() : null;
         const costPrice = roundKyat(body.costPrice ?? body.cost_price ?? 0);
         const retailPrice = roundKyat(body.retailPrice ?? body.retail_price ?? 0);
         const wholesalePrice = roundKyat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice);
         const initialStock = roundQty(body.initialStock ?? body.quantity ?? 0);
+        const defaultAlert = cleanCategory.startsWith("ချည်") ? 10 : 5;
+        const alertQty = body.alertQuantity !== undefined || body.alert_quantity !== undefined
+            ? Math.max(0, roundQty(body.alertQuantity ?? body.alert_quantity))
+            : defaultAlert;
         const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? userBranchId, 10) || 1;
 
         if (costPrice < 0 || retailPrice < 0 || wholesalePrice < 0 || initialStock < 0) {
@@ -136,21 +141,21 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         }
 
         const res = await env.DB.prepare(`
-            INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price, alert_quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-            sku, barcode, String(body.category).trim(), String(itemName).trim(),
+            sku, barcode, cleanCategory, String(itemName).trim(),
             body.pattern && String(body.pattern).trim() !== "" ? String(body.pattern).trim() : null,
             body.size && String(body.size).trim() !== "" ? String(body.size).trim() : "ထည်",
             body.color && String(body.color).trim() !== "" ? String(body.color).trim() : null,
-            costPrice, retailPrice, wholesalePrice
+            costPrice, retailPrice, wholesalePrice, alertQty
         ).run();
 
         const newProductId = res.meta.last_row_id;
         if (initialStock > 0) {
             await env.DB.prepare(`
                 INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity
+                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
             `).bind(targetBranchId, newProductId, initialStock).run();
         }
 
@@ -166,7 +171,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         return jsonResponse({ id: newProductId, message: "အထည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
     }
 
-    // BULK CSV IMPORT (Saves 95% of D1 Roundtrips & Reports Exact Inserted vs Skipped Count)
+    // BULK CSV IMPORT (Saves 95% of D1 Roundtrips, Syncs Opening Stock & Reports Exact Inserted vs Skipped Count)
     if (path === "/api/products/bulk" && method === "POST") {
         if (!isAdminOrFinance) {
             return errorResponse("CSV ဖြင့် ပစ္စည်းသွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
@@ -174,9 +179,10 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         const body = await request.json().catch(() => ({}));
         const items = Array.isArray(body.items) ? body.items : [];
+        const targetBranchId = parseInt(body.branchId ?? body.targetBranchId ?? userBranchId, 10) || 1;
         if (items.length === 0) return errorResponse("သွင်းယူမည့် ပစ္စည်းစာရင်း မရှိပါ", 400);
 
-        const batch = [];
+        const validItems = [];
         for (const item of items) {
             const itemName = String(item.itemName || item.item_name || "").trim();
             const category = String(item.category || "အထွေထွေ").trim();
@@ -187,37 +193,99 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             const costPrice = Math.max(0, roundKyat(item.costPrice ?? item.cost_price ?? 0));
             const retailPrice = Math.max(0, roundKyat(item.retailPrice ?? item.retail_price ?? 0));
             const wholesalePrice = Math.max(0, roundKyat(item.wholesalePrice ?? item.wholesale_price ?? retailPrice));
+            const stockQty = Math.max(0, roundQty(item.quantity ?? item.stock ?? item.initialStock ?? 0));
 
-            batch.push(
+            validItems.push({
+                sku,
+                barcode,
+                category,
+                itemName,
+                pattern: item.pattern && String(item.pattern).trim() !== "" ? String(item.pattern).trim() : null,
+                size: item.size && String(item.size).trim() !== "" ? String(item.size).trim() : "ထည်",
+                color: item.color && String(item.color).trim() !== "" ? String(item.color).trim() : null,
+                costPrice,
+                retailPrice,
+                wholesalePrice,
+                stockQty
+            });
+        }
+
+        if (validItems.length === 0) {
+            return errorResponse("သွင်းယူနိုင်သော ပစ္စည်းအချက်အလက် မတွေ့ပါ", 400);
+        }
+
+        let insertedCount = 0;
+        let stockUpdatedCount = 0;
+
+        for (let i = 0; i < validItems.length; i += 40) {
+            const chunk = validItems.slice(i, i + 40);
+            const stmts = chunk.map(it =>
                 env.DB.prepare(`
                     INSERT OR IGNORE INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
-                    sku, barcode, category, itemName,
-                    item.pattern && String(item.pattern).trim() !== "" ? String(item.pattern).trim() : null,
-                    item.size && String(item.size).trim() !== "" ? String(item.size).trim() : "ထည်",
-                    item.color && String(item.color).trim() !== "" ? String(item.color).trim() : null,
-                    costPrice, retailPrice, wholesalePrice
+                    it.sku, it.barcode, it.category, it.itemName,
+                    it.pattern, it.size, it.color,
+                    it.costPrice, it.retailPrice, it.wholesalePrice
                 )
             );
-        }
 
-        let insertedCount = 0;
-        for (let i = 0; i < batch.length; i += 50) {
-            const chunkResults = await env.DB.batch(batch.slice(i, i + 50));
-            for (const r of chunkResults) {
-                insertedCount += Number(r?.meta?.changes || 0);
+            const chunkResults = await env.DB.batch(stmts);
+            const stockBatch = [];
+
+            chunkResults.forEach((r, idx) => {
+                const changes = Number(r?.meta?.changes || 0);
+                const newProdId = r?.meta?.last_row_id;
+                const it = chunk[idx];
+
+                if (changes > 0) {
+                    insertedCount += 1;
+                    if (it.stockQty > 0 && newProdId) {
+                        stockUpdatedCount += 1;
+                        stockBatch.push(
+                            env.DB.prepare(`
+                                INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
+                                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                            `).bind(targetBranchId, newProdId, it.stockQty)
+                        );
+                    }
+                } else if (it.stockQty > 0 && (it.sku || it.barcode)) {
+                    // If product already existed by SKU/Barcode and CSV specifies a stock balance, sync its stock balance
+                    stockUpdatedCount += 1;
+                    stockBatch.push(
+                        env.DB.prepare(`
+                            INSERT INTO branch_inventory (branch_id, product_id, quantity)
+                            SELECT ?, id, ? FROM products WHERE (sku = ? OR barcode = ?) AND is_active = 1 LIMIT 1
+                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                        `).bind(targetBranchId, it.stockQty, it.sku || "", it.barcode || "")
+                    );
+                }
+            });
+
+            if (stockBatch.length > 0) {
+                await env.DB.batch(stockBatch);
             }
         }
-        const skippedCount = Math.max(0, batch.length - insertedCount);
+
+        const skippedCount = Math.max(0, validItems.length - insertedCount);
+
+        await logAudit(env.DB, {
+            branchId: targetBranchId,
+            userId: currentUserId,
+            action: "BULK_IMPORT_PRODUCTS",
+            tableName: "products",
+            recordId: null,
+            details: { totalRows: validItems.length, insertedCount, skippedCount, stockUpdatedCount }
+        });
 
         return jsonResponse({
             message: skippedCount > 0
-                ? `ပစ္စည်းအသစ် (${insertedCount}) မျိုး သွင်းယူပြီး ကုတ်ထပ်နေသော (${skippedCount}) မျိုးကို ကျော်သွားပါသည်`
-                : `ပစ္စည်း (${insertedCount}) မျိုး အောင်မြင်စွာ သွင်းယူပြီးပါပြီ`,
+                ? `ပစ္စည်းအသစ် (${insertedCount}) မျိုး သွင်းယူပြီး ရှိပြီးသား (${skippedCount}) မျိုးအနက် စတော့ပါသော ပစ္စည်းများကို လက်ကျန်ညှိပေးပြီးပါပြီ`
+                : `ပစ္စည်း (${insertedCount}) မျိုးနှင့် စာရင်းဖွင့်လက်ကျန်များ အောင်မြင်စွာ သွင်းယူပြီးပါပြီ`,
             count: insertedCount,
             insertedCount,
-            skippedCount
+            skippedCount,
+            stockUpdatedCount
         }, 201);
     }
 
@@ -232,6 +300,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         const cleanSku = body.sku !== undefined ? (String(body.sku).trim() || null) : null;
         const cleanBarcode = body.barcode !== undefined ? (String(body.barcode).trim() || null) : null;
+        const alertQty = body.alertQuantity !== undefined || body.alert_quantity !== undefined
+            ? Math.max(0, roundQty(body.alertQuantity ?? body.alert_quantity))
+            : null;
 
         await env.DB.prepare(`
             UPDATE products SET
@@ -244,7 +315,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 color = COALESCE(?, color),
                 cost_price = COALESCE(?, cost_price),
                 retail_price = COALESCE(?, retail_price),
-                wholesale_price = COALESCE(?, wholesale_price)
+                wholesale_price = COALESCE(?, wholesale_price),
+                alert_quantity = COALESCE(?, alert_quantity)
             WHERE id = ?
         `).bind(
             cleanSku,
@@ -257,11 +329,12 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             body.costPrice !== undefined ? roundKyat(body.costPrice) : (body.cost_price !== undefined ? roundKyat(body.cost_price) : null),
             body.retailPrice !== undefined ? roundKyat(body.retailPrice) : (body.retail_price !== undefined ? roundKyat(body.retail_price) : null),
             body.wholesalePrice !== undefined ? roundKyat(body.wholesalePrice) : (body.wholesale_price !== undefined ? roundKyat(body.wholesale_price) : null),
+            alertQty,
             productId
         ).run();
 
-        // Only Admin can manually override stock quantity, and it is strictly audited
-        if (body.quantity !== undefined && currentUserRole === "admin" && (body.branchId || userBranchId)) {
+        // Admin / Finance / Manager can set or adjust Opening / Current Stock balance (strictly audited)
+        if (body.quantity !== undefined && body.quantity !== null && body.quantity !== "" && isAdminOrFinance && (body.branchId || userBranchId)) {
             const targetBranch = Number(body.branchId || userBranchId);
             const newQty = Math.max(0, roundQty(body.quantity));
             const oldInv = await env.DB.prepare(
@@ -286,7 +359,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             }
         }
 
-        return jsonResponse({ message: "ပစ္စည်းအချက်အလက် ပြင်ဆင်ပြီးပါပြီ" });
+        return jsonResponse({ message: "ပစ္စည်းအချက်အလက်နှင့် လက်ကျန်စာရင်း ပြင်ဆင်ပြီးပါပြီ" });
     }
 
     if (path.startsWith("/api/products/") && method === "DELETE") {

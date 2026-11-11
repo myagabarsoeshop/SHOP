@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 3 OF 5: cashbook-api/routes-transactions.js
-// PURCHASES (STOCK-IN + SUPPLIER PAYABLE SYNC) & POS SALES (SECURITY HARDENED)
-// Version: 3.2.0 (Branch-Safe VR No, Soft-Delete Audit, No Stock Clamping Bug & Indexed)
+// PURCHASES (STOCK-IN + OWN PRODUCTION + SUPPLIER PAYABLE SYNC) & POS SALES
+// Version: 3.2.0 (Own Production Support, Branch-Safe VR No, Soft-Delete & Indexed)
 // =============================================================================
 
 import {
@@ -24,7 +24,7 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
     const isAdminOrFinance = ["admin", "finance", "manager"].includes(currentUserRole);
 
     // =========================================================================
-    // 1. PURCHASES & STOCK IN (AUTO SUPPLIER REGISTRATION & PAYABLES SYNC)
+    // 1. PURCHASES & STOCK IN (SUPPORTS EXTERNAL PURCHASE & OWN PRODUCTION)
     // =========================================================================
     if (path === "/api/purchases" && method === "GET") {
         const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
@@ -45,7 +45,10 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                 p.total_amount,
                 COALESCE(p.paid_amount, p.total_amount, 0) AS paid_amount,
                 COALESCE(p.diff_amount, 0) AS diff_amount,
-                p.payment_method,
+                CASE 
+                    WHEN p.notes = 'OWN_PRODUCTION' OR p.payment_method = 'production' THEN 'production'
+                    ELSE p.payment_method 
+                END AS payment_method,
                 p.bank_account_name,
                 p.status,
                 p.created_at,
@@ -78,7 +81,15 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
     if (path === "/api/purchases" && method === "POST") {
         const body = await request.json().catch(() => ({}));
         const targetBranch = resolveBranchId(auth, body.branch_id);
-        const supplierName = String(body.supplier_name || "").trim();
+        const rawMethod = String(body.payment_method || "cash").toLowerCase();
+        const validMethod = ["cash", "bank", "credit", "production"].includes(rawMethod) ? rawMethod : "cash";
+        const isOwnProduction = validMethod === "production";
+
+        let supplierName = String(body.supplier_name || "").trim();
+        if (isOwnProduction && !supplierName) {
+            supplierName = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
+        }
+
         const itemsList = Array.isArray(body.items) ? body.items : [];
 
         if (!supplierName || itemsList.length === 0) {
@@ -145,36 +156,49 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
         const refNo = body.ref_no && String(body.ref_no).trim() !== "" ? String(body.ref_no).trim() : null;
 
         // ၂။ အမှန်ပေးငွေ နှင့် ကွာခြားချက် (Surplus / Deficit) ကို Server မှသာ တွက်ချက်ခြင်း
-        const rawMethod = String(body.payment_method || "cash").toLowerCase();
-        const validMethod = ["cash", "bank", "credit"].includes(rawMethod) ? rawMethod : "cash";
-
         let paidAmount = 0;
-        if (validMethod === "credit") {
+        let diffAmount = 0;
+        let dbPaymentMethod = "cash";
+        let notesTag = null;
+
+        if (isOwnProduction) {
             paidAmount = 0;
-        } else if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
-            paidAmount = Math.max(0, roundKyat(body.paid_amount));
+            diffAmount = 0;
+            dbPaymentMethod = "cash"; // Safe for legacy SQLite CHECK(payment_method IN ('cash','bank','credit'))
+            notesTag = "OWN_PRODUCTION";
+        } else if (validMethod === "credit") {
+            paidAmount = 0;
+            diffAmount = -itemsTotal;
+            dbPaymentMethod = "credit";
         } else {
-            paidAmount = itemsTotal;
+            if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                paidAmount = Math.max(0, roundKyat(body.paid_amount));
+            } else {
+                paidAmount = itemsTotal;
+            }
+            diffAmount = paidAmount - itemsTotal;
+            dbPaymentMethod = paidAmount === 0 ? "credit" : validMethod;
         }
 
-        // Authoritative server-calculated difference (Paid - ItemsTotal)
-        const diffAmount = paidAmount - itemsTotal;
-        const finalPaymentMethod = paidAmount === 0 ? "credit" : validMethod;
+        // ၃။ ကိုယ်ပိုင်ထုတ် မဟုတ်မှသာ ပွဲရုံအမည်အား customers ဇယားတွင် စစ်ဆေးပြီး Auto-Register ပြုလုပ်ပေးခြင်း
+        let supplierId = null;
+        let payableToAdd = 0;
 
-        // ၃။ ပွဲရုံအမည်အား customers ဇယားတွင် စစ်ဆေးပြီး မရှိပါက Auto-Register ပြုလုပ်ပေးခြင်း
-        let supplierRecord = await env.DB.prepare(
-            "SELECT id, current_payable FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
-        ).bind(supplierName, supplierName).first();
+        if (!isOwnProduction) {
+            const supplierRecord = await env.DB.prepare(
+                "SELECT id, current_payable FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
+            ).bind(supplierName, supplierName).first();
 
-        let supplierId = supplierRecord?.id || null;
-        const payableToAdd = diffAmount < 0 ? Math.abs(diffAmount) : (finalPaymentMethod === "credit" ? itemsTotal : 0);
+            supplierId = supplierRecord?.id || null;
+            payableToAdd = diffAmount < 0 ? Math.abs(diffAmount) : (dbPaymentMethod === "credit" ? itemsTotal : 0);
 
-        if (!supplierRecord) {
-            const suppInsertRes = await env.DB.prepare(`
-                INSERT INTO customers (name, shop_name, entity_type, customer_type, current_debt, current_payable)
-                VALUES (?, ?, 'SUPPLIER', 'wholesale', 0, 0)
-            `).bind(supplierName, supplierName).run();
-            supplierId = suppInsertRes?.meta?.last_row_id || null;
+            if (!supplierRecord) {
+                const suppInsertRes = await env.DB.prepare(`
+                    INSERT INTO customers (name, shop_name, entity_type, customer_type, current_debt, current_payable)
+                    VALUES (?, ?, 'SUPPLIER', 'wholesale', 0, 0)
+                `).bind(supplierName, supplierName).run();
+                supplierId = suppInsertRes?.meta?.last_row_id || null;
+            }
         }
 
         // ၄။ purchases ဇယားထဲသို့ မှတ်တမ်းတင်ခြင်း
@@ -182,19 +206,19 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             INSERT INTO purchases (
                 purchase_no, ref_no, branch_id, supplier_id, supplier_name, purchase_date,
                 items_total, total_amount, paid_amount, diff_amount, 
-                payment_method, bank_account_name, status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+                payment_method, bank_account_name, notes, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
         `).bind(
             purchaseNo, refNo, targetBranch, supplierId, supplierName, purDate,
             itemsTotal, itemsTotal, paidAmount, diffAmount,
-            finalPaymentMethod, body.bank_account_name || null, currentUserId
+            dbPaymentMethod, isOwnProduction ? null : (body.bank_account_name || null), notesTag, currentUserId
         ).run();
 
         const newPurId = purRes.meta.last_row_id;
         const batchStatements = [];
 
-        // ၅။ ပေးရန်ကျန်ငွေရှိပါက customers.current_payable နှင့် supplier_ledger သို့ တစ်ပြိုင်နက် စာရင်းသွင်းခြင်း
-        if (payableToAdd > 0 && supplierId) {
+        // ၅။ ပေးရန်ကျန်ငွေရှိပါက (ကိုယ်ပိုင်ထုတ် မဟုတ်ပါက) customers.current_payable နှင့် supplier_ledger သို့ စာရင်းသွင်းခြင်း
+        if (!isOwnProduction && payableToAdd > 0 && supplierId) {
             batchStatements.push(
                 env.DB.prepare("UPDATE customers SET current_payable = COALESCE(current_payable, 0) + ? WHERE id = ?")
                     .bind(payableToAdd, supplierId),
@@ -203,7 +227,7 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                     VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, 'completed', ?)
                 `).bind(
                     supplierId, targetBranch, newPurId, payableToAdd, supplierId,
-                    finalPaymentMethod, `အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
+                    dbPaymentMethod, `အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
                 )
             );
         }
@@ -249,8 +273,8 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             );
         }
 
-        // ၇။ အမှန်တကယ် ပေးခဲ့သော ငွေရှိပါက Cash Book တွင် စာရင်းသွင်းခြင်း
-        if (paidAmount > 0) {
+        // ၇။ အမှန်တကယ် ပေးခဲ့သော ငွေရှိပါက (ကိုယ်ပိုင်ထုတ် မဟုတ်ပါက) Cash Book တွင် စာရင်းသွင်းခြင်း
+        if (!isOwnProduction && paidAmount > 0) {
             const cbRefNo = refNo || purchaseNo;
             batchStatements.push(
                 env.DB.prepare(`
@@ -260,7 +284,7 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                         ref_no, description, entry_date, status, created_by
                     ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
                 `).bind(
-                    targetBranch, newPurId, finalPaymentMethod,
+                    targetBranch, newPurId, dbPaymentMethod,
                     body.bank_account_name || null, paidAmount, diffAmount,
                     cbRefNo, supplierName, purDate, currentUserId
                 )
@@ -276,14 +300,27 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             throw new Error(`အဝယ်စာရင်း သိမ်းဆည်းမှု မအောင်မြင်ပါ: ${err.message}`);
         }
 
-        return jsonResponse({ message: "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။", purchaseNo }, 201);
+        return jsonResponse({
+            message: isOwnProduction
+                ? "ကိုယ်ပိုင်ထုတ်လုပ်မှု စတော့အဝင် မှတ်တမ်းတင်ပြီးပါပြီ (ငွေစာရင်းနှင့် အကြွေးမထိပါ)"
+                : "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။",
+            purchaseNo
+        }, 201);
     }
 
     // PURCHASES UPDATE (FULL ATOMIC REVERSAL + RE-APPLICATION WITHOUT PHANTOM STOCK CLAMPING)
     if (path.startsWith("/api/purchases/") && method === "PUT") {
         const purId = Number(path.split("/").pop());
         const body = await request.json().catch(() => ({}));
-        const supplierName = String(body.supplier_name || "").trim();
+        const rawMethod = String(body.payment_method || "cash").toLowerCase();
+        const validMethod = ["cash", "bank", "credit", "production"].includes(rawMethod) ? rawMethod : "cash";
+        const isOwnProduction = validMethod === "production";
+
+        let supplierName = String(body.supplier_name || "").trim();
+        if (isOwnProduction && !supplierName) {
+            supplierName = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
+        }
+
         const refNo = body.ref_no && String(body.ref_no).trim() !== "" ? String(body.ref_no).trim() : null;
         const itemsList = Array.isArray(body.items) ? body.items : [];
 
@@ -398,40 +435,52 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             );
         }
 
-        const rawMethod = String(body.payment_method || "cash").toLowerCase();
-        const validMethod = ["cash", "bank", "credit"].includes(rawMethod) ? rawMethod : "cash";
         let newPaidAmount = 0;
-        if (validMethod === "credit") {
+        let newDiffAmount = 0;
+        let dbPaymentMethod = "cash";
+        let notesTag = null;
+
+        if (isOwnProduction) {
             newPaidAmount = 0;
-        } else if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
-            newPaidAmount = Math.max(0, roundKyat(body.paid_amount));
+            newDiffAmount = 0;
+            dbPaymentMethod = "cash";
+            notesTag = "OWN_PRODUCTION";
+        } else if (validMethod === "credit") {
+            newPaidAmount = 0;
+            newDiffAmount = -newItemsTotal;
+            dbPaymentMethod = "credit";
         } else {
-            newPaidAmount = newItemsTotal;
+            if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                newPaidAmount = Math.max(0, roundKyat(body.paid_amount));
+            } else {
+                newPaidAmount = newItemsTotal;
+            }
+            newDiffAmount = newPaidAmount - newItemsTotal;
+            dbPaymentMethod = newPaidAmount === 0 ? "credit" : validMethod;
         }
 
-        // Server-calculated difference
-        const newDiffAmount = newPaidAmount - newItemsTotal;
-        const finalPaymentMethod = newPaidAmount === 0 ? "credit" : validMethod;
+        // ၄။ ပွဲရုံ ID ရှာဖွေခြင်းနှင့် ပေးရန်ကျန်ငွေ အသစ် (ကိုယ်ပိုင်ထုတ် မဟုတ်ပါက) ပြန်ထည့်ခြင်း
+        let supplierId = null;
+        if (!isOwnProduction) {
+            const suppRecord = await env.DB.prepare(
+                "SELECT id FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
+            ).bind(supplierName, supplierName).first();
+            supplierId = suppRecord?.id || oldPur.supplier_id || null;
+            const newPayableToAdd = newDiffAmount < 0 ? Math.abs(newDiffAmount) : (dbPaymentMethod === "credit" ? newItemsTotal : 0);
 
-        // ၄။ ပွဲရုံ ID ရှာဖွေခြင်းနှင့် ပေးရန်ကျန်ငွေ အသစ် (ရှိပါက) ပြန်ထည့်ခြင်း
-        const suppRecord = await env.DB.prepare(
-            "SELECT id FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
-        ).bind(supplierName, supplierName).first();
-        const supplierId = suppRecord?.id || oldPur.supplier_id || null;
-        const newPayableToAdd = newDiffAmount < 0 ? Math.abs(newDiffAmount) : (finalPaymentMethod === "credit" ? newItemsTotal : 0);
-
-        if (newPayableToAdd > 0 && supplierId) {
-            batch.push(
-                env.DB.prepare("UPDATE customers SET current_payable = COALESCE(current_payable, 0) + ? WHERE id = ?")
-                    .bind(newPayableToAdd, supplierId),
-                env.DB.prepare(`
-                    INSERT INTO supplier_ledger (supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
-                    VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, 'completed', ?)
-                `).bind(
-                    supplierId, branchId, purId, newPayableToAdd, supplierId,
-                    finalPaymentMethod, `အဝယ်ဘောင်ချာ ${oldPur.purchase_no}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
-                )
-            );
+            if (newPayableToAdd > 0 && supplierId) {
+                batch.push(
+                    env.DB.prepare("UPDATE customers SET current_payable = COALESCE(current_payable, 0) + ? WHERE id = ?")
+                        .bind(newPayableToAdd, supplierId),
+                    env.DB.prepare(`
+                        INSERT INTO supplier_ledger (supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                        VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, 'completed', ?)
+                    `).bind(
+                        supplierId, branchId, purId, newPayableToAdd, supplierId,
+                        dbPaymentMethod, `အဝယ်ဘောင်ချာ ${oldPur.purchase_no}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
+                    )
+                );
+            }
         }
 
         // ၅။ Purchases Header နှင့် Cashbook ပြန်ညှိခြင်း
@@ -440,17 +489,17 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                 UPDATE purchases SET 
                     supplier_id = ?, supplier_name = ?, purchase_date = ?, ref_no = ?, 
                     items_total = ?, total_amount = ?, paid_amount = ?, diff_amount = ?, 
-                    payment_method = ?, bank_account_name = ? 
+                    payment_method = ?, bank_account_name = ?, notes = ?
                 WHERE id = ?
             `).bind(
                 supplierId, supplierName, purDate, refNo,
                 newItemsTotal, newItemsTotal, newPaidAmount, newDiffAmount,
-                finalPaymentMethod, body.bank_account_name || null, purId
+                dbPaymentMethod, isOwnProduction ? null : (body.bank_account_name || null), notesTag, purId
             ),
             env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId)
         );
 
-        if (newPaidAmount > 0) {
+        if (!isOwnProduction && newPaidAmount > 0) {
             const cbRefNo = refNo || oldPur.purchase_no;
             batch.push(
                 env.DB.prepare(`
@@ -460,7 +509,7 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                         ref_no, description, entry_date, status, created_by
                     ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
                 `).bind(
-                    branchId, purId, finalPaymentMethod,
+                    branchId, purId, dbPaymentMethod,
                     body.bank_account_name || null, newPaidAmount, newDiffAmount,
                     cbRefNo, supplierName, purDate, currentUserId
                 )
@@ -475,10 +524,10 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             action: "UPDATE_PURCHASE",
             tableName: "purchases",
             recordId: purId,
-            details: { purchase_no: oldPur.purchase_no, newItemsTotal, newPaidAmount }
+            details: { purchase_no: oldPur.purchase_no, newItemsTotal, newPaidAmount, isOwnProduction }
         });
 
-        return jsonResponse({ message: "အဝယ်စာရင်း ပြင်ဆင်ပြီး စတော့၊ ငွေစာရင်းနှင့် ပွဲရုံအကြွေးပါ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
+        return jsonResponse({ message: "စာရင်း ပြင်ဆင်ပြီး စတော့၊ ငွေစာရင်းနှင့် ပွဲရုံအကြွေးပါ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
     }
 
     // PURCHASES VOID / SOFT-DELETE (FULL ATOMIC REVERSAL + AUDIT PRESERVATION)

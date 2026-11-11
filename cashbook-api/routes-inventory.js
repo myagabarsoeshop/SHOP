@@ -1,827 +1,957 @@
 // =============================================================================
-// FILE 2 OF 5: cashbook-api/routes-inventory.js
-// BRANCHES, PRODUCTS (OPENING STOCK & BULK CSV), YARN, WASTE LOGS & STOCK TRANSFERS
-// Version: 3.2.0 (RBAC Hardened, Cost-Price Masked, CSV Stock Sync & UTC Indexed)
+// FILE 3 OF 5: cashbook-api/routes-transactions.js
+// PURCHASES (STOCK-IN + OWN PRODUCTION + SUPPLIER PAYABLE SYNC) & POS SALES
+// Version: 4.0.0 (Server-Side Paginated, Collision-Proof VR, Race-Condition Safe)
 // =============================================================================
 
 import {
     jsonResponse,
     errorResponse,
     getMyanmarTodayDate,
+    getMyanmarDayUtcBounds,
     getMyanmarYearUtcBounds,
     roundKyat,
     roundQty,
     getQueryYear,
     resolveBranchId,
-    requireRole,
-    logAudit
+    logAudit,
+    generateUniqueInvoice // [NEW] Added for 100% Collision-Proof Invoice/VR Nos
 } from "./utils.js";
 
-export async function handleInventoryRoutes(request, env, url, path, method, auth) {
+export async function handleTransactionRoutes(request, env, url, path, method, auth) {
     const currentUserId = auth.uid;
     const currentUserRole = auth.role;
     const userBranchId = auth.branch_id;
-    const isAdminOrFinance = requireRole(auth, ["admin", "finance", "manager"]);
+    const isAdminOrFinance = ["admin", "finance", "manager"].includes(currentUserRole);
 
     // =========================================================================
-    // 1. BRANCHES
+    // 1. PURCHASES & STOCK IN (SUPPORTS EXTERNAL PURCHASE & OWN PRODUCTION)
     // =========================================================================
-    if (path === "/api/branches" && method === "GET") {
-        const { results } = await env.DB.prepare(
-            "SELECT id, code, name, type, phone, address FROM branches WHERE is_active = 1 ORDER BY id ASC"
-        ).all();
-        return jsonResponse(results || []);
-    }
-
-    // =========================================================================
-    // 2. PRODUCTS & STOCK BALANCES (INDEX-OPTIMIZED JOIN & RBAC COST MASKING)
-    // =========================================================================
-    if (path === "/api/products" && method === "GET") {
-        const requestedBranch = url.searchParams.get("branch_id");
-        const branchId = resolveBranchId(auth, requestedBranch, { allowAllForAdmin: true });
-        const search = url.searchParams.get("search")?.trim() || "";
-        const category = url.searchParams.get("category")?.trim() || "";
-
-        let sql = "";
-        const bindings = [];
-
-        if (branchId && branchId !== "ALL") {
-            sql = `
-                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
-                       p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
-                       COALESCE(bi.quantity, 0) AS current_stock
-                FROM products p
-                LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
-                WHERE p.is_active = 1
-            `;
-            bindings.push(Number(branchId));
-        } else {
-            sql = `
-                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
-                       p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
-                       COALESCE(SUM(bi.quantity), 0) AS current_stock
-                FROM products p
-                LEFT JOIN branch_inventory bi ON p.id = bi.product_id
-                WHERE p.is_active = 1
-            `;
-        }
-
-        if (search) {
-            sql += " AND (p.barcode = ? OR p.sku LIKE ? OR p.item_name LIKE ? OR p.pattern LIKE ? OR p.color LIKE ? OR p.category LIKE ?) ";
-            bindings.push(search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-        }
-
-        if (category) {
-            sql += " AND p.category = ? ";
-            bindings.push(category);
-        }
-
-        if (!branchId || branchId === "ALL") {
-            sql += " GROUP BY p.id ";
-        }
-
-        sql += " ORDER BY p.item_name ASC, p.id DESC LIMIT 1000";
-
-        const { results } = await env.DB.prepare(sql).bind(...bindings).all();
-        const maskedResults = (results || []).map(row => ({
-            ...row,
-            cost_price: isAdminOrFinance ? roundKyat(row.cost_price || 0) : 0
-        }));
-
-        return jsonResponse(maskedResults);
-    }
-
-    if (path === "/api/products/scan" && method === "GET") {
-        const code = url.searchParams.get("code")?.trim();
+    if (path === "/api/purchases" && method === "GET") {
         const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
-        if (!code) return errorResponse("Barcode ထည့်သွင်းပေးပါ", 400);
+        const targetYear = getQueryYear(url);
+        const { startUtc: yearStartUtc, endUtc: yearEndUtc } = getMyanmarYearUtcBounds(targetYear);
+
+        // [NEW] Server-Side Pagination
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const limit = Math.max(1, Number(url.searchParams.get("limit")) || 2000);
+        const offset = (page - 1) * limit;
+
+        const countSql = `
+            SELECT COUNT(DISTINCT p.id) AS total
+            FROM purchases p
+            WHERE p.branch_id = ? 
+              AND p.created_at >= ? 
+              AND p.created_at <= ?
+              AND COALESCE(p.status, 'completed') != 'cancelled'
+        `;
+        const countRes = await env.DB.prepare(countSql).bind(Number(branchId), yearStartUtc, yearEndUtc).first();
+        const totalItems = countRes?.total || 0;
 
         const sql = `
-            SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
-                   p.cost_price, p.retail_price, p.wholesale_price, COALESCE(bi.quantity, 0) AS current_stock
-            FROM products p
-            LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
-            WHERE (p.barcode = ? OR p.sku = ?) AND p.is_active = 1 LIMIT 1
+            SELECT 
+                pi.id AS item_row_id,
+                p.id AS purchase_id,
+                p.purchase_no,
+                p.purchase_no AS vr_no,
+                p.ref_no,
+                p.supplier_id,
+                p.supplier_name,
+                COALESCE(p.purchase_date, date(p.created_at, '+390 minutes')) AS purchase_date,
+                COALESCE(p.items_total, p.total_amount, 0) AS items_total,
+                p.total_amount,
+                COALESCE(p.paid_amount, p.total_amount, 0) AS paid_amount,
+                COALESCE(p.diff_amount, 0) AS diff_amount,
+                CASE 
+                    WHEN p.notes = 'OWN_PRODUCTION' OR p.payment_method = 'production' THEN 'production'
+                    ELSE p.payment_method 
+                END AS payment_method,
+                p.bank_account_name,
+                p.status,
+                p.created_at,
+                pi.product_id,
+                pi.quantity,
+                pi.unit_cost,
+                pi.subtotal,
+                pr.sku,
+                pr.barcode,
+                pr.category,
+                pr.item_name,
+                pr.pattern,
+                pr.size,
+                pr.color,
+                pr.retail_price,
+                pr.wholesale_price
+            FROM purchases p
+            INNER JOIN purchase_items pi ON p.id = pi.purchase_id
+            INNER JOIN products pr ON pi.product_id = pr.id
+            WHERE p.branch_id = ? 
+              AND p.created_at >= ? 
+              AND p.created_at <= ?
+              AND COALESCE(p.status, 'completed') != 'cancelled'
+            ORDER BY p.id DESC, pi.id DESC LIMIT ? OFFSET ?
         `;
-        const product = await env.DB.prepare(sql).bind(Number(branchId), code, code).first();
-        if (!product) return errorResponse("ပစ္စည်း ရှာမတွေ့ပါ", 404);
-
-        if (!isAdminOrFinance) {
-            product.cost_price = 0;
-        }
-        return jsonResponse(product);
-    }
-
-    if (path === "/api/products" && method === "POST") {
-        if (!isAdminOrFinance) {
-            return errorResponse("ပစ္စည်းအသစ် ထည့်သွင်းခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
-        }
-
-        const body = await request.json().catch(() => ({}));
-        const itemName = body.itemName || body.item_name;
-        if (!body.category || !itemName) {
-            return errorResponse("အမျိုးအစားနှင့် ပစ္စည်းအမည် ထည့်သွင်းပေးပါ", 400);
-        }
-
-        const cleanCategory = String(body.category).trim();
-        const sku = body.sku && String(body.sku).trim() !== "" ? String(body.sku).trim() : null;
-        const barcode = body.barcode && String(body.barcode).trim() !== "" ? String(body.barcode).trim() : null;
-        const costPrice = roundKyat(body.costPrice ?? body.cost_price ?? 0);
-        const retailPrice = roundKyat(body.retailPrice ?? body.retail_price ?? 0);
-        const wholesalePrice = roundKyat(body.wholesalePrice ?? body.wholesale_price ?? retailPrice);
-        const initialStock = roundQty(body.initialStock ?? body.quantity ?? 0);
-        const defaultAlert = cleanCategory.startsWith("ချည်") ? 10 : 5;
-        const alertQty = body.alertQuantity !== undefined || body.alert_quantity !== undefined
-            ? Math.max(0, roundQty(body.alertQuantity ?? body.alert_quantity))
-            : defaultAlert;
-        const targetBranchId = parseInt(body.targetBranchId ?? body.branchId ?? userBranchId, 10) || 1;
-
-        if (costPrice < 0 || retailPrice < 0 || wholesalePrice < 0 || initialStock < 0) {
-            return errorResponse("ဈေးနှုန်းနှင့် အရေအတွက်များ အနှုတ်ဖြစ်၍ မရပါ", 400);
-        }
-
-        const res = await env.DB.prepare(`
-            INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price, alert_quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-            sku, barcode, cleanCategory, String(itemName).trim(),
-            body.pattern && String(body.pattern).trim() !== "" ? String(body.pattern).trim() : null,
-            body.size && String(body.size).trim() !== "" ? String(body.size).trim() : "ထည်",
-            body.color && String(body.color).trim() !== "" ? String(body.color).trim() : null,
-            costPrice, retailPrice, wholesalePrice, alertQty
-        ).run();
-
-        const newProductId = res.meta.last_row_id;
-        if (initialStock > 0) {
-            await env.DB.prepare(`
-                INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-            `).bind(targetBranchId, newProductId, initialStock).run();
-        }
-
-        await logAudit(env.DB, {
-            branchId: targetBranchId,
-            userId: currentUserId,
-            action: "CREATE_PRODUCT",
-            tableName: "products",
-            recordId: newProductId,
-            details: { sku, itemName, initialStock, costPrice, retailPrice }
+        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStartUtc, yearEndUtc, limit, offset).all();
+        
+        return jsonResponse({
+            items: results || [],
+            total: totalItems,
+            page,
+            limit
         });
-
-        return jsonResponse({ id: newProductId, message: "အထည်အသစ် သိမ်းဆည်းပြီးပါပြီ" }, 201);
     }
 
-    // BULK CSV IMPORT (Saves 95% of D1 Roundtrips, Syncs Opening Stock & Reports Exact Inserted vs Skipped Count)
-    if (path === "/api/products/bulk" && method === "POST") {
-        if (!isAdminOrFinance) {
-            return errorResponse("CSV ဖြင့် ပစ္စည်းသွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
-        }
-
+    if (path === "/api/purchases" && method === "POST") {
         const body = await request.json().catch(() => ({}));
-        const items = Array.isArray(body.items) ? body.items : [];
-        const targetBranchId = parseInt(body.branchId ?? body.targetBranchId ?? userBranchId, 10) || 1;
-        if (items.length === 0) return errorResponse("သွင်းယူမည့် ပစ္စည်းစာရင်း မရှိပါ", 400);
+        const targetBranch = resolveBranchId(auth, body.branch_id);
+        const rawMethod = String(body.payment_method || "cash").toLowerCase();
+        const validMethod = ["cash", "bank", "credit", "production"].includes(rawMethod) ? rawMethod : "cash";
+        const isOwnProduction = validMethod === "production";
 
-        const validItems = [];
-        for (const item of items) {
-            const itemName = String(item.itemName || item.item_name || "").trim();
-            const category = String(item.category || "အထွေထွေ").trim();
-            if (!itemName) continue;
-
-            const sku = item.sku && String(item.sku).trim() !== "" ? String(item.sku).trim() : null;
-            const barcode = item.barcode && String(item.barcode).trim() !== "" ? String(item.barcode).trim() : null;
-            const costPrice = Math.max(0, roundKyat(item.costPrice ?? item.cost_price ?? 0));
-            const retailPrice = Math.max(0, roundKyat(item.retailPrice ?? item.retail_price ?? 0));
-            const wholesalePrice = Math.max(0, roundKyat(item.wholesalePrice ?? item.wholesale_price ?? retailPrice));
-            const stockQty = Math.max(0, roundQty(item.quantity ?? item.stock ?? item.initialStock ?? 0));
-
-            validItems.push({
-                sku,
-                barcode,
-                category,
-                itemName,
-                pattern: item.pattern && String(item.pattern).trim() !== "" ? String(item.pattern).trim() : null,
-                size: item.size && String(item.size).trim() !== "" ? String(item.size).trim() : "ထည်",
-                color: item.color && String(item.color).trim() !== "" ? String(item.color).trim() : null,
-                costPrice,
-                retailPrice,
-                wholesalePrice,
-                stockQty
-            });
+        let supplierName = String(body.supplier_name || "").trim();
+        if (isOwnProduction && !supplierName) {
+            supplierName = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
         }
 
-        if (validItems.length === 0) {
-            return errorResponse("သွင်းယူနိုင်သော ပစ္စည်းအချက်အလက် မတွေ့ပါ", 400);
+        const itemsList = Array.isArray(body.items) ? body.items : [];
+        if (!supplierName || itemsList.length === 0) {
+            return errorResponse("ပေးသွင်းသူ (ပွဲရုံ) အမည်နှင့် ဝယ်ယူသည့်ပစ္စည်းများ လိုအပ်ပါသည်", 400);
         }
 
-        let insertedCount = 0;
-        let stockUpdatedCount = 0;
+        let itemsTotal = 0;
+        const validatedItems = [];
 
-        for (let i = 0; i < validItems.length; i += 40) {
-            const chunk = validItems.slice(i, i + 40);
-            const stmts = chunk.map(it =>
-                env.DB.prepare(`
-                    INSERT OR IGNORE INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `).bind(
-                    it.sku, it.barcode, it.category, it.itemName,
-                    it.pattern, it.size, it.color,
-                    it.costPrice, it.retailPrice, it.wholesalePrice
-                )
-            );
+        for (const it of itemsList) {
+            const q = roundQty(it.quantity);
+            const c = roundKyat(it.unit_cost);
+            const rPrice = roundKyat(it.retail_price);
+            const wPrice = roundKyat(it.wholesale_price);
 
-            const chunkResults = await env.DB.batch(stmts);
-            const stockBatch = [];
+            if (q <= 0 || c < 0 || rPrice < 0 || wPrice < 0) {
+                return errorResponse("ပစ္စည်းအရေအတွက်နှင့် ဈေးနှုန်းများ မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
+            }
 
-            chunkResults.forEach((r, idx) => {
-                const changes = Number(r?.meta?.changes || 0);
-                const newProdId = r?.meta?.last_row_id;
-                const it = chunk[idx];
-
-                if (changes > 0) {
-                    insertedCount += 1;
-                    if (it.stockQty > 0 && newProdId) {
-                        stockUpdatedCount += 1;
-                        stockBatch.push(
-                            env.DB.prepare(`
-                                INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                            `).bind(targetBranchId, newProdId, it.stockQty)
-                        );
-                    }
-                } else if (it.stockQty > 0 && (it.sku || it.barcode)) {
-                    // If product already existed by SKU/Barcode and CSV specifies a stock balance, sync its stock balance
-                    stockUpdatedCount += 1;
-                    stockBatch.push(
-                        env.DB.prepare(`
-                            INSERT INTO branch_inventory (branch_id, product_id, quantity)
-                            SELECT ?, id, ? FROM products WHERE (sku = ? OR barcode = ?) AND is_active = 1 LIMIT 1
-                            ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                        `).bind(targetBranchId, it.stockQty, it.sku || "", it.barcode || "")
-                    );
+            if (it.is_new && it.new_product) {
+                if (!it.new_product.category || !it.new_product.item_name) {
+                    return errorResponse("ပစ္စည်းအသစ်အတွက် အမျိုးအစားနှင့် အမည် လိုအပ်ပါသည်", 400);
                 }
-            });
+            } else if (!Number(it.product_id)) {
+                return errorResponse("ပစ္စည်း ID မမှန်ကန်ပါ", 400);
+            }
 
-            if (stockBatch.length > 0) {
-                await env.DB.batch(stockBatch);
+            const lineSub = roundKyat(q * c);
+            itemsTotal += lineSub;
+
+            validatedItems.push({
+                product_id: Number(it.product_id || 0),
+                is_new: Boolean(it.is_new && it.new_product),
+                new_product: it.new_product || null,
+                quantity: q,
+                unit_cost: c,
+                retail_price: rPrice,
+                wholesale_price: wPrice,
+                subtotal: lineSub
+            });
+        }
+
+        const purDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.purchase_date || body.date || "").trim())
+            ? String(body.purchase_date || body.date).trim()
+            : getMyanmarTodayDate();
+        
+        // [NEW] 100% Collision-Proof VR No Generator
+        const purchaseNo = generateUniqueInvoice("PUR", targetBranch);
+        const refNo = body.ref_no && String(body.ref_no).trim() !== "" ? String(body.ref_no).trim() : null;
+
+        let paidAmount = 0;
+        let diffAmount = 0;
+        let dbPaymentMethod = "cash";
+        let notesTag = null;
+
+        if (isOwnProduction) {
+            paidAmount = 0;
+            diffAmount = 0;
+            dbPaymentMethod = "production"; 
+            notesTag = "OWN_PRODUCTION";
+        } else if (validMethod === "credit") {
+            paidAmount = 0;
+            diffAmount = -itemsTotal;
+            dbPaymentMethod = "credit";
+        } else {
+            if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                paidAmount = Math.max(0, roundKyat(body.paid_amount));
+            } else {
+                paidAmount = itemsTotal;
+            }
+            diffAmount = paidAmount - itemsTotal;
+            dbPaymentMethod = paidAmount === 0 ? "credit" : validMethod;
+        }
+
+        let supplierId = null;
+        let payableToAdd = 0;
+
+        if (!isOwnProduction) {
+            const supplierRecord = await env.DB.prepare(
+                "SELECT id, current_payable FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
+            ).bind(supplierName, supplierName).first();
+
+            supplierId = supplierRecord?.id || null;
+            payableToAdd = diffAmount < 0 ? Math.abs(diffAmount) : (dbPaymentMethod === "credit" ? itemsTotal : 0);
+
+            if (!supplierRecord) {
+                const suppInsertRes = await env.DB.prepare(`
+                    INSERT INTO customers (name, shop_name, entity_type, customer_type, current_debt, current_payable)
+                    VALUES (?, ?, 'SUPPLIER', 'wholesale', 0, 0)
+                `).bind(supplierName, supplierName).run();
+                supplierId = suppInsertRes?.meta?.last_row_id || null;
             }
         }
 
-        const skippedCount = Math.max(0, validItems.length - insertedCount);
+        const purRes = await env.DB.prepare(`
+            INSERT INTO purchases (
+                purchase_no, ref_no, branch_id, supplier_id, supplier_name, purchase_date,
+                items_total, total_amount, paid_amount, diff_amount, 
+                payment_method, bank_account_name, notes, status, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+        `).bind(
+            purchaseNo, refNo, targetBranch, supplierId, supplierName, purDate,
+            itemsTotal, itemsTotal, paidAmount, diffAmount,
+            dbPaymentMethod, isOwnProduction ? null : (body.bank_account_name || null), notesTag, currentUserId
+        ).run();
 
-        await logAudit(env.DB, {
-            branchId: targetBranchId,
-            userId: currentUserId,
-            action: "BULK_IMPORT_PRODUCTS",
-            tableName: "products",
-            recordId: null,
-            details: { totalRows: validItems.length, insertedCount, skippedCount, stockUpdatedCount }
-        });
+        const newPurId = purRes.meta.last_row_id;
+        const batchStatements = [];
+
+        if (!isOwnProduction && payableToAdd > 0 && supplierId) {
+            batchStatements.push(
+                env.DB.prepare("UPDATE customers SET current_payable = current_payable + ? WHERE id = ?")
+                    .bind(payableToAdd, supplierId),
+                env.DB.prepare(`
+                    INSERT INTO supplier_ledger (supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                    VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, 'completed', ?)
+                `).bind(
+                    supplierId, targetBranch, newPurId, payableToAdd, supplierId,
+                    dbPaymentMethod, `အဝယ်ဘောင်ချာ ${purchaseNo}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
+                )
+            );
+        }
+
+        for (const item of validatedItems) {
+            let targetProductId = item.product_id;
+
+            if (item.is_new && item.new_product) {
+                const np = item.new_product;
+                const prodRes = await env.DB.prepare(`
+                    INSERT INTO products (sku, barcode, category, item_name, pattern, size, color, cost_price, retail_price, wholesale_price)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                    np.sku && String(np.sku).trim() !== "" ? String(np.sku).trim() : null,
+                    null,
+                    String(np.category).trim(),
+                    String(np.item_name).trim(),
+                    np.pattern ? String(np.pattern).trim() : null,
+                    np.size ? String(np.size).trim() : "ထည်",
+                    np.color ? String(np.color).trim() : null,
+                    item.unit_cost, item.retail_price, item.wholesale_price
+                ).run();
+
+                targetProductId = prodRes.meta.last_row_id;
+            } else {
+                batchStatements.push(
+                    env.DB.prepare(`
+                        UPDATE products SET cost_price = ?, retail_price = ?, wholesale_price = ? WHERE id = ?
+                    `).bind(item.unit_cost, item.retail_price, item.wholesale_price, Number(targetProductId))
+                );
+            }
+
+            batchStatements.push(
+                env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
+                    .bind(newPurId, Number(targetProductId), item.quantity, item.unit_cost, item.subtotal),
+                env.DB.prepare(`
+                    INSERT INTO branch_inventory (branch_id, product_id, quantity) 
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(branch_id, product_id) DO UPDATE SET 
+                    quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                `).bind(targetBranch, Number(targetProductId), item.quantity)
+            );
+        }
+
+        if (!isOwnProduction && paidAmount > 0) {
+            const cbRefNo = refNo || purchaseNo;
+            batchStatements.push(
+                env.DB.prepare(`
+                    INSERT INTO cashbook_entries (
+                        branch_id, category_id, purchase_id, entry_type, 
+                        payment_method, bank_account_name, amount, diff_amount, 
+                        ref_no, description, entry_date, status, created_by
+                    ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+                `).bind(
+                    targetBranch, newPurId, dbPaymentMethod,
+                    body.bank_account_name || null, paidAmount, diffAmount,
+                    cbRefNo, supplierName, purDate, currentUserId
+                )
+            );
+        }
+
+        try {
+            if (batchStatements.length > 0) {
+                await env.DB.batch(batchStatements);
+            }
+        } catch (err) {
+            await env.DB.prepare("DELETE FROM purchases WHERE id = ?").bind(newPurId).run().catch(() => {});
+            throw new Error(`အဝယ်စာရင်း သိမ်းဆည်းမှု မအောင်မြင်ပါ: ${err.message}`);
+        }
 
         return jsonResponse({
-            message: skippedCount > 0
-                ? `ပစ္စည်းအသစ် (${insertedCount}) မျိုး သွင်းယူပြီး ရှိပြီးသား (${skippedCount}) မျိုးအနက် စတော့ပါသော ပစ္စည်းများကို လက်ကျန်ညှိပေးပြီးပါပြီ`
-                : `ပစ္စည်း (${insertedCount}) မျိုးနှင့် စာရင်းဖွင့်လက်ကျန်များ အောင်မြင်စွာ သွင်းယူပြီးပါပြီ`,
-            count: insertedCount,
-            insertedCount,
-            skippedCount,
-            stockUpdatedCount
+            message: isOwnProduction
+                ? "ကိုယ်ပိုင်ထုတ်လုပ်မှု စတော့အဝင် မှတ်တမ်းတင်ပြီးပါပြီ (ငွေစာရင်းနှင့် အကြွေးမထိပါ)"
+                : "အဝယ်စာရင်းနှင့် စတော့အဝင် အောင်မြင်ပါသည်။",
+            purchaseNo
         }, 201);
     }
 
-    if (path.startsWith("/api/products/") && method === "PUT") {
-        if (!isAdminOrFinance) {
-            return errorResponse("ပစ္စည်းအချက်အလက်နှင့် ဈေးနှုန်းပြင်ဆင်ခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
+    // PURCHASES UPDATE (FULL ATOMIC REVERSAL + RE-APPLICATION WITHOUT PHANTOM STOCK CLAMPING)
+    if (path.startsWith("/api/purchases/") && method === "PUT") {
+        const purId = Number(path.split("/").pop());
+        const body = await request.json().catch(() => ({}));
+        const rawMethod = String(body.payment_method || "cash").toLowerCase();
+        const validMethod = ["cash", "bank", "credit", "production"].includes(rawMethod) ? rawMethod : "cash";
+        const isOwnProduction = validMethod === "production";
+
+        let supplierName = String(body.supplier_name || "").trim();
+        if (isOwnProduction && !supplierName) {
+            supplierName = "ကိုယ်ပိုင်ရက်ကန်း / ထုတ်လုပ်မှု";
         }
 
-        const productId = Number(path.split("/").pop());
-        const body = await request.json().catch(() => ({}));
-        if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
+        const refNo = body.ref_no && String(body.ref_no).trim() !== "" ? String(body.ref_no).trim() : null;
+        const itemsList = Array.isArray(body.items) ? body.items : [];
 
-        const cleanSku = body.sku !== undefined ? (String(body.sku).trim() || null) : null;
-        const cleanBarcode = body.barcode !== undefined ? (String(body.barcode).trim() || null) : null;
-        const alertQty = body.alertQuantity !== undefined || body.alert_quantity !== undefined
-            ? Math.max(0, roundQty(body.alertQuantity ?? body.alert_quantity))
-            : null;
+        if (!purId || !supplierName || itemsList.length === 0) {
+            return errorResponse("အဝယ်မှတ်တမ်း ID၊ ပွဲရုံအမည်နှင့် ပစ္စည်းများ လိုအပ်ပါသည်", 400);
+        }
 
-        await env.DB.prepare(`
-            UPDATE products SET
-                sku = COALESCE(?, sku),
-                barcode = COALESCE(?, barcode),
-                category = COALESCE(?, category),
-                item_name = COALESCE(?, item_name),
-                pattern = COALESCE(?, pattern),
-                size = COALESCE(?, size),
-                color = COALESCE(?, color),
-                cost_price = COALESCE(?, cost_price),
-                retail_price = COALESCE(?, retail_price),
-                wholesale_price = COALESCE(?, wholesale_price),
-                alert_quantity = COALESCE(?, alert_quantity)
-            WHERE id = ?
-        `).bind(
-            cleanSku,
-            cleanBarcode,
-            body.category ? String(body.category).trim() : null,
-            body.itemName ?? body.item_name ?? null,
-            body.pattern !== undefined ? (String(body.pattern).trim() || null) : null,
-            body.size ? String(body.size).trim() : null,
-            body.color !== undefined ? (String(body.color).trim() || null) : null,
-            body.costPrice !== undefined ? roundKyat(body.costPrice) : (body.cost_price !== undefined ? roundKyat(body.cost_price) : null),
-            body.retailPrice !== undefined ? roundKyat(body.retailPrice) : (body.retail_price !== undefined ? roundKyat(body.retail_price) : null),
-            body.wholesalePrice !== undefined ? roundKyat(body.wholesalePrice) : (body.wholesale_price !== undefined ? roundKyat(body.wholesale_price) : null),
-            alertQty,
-            productId
-        ).run();
+        const oldPur = await env.DB.prepare(
+            "SELECT branch_id, purchase_no, supplier_id, supplier_name, purchase_date, status FROM purchases WHERE id = ?"
+        ).bind(purId).first();
+        if (!oldPur || oldPur.status === "cancelled") {
+            return errorResponse("အဝယ်မှတ်တမ်း ရှာမတွေ့ပါ သို့မဟုတ် ပယ်ဖျက်ထားပြီး ဖြစ်ပါသည်", 404);
+        }
 
-        // Admin / Finance / Manager can set or adjust Opening / Current Stock balance (strictly audited)
-        if (body.quantity !== undefined && body.quantity !== null && body.quantity !== "" && isAdminOrFinance && (body.branchId || userBranchId)) {
-            const targetBranch = Number(body.branchId || userBranchId);
-            const newQty = Math.max(0, roundQty(body.quantity));
-            const oldInv = await env.DB.prepare(
-                "SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?"
-            ).bind(targetBranch, productId).first();
-            const oldQty = roundQty(oldInv?.quantity || 0);
+        const branchId = Number(oldPur.branch_id);
+        if (!isAdminOrFinance && branchId !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ အဝယ်မှတ်တမ်းအား ပြင်ဆင်ခွင့် မရှိပါ", 403);
+        }
 
-            if (oldQty !== newQty) {
-                await env.DB.prepare(`
-                    INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                    ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, updated_at = CURRENT_TIMESTAMP
-                `).bind(targetBranch, productId, newQty).run();
+        const purDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.purchase_date || body.date || "").trim())
+            ? String(body.purchase_date || body.date).trim()
+            : (oldPur.purchase_date || getMyanmarTodayDate());
 
-                await logAudit(env.DB, {
-                    branchId: targetBranch,
-                    userId: currentUserId,
-                    action: "MANUAL_STOCK_ADJUST",
-                    tableName: "branch_inventory",
-                    recordId: productId,
-                    details: { productId, branchId: targetBranch, oldQty, newQty }
-                });
+        const [oldItemsRes, oldLedgerRow, currentInvRes] = await env.DB.batch([
+            env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId),
+            env.DB.prepare("SELECT id, supplier_id, amount FROM supplier_ledger WHERE purchase_id = ? AND type = 'PURCHASE_DEBT' AND COALESCE(status, 'completed') != 'cancelled' LIMIT 1").bind(purId),
+            env.DB.prepare("SELECT product_id, quantity FROM branch_inventory WHERE branch_id = ?").bind(branchId)
+        ]);
+
+        const oldItems = oldItemsRes.results || [];
+        const oldDebtEntry = (oldLedgerRow.results || [])[0] || null;
+        const invMap = new Map((currentInvRes.results || []).map(r => [Number(r.product_id), roundQty(r.quantity)]));
+
+        // Calculate net stock change per product to prevent negative stock or MAX(0) phantom inflation
+        const netDeltaByProduct = new Map();
+        for (const oldIt of oldItems) {
+            const pid = Number(oldIt.product_id);
+            netDeltaByProduct.set(pid, roundQty((netDeltaByProduct.get(pid) || 0) - roundQty(oldIt.quantity)));
+        }
+
+        let newItemsTotal = 0;
+        const validatedNewItems = [];
+        for (const it of itemsList) {
+            const pid = Number(it.product_id);
+            const q = roundQty(it.quantity);
+            const c = roundKyat(it.unit_cost);
+            if (!pid || q <= 0 || c < 0) {
+                return errorResponse("ပစ္စည်းအရေအတွက်နှင့် ဝယ်ဈေး မှန်ကန်စွာ ထည့်သွင်းပါ", 400);
+            }
+            const sub = roundKyat(q * c);
+            newItemsTotal += sub;
+            netDeltaByProduct.set(pid, roundQty((netDeltaByProduct.get(pid) || 0) + q));
+            validatedNewItems.push({
+                product_id: pid,
+                quantity: q,
+                unit_cost: c,
+                retail_price: it.retail_price !== undefined ? roundKyat(it.retail_price) : undefined,
+                wholesale_price: it.wholesale_price !== undefined ? roundKyat(it.wholesale_price) : undefined,
+                subtotal: sub
+            });
+        }
+
+        for (const [pid, delta] of netDeltaByProduct.entries()) {
+            const currentQty = invMap.get(pid) || 0;
+            if (currentQty + delta < 0) {
+                return errorResponse(
+                    `ပစ္စည်း (ID: ${pid}) သည် ရောင်းချ/လွှဲပြောင်းထားပြီးဖြစ်သဖြင့် လက်ရှိလက်ကျန် (${currentQty}) ထက် လျှော့ချ၍ မရနိုင်ပါ`,
+                    400
+                );
             }
         }
 
-        return jsonResponse({ message: "ပစ္စည်းအချက်အလက်နှင့် လက်ကျန်စာရင်း ပြင်ဆင်ပြီးပါပြီ" });
-    }
+        const batch = [];
 
-    if (path.startsWith("/api/products/") && method === "DELETE") {
-        if (!isAdminOrFinance) {
-            return errorResponse("ပစ္စည်းဖျက်သိမ်းခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်", 403);
-        }
-
-        const productId = Number(path.split("/").pop());
-        if (!productId) return errorResponse("Product ID မမှန်ကန်ပါ", 400);
-
-        await env.DB.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(productId).run();
-        await logAudit(env.DB, {
-            branchId: userBranchId,
-            userId: currentUserId,
-            action: "DELETE_PRODUCT",
-            tableName: "products",
-            recordId: productId,
-            details: "Soft-deleted product (is_active = 0)"
-        });
-        return jsonResponse({ message: "အထည်စာရင်းမှ အောင်မြင်စွာ ဖျက်ပြီးပါပြီ" });
-    }
-
-    // =========================================================================
-    // 3. YARN BALANCES & PRODUCTION ISSUE
-    // =========================================================================
-    if (path === "/api/yarns" && method === "GET") {
-        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
-        const search = url.searchParams.get("search")?.trim() || "";
-
-        let sql = `
-            SELECT 
-                p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, 
-                p.size, p.color, p.cost_price, p.retail_price, p.wholesale_price, 
-                p.alert_quantity,
-                COALESCE(bi.quantity, 0) AS current_stock
-            FROM products p
-            LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
-            WHERE p.is_active = 1 
-              AND (p.category = 'ချည်' OR p.category = 'Yarn' OR p.category LIKE 'ချည်%')
-              AND p.category NOT LIKE '%ပုဆိုး%' 
-              AND p.category NOT LIKE '%လုံချည်%'
-              AND p.category NOT LIKE '%အင်္ကျီ%'
-        `;
-        const bindings = [Number(branchId)];
-
-        if (search) {
-            sql += ` AND (p.sku LIKE ? OR p.barcode LIKE ? OR p.item_name LIKE ? OR p.color LIKE ?) `;
-            bindings.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-        }
-
-        sql += ` ORDER BY p.id DESC LIMIT 500`;
-        const { results } = await env.DB.prepare(sql).bind(...bindings).all().catch(() => ({ results: [] }));
-        const masked = (results || []).map(r => ({
-            ...r,
-            cost_price: isAdminOrFinance ? roundKyat(r.cost_price || 0) : 0
-        }));
-        return jsonResponse(masked);
-    }
-
-    if (path === "/api/yarns/issue" && method === "POST") {
-        const body = await request.json().catch(() => ({}));
-        const branchId = resolveBranchId(auth, body.branchId);
-        const yarnId = Number(body.yarnId || body.product_id);
-        const weaverName = String(body.weaverName || body.weaver_name || "").trim();
-        const qty = roundQty(body.quantity);
-        const notes = String(body.notes || "").trim();
-
-        if (!yarnId || !weaverName || qty <= 0) {
-            return errorResponse("ချည်အမျိုးအစား၊ ရက်ကန်းသမားအမည်နှင့် ပမာဏ မှန်ကန်စွာ ဖြည့်သွင်းပါ", 400);
-        }
-
-        const inv = await env.DB.prepare(
-            "SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?"
-        ).bind(branchId, yarnId).first();
-
-        const currentStock = Number(inv?.quantity || 0);
-        if (currentStock < qty) {
-            return errorResponse(`ချည်လက်ကျန် မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
-        }
-
-        const today = getMyanmarTodayDate();
-
-        await env.DB.batch([
-            env.DB.prepare(`
-                INSERT INTO yarn_issues (yarn_id, branch_id, weaver_name, quantity, issue_date, notes, created_by) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).bind(yarnId, branchId, weaverName, qty, today, notes, currentUserId),
-
-            env.DB.prepare(`
-                UPDATE branch_inventory 
-                SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
-                WHERE branch_id = ? AND product_id = ?
-            `).bind(qty, branchId, yarnId)
-        ]);
-
-        return jsonResponse({ message: "ရက်ကန်းသို့ ချည်ထုတ်ပေးမှု အောင်မြင်ပါသည်။ ချည်စတော့မှ နှုတ်ပြီးပါပြီ။" });
-    }
-
-    if (path === "/api/yarns/issues" && method === "GET") {
-        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
-
-        const sql = `
-            SELECT 
-                yi.id, yi.yarn_id, yi.branch_id, yi.weaver_name, yi.quantity, yi.issue_date, yi.notes, yi.created_at,
-                p.sku, p.item_name, p.color, p.size AS unit,
-                COALESCE(u.full_name, 'Admin') AS created_by_name
-            FROM yarn_issues yi
-            INNER JOIN products p ON yi.yarn_id = p.id
-            LEFT JOIN users u ON yi.created_by = u.id
-            WHERE yi.branch_id = ?
-            ORDER BY yi.id DESC LIMIT 300
-        `;
-        const { results } = await env.DB.prepare(sql).bind(Number(branchId)).all().catch(() => ({ results: [] }));
-        return jsonResponse(results || []);
-    }
-
-    if (path.startsWith("/api/yarns/issues/") && method === "DELETE") {
-        const id = Number(path.split("/").pop());
-        const issue = await env.DB.prepare("SELECT yarn_id, branch_id, quantity, weaver_name FROM yarn_issues WHERE id = ?").bind(id).first();
-        if (!issue) return errorResponse("ချည်ထုတ်ပေးမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
-
-        const targetBranch = Number(issue.branch_id || userBranchId);
-        if (!isAdminOrFinance && targetBranch !== Number(userBranchId)) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ပယ်ဖျက်ခွင့် မရှိပါ", 403);
-        }
-
-        await env.DB.batch([
-            env.DB.prepare(`
-                INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
-                ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-            `).bind(targetBranch, Number(issue.yarn_id), roundQty(issue.quantity)),
-            env.DB.prepare("DELETE FROM yarn_issues WHERE id = ?").bind(id)
-        ]);
-
-        await logAudit(env.DB, {
-            branchId: targetBranch,
-            userId: currentUserId,
-            action: "VOID_YARN_ISSUE",
-            tableName: "yarn_issues",
-            recordId: id,
-            details: { yarn_id: issue.yarn_id, quantity: issue.quantity, weaver_name: issue.weaver_name }
-        });
-
-        return jsonResponse({ message: "ချည်ထုတ်ပေးမှုမှတ်တမ်း ပယ်ဖျက်ပြီး လက်ကျန်ပြန်ပေါင်းပြီးပါပြီ" });
-    }
-
-    // =========================================================================
-    // 4. DAMAGE & WASTE LOGS (UTC Index Optimized & Branch Scoped)
-    // =========================================================================
-    if (path === "/api/waste" && method === "GET") {
-        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
-        const targetYear = getQueryYear(url);
-        const { startUtc: yearStartUtc, endUtc: yearEndUtc } = getMyanmarYearUtcBounds(targetYear);
-
-        const sql = `
-            SELECT 
-                w.id, w.reference_no, w.branch_id, w.product_id, w.quantity, w.unit_cost, w.reason, w.created_at,
-                p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
-                COALESCE(u.full_name, 'Admin') AS recorded_by_name
-            FROM waste_logs w
-            INNER JOIN products p ON w.product_id = p.id
-            LEFT JOIN users u ON w.recorded_by = u.id
-            WHERE w.branch_id = ? 
-              AND w.created_at >= ? 
-              AND w.created_at <= ?
-              AND COALESCE(w.status, 'completed') != 'cancelled'
-            ORDER BY w.id DESC LIMIT 300
-        `;
-        const { results } = await env.DB.prepare(sql).bind(Number(branchId), yearStartUtc, yearEndUtc).all().catch(() => ({ results: [] }));
-        return jsonResponse(results || []);
-    }
-
-    if (path === "/api/waste" && method === "POST") {
-        const body = await request.json().catch(() => ({}));
-        const branchId = resolveBranchId(auth, body.branch_id);
-        const productId = Number(body.product_id || body.productId);
-        const quantity = roundQty(body.quantity);
-        const unitCost = roundKyat(body.unit_cost ?? body.unitCost ?? 0);
-        const reason = String(body.reason || "").trim();
-
-        if (!branchId || !productId || quantity <= 0) {
-            return errorResponse("ဆိုင်ခွဲ၊ ပစ္စည်းနှင့် ပျက်စီးပမာဏ မှန်ကန်စွာ ထည့်သွင်းပေးပါ", 400);
-        }
-
-        const inv = await env.DB.prepare(
-            "SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?"
-        ).bind(branchId, productId).first();
-
-        const currentStock = Number(inv?.quantity || 0);
-        if (currentStock < quantity) {
-            return errorResponse(`လက်ကျန်စတော့ (${currentStock}) ထက် ပိုမို၍ ပျက်စီးစာရင်း သွင်း၍မရပါ`, 400);
-        }
-
-        const dateStr = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 12);
-        const randSuffix = Math.floor(10 + Math.random() * 89);
-        const refNo = `WST-B${branchId}-${dateStr}${randSuffix}`;
-
-        await env.DB.batch([
-            env.DB.prepare(`
-                INSERT INTO waste_logs (reference_no, branch_id, product_id, quantity, unit_cost, reason, status, recorded_by)
-                VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
-            `).bind(refNo, branchId, productId, quantity, unitCost, reason || "ချည်/အထည် ပျက်စီးအလေအလွင့်", currentUserId),
-
-            env.DB.prepare(`
-                UPDATE branch_inventory 
-                SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
-                WHERE branch_id = ? AND product_id = ?
-            `).bind(quantity, branchId, productId)
-        ]);
-
-        return jsonResponse({ message: "အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။", refNo }, 201);
-    }
-
-    if (path.startsWith("/api/waste/") && method === "PUT") {
-        const id = Number(path.split("/").pop());
-        const body = await request.json().catch(() => ({}));
-        const newQty = roundQty(body.quantity);
-        const reason = String(body.reason || "").trim();
-        const unitCost = body.unit_cost !== undefined ? roundKyat(body.unit_cost) : null;
-
-        if (!id || newQty <= 0) {
-            return errorResponse("မှန်ကန်သော အရေအတွက်/ပမာဏ ထည့်သွင်းပါ", 400);
-        }
-
-        const oldLog = await env.DB.prepare(
-            "SELECT branch_id, product_id, quantity, unit_cost, status FROM waste_logs WHERE id = ?"
-        ).bind(id).first();
-        if (!oldLog || oldLog.status === "cancelled") return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
-
-        if (!isAdminOrFinance && Number(oldLog.branch_id) !== Number(userBranchId)) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ပြင်ဆင်ခွင့် မရှိပါ", 403);
-        }
-
-        const diff = roundQty(Number(oldLog.quantity) - newQty);
-
-        if (diff < 0) {
-            const inv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
-                .bind(Number(oldLog.branch_id), Number(oldLog.product_id)).first();
-            const currentStock = Number(inv?.quantity || 0);
-            if (currentStock + diff < 0) {
-                return errorResponse(`လက်ကျန်စတော့ မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
+        // ၁။ Net Stock Delta အတိအကျ ပြန်ညှိခြင်း (MAX(0) ကြောင့် စတော့ဖောင်းပွမှု လုံးဝမဖြစ်စေရန်)
+        for (const [pid, delta] of netDeltaByProduct.entries()) {
+            if (delta !== 0) {
+                batch.push(
+                    env.DB.prepare(`
+                        INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
+                        ON CONFLICT(branch_id, product_id) DO UPDATE SET 
+                            quantity = branch_inventory.quantity + excluded.quantity,
+                            updated_at = CURRENT_TIMESTAMP
+                    `).bind(branchId, pid, delta)
+                );
             }
         }
 
-        const finalUnitCost = unitCost !== null ? unitCost : roundKyat(oldLog.unit_cost || 0);
+        batch.push(env.DB.prepare("DELETE FROM purchase_items WHERE purchase_id = ?").bind(purId));
 
-        await env.DB.batch([
-            env.DB.prepare("UPDATE waste_logs SET quantity = ?, unit_cost = ?, reason = ? WHERE id = ?")
-                .bind(newQty, finalUnitCost, reason, id),
-            env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                .bind(diff, Number(oldLog.branch_id), Number(oldLog.product_id))
-        ]);
-
-        return jsonResponse({ message: "အလေအလွင့်စာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်ညှိပြီးပါပြီ။" });
-    }
-
-    if (path.startsWith("/api/waste/") && method === "DELETE") {
-        const id = Number(path.split("/").pop());
-        const oldLog = await env.DB.prepare(
-            "SELECT reference_no, branch_id, product_id, quantity, status FROM waste_logs WHERE id = ?"
-        ).bind(id).first();
-        if (!oldLog || oldLog.status === "cancelled") return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ", 404);
-
-        if (!isAdminOrFinance && Number(oldLog.branch_id) !== Number(userBranchId)) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
-        }
-
-        await env.DB.batch([
-            env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                .bind(roundQty(oldLog.quantity), Number(oldLog.branch_id), Number(oldLog.product_id)),
-            env.DB.prepare("UPDATE waste_logs SET status = 'cancelled' WHERE id = ?").bind(id)
-        ]);
-
-        await logAudit(env.DB, {
-            branchId: oldLog.branch_id,
-            userId: currentUserId,
-            action: "VOID_WASTE_LOG",
-            tableName: "waste_logs",
-            recordId: id,
-            details: { reference_no: oldLog.reference_no, product_id: oldLog.product_id, quantity: oldLog.quantity }
-        });
-
-        return jsonResponse({ message: "မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲသို့ အပြည့်အဝ ပြန်လည် ထည့်သွင်းပြီးပါပြီ။" });
-    }
-
-    // =========================================================================
-    // 5. INTER-BRANCH STOCK TRANSFERS (UTC Index Optimized & RBAC Scoped)
-    // =========================================================================
-    if (path === "/api/transfers" && method === "GET") {
-        const requestedBranch = url.searchParams.get("branch_id");
-        const branchId = resolveBranchId(auth, requestedBranch, { allowAllForAdmin: true });
-        const targetYear = getQueryYear(url);
-        const { startUtc: yearStartUtc, endUtc: yearEndUtc } = getMyanmarYearUtcBounds(targetYear);
-
-        let sql = `
-            SELECT 
-                t.id, t.transfer_no, t.from_branch_id, t.to_branch_id, t.product_id, t.quantity, t.status, t.notes, t.created_at,
-                b1.name AS from_branch_name, b1.code AS from_branch_code,
-                b2.name AS to_branch_name, b2.code AS to_branch_code,
-                p.sku, p.barcode, p.category, p.item_name, p.pattern, p.size, p.color,
-                COALESCE(u.full_name, 'Admin') AS created_by_name
-            FROM stock_transfers t
-            LEFT JOIN branches b1 ON t.from_branch_id = b1.id
-            LEFT JOIN branches b2 ON t.to_branch_id = b2.id
-            LEFT JOIN products p ON t.product_id = p.id
-            LEFT JOIN users u ON t.created_by = u.id
-            WHERE t.created_at >= ? AND t.created_at <= ?
-              AND COALESCE(t.status, 'received') != 'cancelled'
-        `;
-        const bindings = [yearStartUtc, yearEndUtc];
-        if (branchId && branchId !== "ALL") {
-            sql += ` AND (t.from_branch_id = ? OR t.to_branch_id = ?) `;
-            bindings.push(Number(branchId), Number(branchId));
-        }
-        sql += ` ORDER BY t.id DESC LIMIT 300 `;
-
-        const { results } = await env.DB.prepare(sql).bind(...bindings).all().catch(() => ({ results: [] }));
-        return jsonResponse(results || []);
-    }
-
-    if (path === "/api/transfers" && method === "POST") {
-        const body = await request.json().catch(() => ({}));
-        const fromBranchId = currentUserRole === "cashier"
-            ? Number(userBranchId)
-            : Number(body.fromBranchId || body.from_branch_id);
-        const toBranchId = Number(body.toBranchId || body.to_branch_id);
-        const productId = Number(body.productId || body.product_id);
-        const quantity = roundQty(body.quantity);
-        const notes = String(body.notes || "").trim();
-
-        if (!fromBranchId || !toBranchId || !productId || quantity <= 0) {
-            return errorResponse("လွှဲပြောင်းပေးပို့မည့် ဆိုင်ခွဲများ၊ ပစ္စည်းနှင့် အရေအတွက် အပြည့်အစုံ ထည့်သွင်းပေးပါ", 400);
-        }
-
-        if (fromBranchId === toBranchId) {
-            return errorResponse("ပေးပို့မည့်ဆိုင်နှင့် လက်ခံမည့်ဆိုင် တူညီ၍ မရပါ", 400);
-        }
-
-        const sourceInv = await env.DB.prepare(
-            "SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?"
-        ).bind(fromBranchId, productId).first();
-
-        const currentStock = Number(sourceInv?.quantity || 0);
-        if (currentStock < quantity) {
-            return errorResponse(`လွှဲပြောင်းမည့်ဆိုင်တွင် လက်ကျန်ပစ္စည်း မလုံလောက်ပါ (လက်ရှိလက်ကျန်: ${currentStock})`, 400);
-        }
-
-        const dateStr = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 12);
-        const randSuffix = Math.floor(10 + Math.random() * 89);
-        const transferNo = `TRF-B${fromBranchId}TO${toBranchId}-${dateStr}${randSuffix}`;
-
-        await env.DB.batch([
-            env.DB.prepare(`
-                INSERT INTO stock_transfers (transfer_no, from_branch_id, to_branch_id, product_id, quantity, status, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, 'received', ?, ?)
-            `).bind(transferNo, fromBranchId, toBranchId, productId, quantity, notes || "ဆိုင်အချင်းချင်း ပစ္စည်းလွှဲပြောင်းမှု", currentUserId),
-
-            env.DB.prepare(`
-                UPDATE branch_inventory 
-                SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP 
-                WHERE branch_id = ? AND product_id = ?
-            `).bind(quantity, fromBranchId, productId),
-
-            env.DB.prepare(`
-                INSERT INTO branch_inventory (branch_id, product_id, quantity) 
-                VALUES (?, ?, ?)
-                ON CONFLICT(branch_id, product_id) DO UPDATE SET 
-                quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
-            `).bind(toBranchId, productId, quantity)
-        ]);
-
-        return jsonResponse({ message: "ဆိုင်ခွဲအချင်းချင်း ပစ္စည်းလွှဲပြောင်းခြင်း အောင်မြင်ပါသည်", transferNo }, 201);
-    }
-
-    if (path.startsWith("/api/transfers/") && method === "PUT") {
-        const id = Number(path.split("/").pop());
-        const body = await request.json().catch(() => ({}));
-        const newQty = roundQty(body.quantity);
-        const notes = String(body.notes || "").trim();
-
-        if (!id || newQty <= 0) {
-            return errorResponse("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပေးပါ", 400);
-        }
-
-        const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
-        if (!trf || trf.status === "cancelled") return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
-
-        if (!isAdminOrFinance && Number(trf.from_branch_id) !== Number(userBranchId)) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ လွှဲပြောင်းမှုမှတ်တမ်းအား ပြင်ဆင်ခွင့် မရှိပါ", 403);
-        }
-
-        const oldQty = roundQty(trf.quantity || 0);
-        const diff = roundQty(newQty - oldQty);
-
-        if (diff > 0) {
-            const fromInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
-                .bind(Number(trf.from_branch_id), Number(trf.product_id)).first();
-            const fromStock = Number(fromInv?.quantity || 0);
-            if (fromStock < diff) {
-                return errorResponse(`မူလပေးပို့သည့်ဆိုင်တွင် လက်ကျန် (${fromStock}) မလုံလောက်သဖြင့် အရေအတွက် တိုး၍မရပါ`, 400);
-            }
-        } else if (diff < 0) {
-            const toInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
-                .bind(Number(trf.to_branch_id), Number(trf.product_id)).first();
-            const toStock = Number(toInv?.quantity || 0);
-            if (toStock < Math.abs(diff)) {
-                return errorResponse(`လက်ခံရရှိသည့်ဆိုင်တွင် လက်ကျန် (${toStock}) လျော့နည်းနေသဖြင့် အရေအတွက် လျှော့ချ၍မရပါ`, 400);
-            }
-        }
-
-        const batchStatements = [
-            env.DB.prepare("UPDATE stock_transfers SET quantity = ?, notes = ? WHERE id = ?").bind(newQty, notes, id)
-        ];
-
-        if (diff !== 0) {
-            batchStatements.push(
-                env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                    .bind(diff, Number(trf.from_branch_id), Number(trf.product_id)),
-                env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                    .bind(diff, Number(trf.to_branch_id), Number(trf.product_id))
+        // ၂။ မူလ ပွဲရုံအကြွေး (ရှိခဲ့ပါက) ပြန်နှုတ်ပြီး Ledger မှ ဖယ်ရှားခြင်း
+        if (oldDebtEntry && oldDebtEntry.supplier_id) {
+            batch.push(
+                env.DB.prepare("UPDATE customers SET current_payable = MAX(0, COALESCE(current_payable, 0) - ?) WHERE id = ?")
+                    .bind(roundKyat(oldDebtEntry.amount), Number(oldDebtEntry.supplier_id)),
+                env.DB.prepare("DELETE FROM supplier_ledger WHERE purchase_id = ?").bind(purId)
             );
         }
 
-        await env.DB.batch(batchStatements);
-        return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်း ပြင်ဆင်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့လက်ကျန်များကို အလိုအလျောက် ပြန်ညှိပြီးပါပြီ။" });
-    }
+        // ၃။ ပစ္စည်းအသစ်များနှင့် ဈေးနှုန်းများ ပြန်ထည့်ခြင်း
+        for (const it of validatedNewItems) {
+            if (it.retail_price !== undefined && it.wholesale_price !== undefined) {
+                batch.push(
+                    env.DB.prepare("UPDATE products SET cost_price = ?, retail_price = ?, wholesale_price = ? WHERE id = ?")
+                        .bind(it.unit_cost, it.retail_price, it.wholesale_price, it.product_id)
+                );
+            }
 
-    if (path.startsWith("/api/transfers/") && method === "DELETE") {
-        const id = Number(path.split("/").pop());
-        const trf = await env.DB.prepare("SELECT * FROM stock_transfers WHERE id = ?").bind(id).first();
-        if (!trf || trf.status === "cancelled") return errorResponse("လွှဲပြောင်းမှုမှတ်တမ်း ရှာမတွေ့ပါ", 404);
-
-        if (!isAdminOrFinance && Number(trf.from_branch_id) !== Number(userBranchId)) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ လွှဲပြောင်းမှုမှတ်တမ်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
+            batch.push(
+                env.DB.prepare("INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)")
+                    .bind(purId, it.product_id, it.quantity, it.unit_cost, it.subtotal)
+            );
         }
 
-        const destInv = await env.DB.prepare("SELECT quantity FROM branch_inventory WHERE branch_id = ? AND product_id = ?")
-            .bind(Number(trf.to_branch_id), Number(trf.product_id)).first();
-        const destStock = Number(destInv?.quantity || 0);
+        let newPaidAmount = 0;
+        let newDiffAmount = 0;
+        let dbPaymentMethod = "cash";
+        let notesTag = null;
 
-        if (destStock < roundQty(trf.quantity)) {
-            return errorResponse(`လက်ခံဆိုင်တွင် ပစ္စည်းလက်ကျန် (${destStock}) လျော့နည်းနေသဖြင့် လွှဲပြောင်းမှုကို ပြန်ဖျက်၍ မရပါ`, 400);
+        if (isOwnProduction) {
+            newPaidAmount = 0;
+            newDiffAmount = 0;
+            dbPaymentMethod = "production";
+            notesTag = "OWN_PRODUCTION";
+        } else if (validMethod === "credit") {
+            newPaidAmount = 0;
+            newDiffAmount = -newItemsTotal;
+            dbPaymentMethod = "credit";
+        } else {
+            if (body.paid_amount !== undefined && body.paid_amount !== null && body.paid_amount !== "") {
+                newPaidAmount = Math.max(0, roundKyat(body.paid_amount));
+            } else {
+                newPaidAmount = newItemsTotal;
+            }
+            newDiffAmount = newPaidAmount - newItemsTotal;
+            dbPaymentMethod = newPaidAmount === 0 ? "credit" : validMethod;
         }
 
-        await env.DB.batch([
-            env.DB.prepare("UPDATE branch_inventory SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                .bind(roundQty(trf.quantity), Number(trf.from_branch_id), Number(trf.product_id)),
-            env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
-                .bind(roundQty(trf.quantity), Number(trf.to_branch_id), Number(trf.product_id)),
-            env.DB.prepare("UPDATE stock_transfers SET status = 'cancelled' WHERE id = ?").bind(id)
-        ]);
+        // ၄။ ပွဲရုံ ID ရှာဖွေခြင်းနှင့် ပေးရန်ကျန်ငွေ အသစ် (ကိုယ်ပိုင်ထုတ် မဟုတ်ပါက) ပြန်ထည့်ခြင်း
+        let supplierId = null;
+        if (!isOwnProduction) {
+            const suppRecord = await env.DB.prepare(
+                "SELECT id FROM customers WHERE (name = ? OR shop_name = ?) AND is_active = 1 LIMIT 1"
+            ).bind(supplierName, supplierName).first();
+            supplierId = suppRecord?.id || oldPur.supplier_id || null;
+            const newPayableToAdd = newDiffAmount < 0 ? Math.abs(newDiffAmount) : (dbPaymentMethod === "credit" ? newItemsTotal : 0);
+
+            if (newPayableToAdd > 0 && supplierId) {
+                batch.push(
+                    env.DB.prepare("UPDATE customers SET current_payable = COALESCE(current_payable, 0) + ? WHERE id = ?")
+                        .bind(newPayableToAdd, supplierId),
+                    env.DB.prepare(`
+                        INSERT INTO supplier_ledger (supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                        VALUES (?, ?, ?, 'PURCHASE_DEBT', ?, (SELECT COALESCE(current_payable, 0) FROM customers WHERE id = ?), ?, ?, 'completed', ?)
+                    `).bind(
+                        supplierId, branchId, purId, newPayableToAdd, supplierId,
+                        dbPaymentMethod, `အဝယ်ဘောင်ချာ ${oldPur.purchase_no}${refNo ? ` (Ref: ${refNo})` : ""}`, currentUserId
+                    )
+                );
+            }
+        }
+
+        // ၅။ Purchases Header နှင့် Cashbook ပြန်ညှိခြင်း
+        batch.push(
+            env.DB.prepare(`
+                UPDATE purchases SET 
+                    supplier_id = ?, supplier_name = ?, purchase_date = ?, ref_no = ?, 
+                    items_total = ?, total_amount = ?, paid_amount = ?, diff_amount = ?, 
+                    payment_method = ?, bank_account_name = ?, notes = ?
+                WHERE id = ?
+            `).bind(
+                supplierId, supplierName, purDate, refNo,
+                newItemsTotal, newItemsTotal, newPaidAmount, newDiffAmount,
+                dbPaymentMethod, isOwnProduction ? null : (body.bank_account_name || null), notesTag, purId
+            ),
+            env.DB.prepare("DELETE FROM cashbook_entries WHERE purchase_id = ?").bind(purId)
+        );
+
+        if (!isOwnProduction && newPaidAmount > 0) {
+            const cbRefNo = refNo || oldPur.purchase_no;
+            batch.push(
+                env.DB.prepare(`
+                    INSERT INTO cashbook_entries (
+                        branch_id, category_id, purchase_id, entry_type, 
+                        payment_method, bank_account_name, amount, diff_amount, 
+                        ref_no, description, entry_date, status, created_by
+                    ) VALUES (?, 6, ?, 'EXPENSE', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+                `).bind(
+                    branchId, purId, dbPaymentMethod,
+                    body.bank_account_name || null, newPaidAmount, newDiffAmount,
+                    cbRefNo, supplierName, purDate, currentUserId
+                )
+            );
+        }
+
+        await env.DB.batch(batch);
 
         await logAudit(env.DB, {
-            branchId: trf.from_branch_id,
+            branchId,
             userId: currentUserId,
-            action: "VOID_STOCK_TRANSFER",
-            tableName: "stock_transfers",
-            recordId: id,
-            details: { transfer_no: trf.transfer_no, product_id: trf.product_id, quantity: trf.quantity }
+            action: "UPDATE_PURCHASE",
+            tableName: "purchases",
+            recordId: purId,
+            details: { purchase_no: oldPur.purchase_no, newItemsTotal, newPaidAmount, isOwnProduction }
         });
 
-        return jsonResponse({ message: "လွှဲပြောင်းမှုမှတ်တမ်းကို ပယ်ဖျက်ပြီး ဆိုင်နှစ်ခုလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်ညှိပြီးပါပြီ" });
+        return jsonResponse({ message: "စာရင်း ပြင်ဆင်ပြီး စတော့၊ ငွေစာရင်းနှင့် ပွဲရုံအကြွေးပါ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ" });
+    }
+
+    // PURCHASES VOID / SOFT-DELETE (FULL ATOMIC REVERSAL + AUDIT PRESERVATION)
+    if (path.startsWith("/api/purchases/") && method === "DELETE") {
+        const purId = Number(path.split("/").pop());
+        if (!purId) return errorResponse("အဝယ်မှတ်တမ်း ID မမှန်ကန်ပါ", 400);
+
+        const [itemsRes, purRes, ledgerRes] = await env.DB.batch([
+            env.DB.prepare("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?").bind(purId),
+            env.DB.prepare("SELECT id, purchase_no, branch_id, supplier_name, items_total, status FROM purchases WHERE id = ?").bind(purId),
+            env.DB.prepare("SELECT supplier_id, amount FROM supplier_ledger WHERE purchase_id = ? AND type = 'PURCHASE_DEBT' AND COALESCE(status, 'completed') != 'cancelled'").bind(purId)
+        ]);
+
+        const pur = (purRes.results || [])[0];
+        if (!pur) return errorResponse("အဝယ်မှတ်တမ်း ရှာမတွေ့ပါ", 404);
+        if (pur.status === "cancelled") {
+            return errorResponse("ဤအဝယ်မှတ်တမ်းသည် ပယ်ဖျက်ထားပြီး ဖြစ်ပါသည်", 400);
+        }
+
+        const branchId = Number(pur.branch_id);
+        if (!isAdminOrFinance && branchId !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ အဝယ်မှတ်တမ်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
+        }
+
+        const items = itemsRes.results || [];
+        const ledgerRows = ledgerRes.results || [];
+
+        // Check if current branch inventory has enough stock to reverse this purchase
+        const { results: branchStockRows } = await env.DB.prepare(
+            "SELECT product_id, quantity FROM branch_inventory WHERE branch_id = ?"
+        ).bind(branchId).all();
+        const stockMap = new Map((branchStockRows || []).map(r => [Number(r.product_id), roundQty(r.quantity)]));
+
+        for (const it of items) {
+            const currentQty = stockMap.get(Number(it.product_id)) || 0;
+            const revQty = roundQty(it.quantity);
+            if (currentQty < revQty) {
+                return errorResponse(
+                    `အဝယ်ဘောင်ချာပါ ပစ္စည်းအချို့ ရောင်းချ/လွှဲပြောင်းထားပြီးဖြစ်သဖြင့် လက်ကျန် (${currentQty}) မလုံလောက်၍ ဖျက်သိမ်းမရနိုင်ပါ`,
+                    400
+                );
+            }
+        }
+
+        const batchRollback = [];
+        items.forEach(it => {
+            batchRollback.push(
+                env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                    .bind(roundQty(it.quantity), branchId, Number(it.product_id))
+            );
+        });
+
+        ledgerRows.forEach(lr => {
+            if (lr.supplier_id && lr.amount > 0) {
+                batchRollback.push(
+                    env.DB.prepare("UPDATE customers SET current_payable = MAX(0, COALESCE(current_payable, 0) - ?) WHERE id = ?")
+                        .bind(roundKyat(lr.amount), Number(lr.supplier_id))
+                );
+            }
+        });
+
+        // Soft-delete purchase header & linked cashbook/ledger entries (preserving purchase_items for audit)
+        batchRollback.push(
+            env.DB.prepare("UPDATE supplier_ledger SET status = 'cancelled' WHERE purchase_id = ?").bind(purId),
+            env.DB.prepare("UPDATE cashbook_entries SET status = 'cancelled' WHERE purchase_id = ?").bind(purId),
+            env.DB.prepare(`
+                UPDATE purchases 
+                SET status = 'cancelled', cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP, cancel_reason = 'Voided by user'
+                WHERE id = ?
+            `).bind(currentUserId, purId)
+        );
+
+        await env.DB.batch(batchRollback);
+
+        await logAudit(env.DB, {
+            branchId,
+            userId: currentUserId,
+            action: "VOID_PURCHASE",
+            tableName: "purchases",
+            recordId: purId,
+            details: { purchase_no: pur.purchase_no, supplier: pur.supplier_name, items_total: pur.items_total }
+        });
+
+        return jsonResponse({ message: "အဝယ်စာရင်း ပယ်ဖျက်ပြီး စတော့၊ ငွေစာရင်းနှင့် ပွဲရုံအကြွေးများ ပြန်ညှိပြီးပါပြီ။" });
+    }
+
+    // =========================================================================
+    // 2. POS CHECKOUT, SPLIT PAYMENT & VOID/REFUND SALES (SECURITY HARDENED)
+    // =========================================================================
+    if (path === "/api/pos/sales" && method === "GET") {
+        const branchId = resolveBranchId(auth, url.searchParams.get("branch_id"));
+        const date = url.searchParams.get("date") || getMyanmarTodayDate();
+        const { startUtc, endUtc } = getMyanmarDayUtcBounds(date);
+
+        // [NEW] Server-Side Pagination for POS Sales History
+        const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+        const limit = Math.max(1, Number(url.searchParams.get("limit")) || 2000);
+        const offset = (page - 1) * limit;
+
+        const countSql = `
+            SELECT COUNT(DISTINCT s.id) AS total
+            FROM sales s
+            WHERE s.branch_id = ? 
+              AND s.created_at >= ? 
+              AND s.created_at <= ? 
+              AND s.status = 'completed'
+        `;
+        const countRes = await env.DB.prepare(countSql).bind(Number(branchId), startUtc, endUtc).first();
+        const totalItems = countRes?.total || 0;
+
+        const sql = `
+            SELECT 
+                s.id AS sale_id,
+                s.invoice_no,
+                s.sale_type,
+                s.payment_method,
+                s.cash_amount,
+                s.bank_amount,
+                s.bank_account_name,
+                s.total_amount,
+                s.discount_amount,
+                s.final_amount,
+                s.paid_amount,
+                s.debt_amount,
+                s.created_at,
+                COALESCE(c.name, 'Walk-in') AS customer_name,
+                si.id AS item_row_id,
+                si.product_id,
+                si.quantity,
+                si.unit_price,
+                si.subtotal,
+                p.category,
+                p.item_name,
+                p.sku,
+                p.color,
+                p.size,
+                p.pattern
+            FROM sales s
+            LEFT JOIN customers c ON s.customer_id = c.id
+            JOIN sale_items si ON s.id = si.sale_id
+            JOIN products p ON si.product_id = p.id
+            WHERE s.branch_id = ? 
+              AND s.created_at >= ? 
+              AND s.created_at <= ? 
+              AND s.status = 'completed'
+            ORDER BY s.id DESC, si.id ASC LIMIT ? OFFSET ?
+        `;
+        const { results } = await env.DB.prepare(sql).bind(Number(branchId), startUtc, endUtc, limit, offset).all();
+        
+        return jsonResponse({
+            items: results || [],
+            total: totalItems,
+            page,
+            limit
+        });
+    }
+
+    if (path === "/api/pos/sales" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const branchId = resolveBranchId(auth, body.branchId);
+        const {
+            customerId = null, saleType = "retail", items = [],
+            discountAmount = 0, paidAmount = 0, paymentMethod = "cash",
+            cashAmount = 0, bankAmount = 0, bankAccountName = null
+        } = body;
+
+        if (!branchId || !Array.isArray(items) || items.length === 0) {
+            return errorResponse("ဆိုင်ခွဲနှင့် ပစ္စည်းစာရင်း လိုအပ်ပါသည်", 400);
+        }
+
+        // Aggregate requested quantities per product in case the same product appears in multiple lines
+        const totalQtyByProd = new Map();
+        for (const item of items) {
+            const pid = Number(item.productId || item.product_id);
+            const qty = roundQty(item.quantity);
+            if (!pid || qty <= 0) return errorResponse("ပစ္စည်းအရေအတွက် မှားယွင်းနေပါသည်", 400);
+            totalQtyByProd.set(pid, roundQty((totalQtyByProd.get(pid) || 0) + qty));
+        }
+
+        // ၁။ စတော့နှင့် ပစ္စည်းဈေးနှုန်းအမှန်ကို Database မှ တိုက်ရိုက်စစ်ဆေးခြင်း (Tamper-Proof Pricing)
+        const verifiedItems = [];
+        let calculatedTotal = 0;
+
+        for (const item of items) {
+            const pid = Number(item.productId || item.product_id);
+            const qty = roundQty(item.quantity);
+
+            const product = await env.DB.prepare(`
+                SELECT p.id, p.item_name, p.cost_price, p.retail_price, p.wholesale_price,
+                       COALESCE(bi.quantity, 0) AS current_stock
+                FROM products p
+                LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
+                WHERE p.id = ? AND p.is_active = 1
+            `).bind(branchId, pid).first();
+
+            if (!product) {
+                return errorResponse(`ပစ္စည်း (ID: ${pid}) ရှာမတွေ့ပါ သို့မဟုတ် ရောင်းချခွင့်ပိတ်ထားပါသည်`, 404);
+            }
+
+            const totalRequestedForPid = totalQtyByProd.get(pid) || qty;
+            if (Number(product.current_stock) < totalRequestedForPid) {
+                return errorResponse(`"${product.item_name}" လက်ကျန်စတော့ (${product.current_stock}) မလုံလောက်ပါ`, 400);
+            }
+
+            const dbRetail = roundKyat(product.retail_price || 0);
+            const dbWholesale = roundKyat(product.wholesale_price || product.retail_price || 0);
+            const costPrice = roundKyat(product.cost_price || 0);
+            const clientPrice = roundKyat(item.unitPrice);
+
+            let unitPrice = (item.priceType === "wholesale" || saleType === "wholesale") ? dbWholesale : dbRetail;
+
+            if (clientPrice > 0 && (clientPrice === dbRetail || clientPrice === dbWholesale)) {
+                unitPrice = clientPrice;
+            } else if (clientPrice > 0 && isAdminOrFinance && clientPrice >= costPrice) {
+                unitPrice = clientPrice;
+            }
+
+            const lineSubtotal = roundKyat(qty * unitPrice);
+            calculatedTotal += lineSubtotal;
+
+            verifiedItems.push({
+                productId: pid,
+                quantity: qty,
+                unitPrice,
+                costPrice,
+                subtotal: lineSubtotal
+            });
+        }
+
+        const discount = Math.min(calculatedTotal, Math.max(0, roundKyat(discountAmount)));
+        const finalAmount = Math.max(0, calculatedTotal - discount);
+
+        let pCash = 0;
+        let pBank = 0;
+        let effectivePaid = 0;
+
+        if (paymentMethod === "split") {
+            pCash = Math.max(0, roundKyat(cashAmount));
+            pBank = Math.max(0, roundKyat(bankAmount));
+            effectivePaid = Math.min(finalAmount, pCash + pBank);
+            if (pCash + pBank > finalAmount) {
+                pCash = Math.max(0, finalAmount - pBank);
+            }
+        } else {
+            const rawPaid = Math.max(0, roundKyat(paidAmount));
+            effectivePaid = Math.min(rawPaid, finalAmount);
+            if (paymentMethod === "cash") pCash = effectivePaid;
+            else if (paymentMethod === "bank") pBank = effectivePaid;
+            else if (paymentMethod === "credit") {
+                if (bankAccountName) pBank = effectivePaid;
+                else pCash = effectivePaid;
+            }
+        }
+
+        const debtAmount = Math.max(0, finalAmount - effectivePaid);
+
+        // ၂။ Customer Credit Limit စစ်ဆေးခြင်း
+        let custName = "Walk-in";
+        if (customerId) {
+            const cust = await env.DB.prepare(
+                "SELECT current_debt, credit_limit, name, shop_name FROM customers WHERE id = ? AND is_active = 1"
+            ).bind(Number(customerId)).first();
+            if (!cust) return errorResponse("ဖောက်သည် ရှာမတွေ့ပါ", 404);
+            custName = cust.shop_name || cust.name;
+
+            if (debtAmount > 0) {
+                const currentDebt = roundKyat(cust.current_debt || 0);
+                const limit = roundKyat(cust.credit_limit || 0);
+                if (limit > 0 && (currentDebt + debtAmount) > limit) {
+                    return errorResponse(`ဖောက်သည် "${cust.name}" ၏ ခွင့်ပြုအကြွေးကန့်သတ်ချက် (${limit.toLocaleString()} Ks) ထက် ကျော်လွန်နေပါသည် (လက်ရှိအကြွေး: ${currentDebt.toLocaleString()} Ks)`, 400);
+                }
+            }
+        } else if (debtAmount > 0) {
+            return errorResponse("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ဖောက်သည် ရွေးချယ်ပေးပါ", 400);
+        }
+
+        // [NEW] 100% Collision-Free POS Invoice No
+        const invoiceNo = generateUniqueInvoice("INV", branchId);
+        const todayDate = getMyanmarTodayDate();
+
+        // ၄။ 100% Atomic Single-Batch Transaction (Sale Header + Items + Stock + Cashbook + Ledger)
+        const saleIdSubquery = `(SELECT id FROM sales WHERE invoice_no = ?)`;
+        const batchStatements = [
+            env.DB.prepare(`
+                INSERT INTO sales (
+                    invoice_no, branch_id, customer_id, sale_type,
+                    total_amount, discount_amount, final_amount, paid_amount, debt_amount,
+                    payment_method, cash_amount, bank_amount, bank_account_name, status, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, CURRENT_TIMESTAMP)
+            `).bind(
+                invoiceNo, Number(branchId), customerId ? Number(customerId) : null, saleType,
+                calculatedTotal, discount, finalAmount, effectivePaid, debtAmount,
+                paymentMethod, pCash, pBank, bankAccountName || null, currentUserId
+            )
+        ];
+
+        // ၅။ Items ထည့်သွင်းခြင်းနှင့် Stock နုတ်ခြင်း
+        for (const item of verifiedItems) {
+            batchStatements.push(
+                env.DB.prepare(`
+                    INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, cost_price, subtotal)
+                    VALUES (${saleIdSubquery}, ?, ?, ?, ?, ?)
+                `).bind(invoiceNo, item.productId, item.quantity, item.unitPrice, item.costPrice, item.subtotal),
+                // [FIXED] Atomic Stock Update to prevent negative sales
+                env.DB.prepare(`
+                    UPDATE branch_inventory
+                    SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE branch_id = ? AND product_id = ? AND quantity >= ?
+                `).bind(item.quantity, Number(branchId), item.productId, item.quantity)
+            );
+        }
+
+        // ၆။ Cashbook စာရင်းသွင်းခြင်း
+        if (effectivePaid > 0) {
+            if (pCash > 0) {
+                batchStatements.push(
+                    env.DB.prepare(`
+                        INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, amount, ref_no, description, entry_date, status, created_by)
+                        VALUES (?, 1, ${saleIdSubquery}, 'INCOME', 'cash', ?, ?, ?, ?, 'completed', ?)
+                    `).bind(Number(branchId), invoiceNo, pCash, invoiceNo, `${custName} (အရောင်း - ငွေသား)`, todayDate, currentUserId)
+                );
+            }
+            if (pBank > 0) {
+                batchStatements.push(
+                    env.DB.prepare(`
+                        INSERT INTO cashbook_entries (branch_id, category_id, sale_id, entry_type, payment_method, bank_account_name, amount, ref_no, description, entry_date, status, created_by)
+                        VALUES (?, 1, ${saleIdSubquery}, 'INCOME', 'bank', ?, ?, ?, ?, ?, 'completed', ?)
+                    `).bind(Number(branchId), invoiceNo, bankAccountName || "KPay/Bank", pBank, invoiceNo, `${custName} (အရောင်း - ${bankAccountName || "Bank"})`, todayDate, currentUserId)
+                );
+            }
+        }
+
+        // ၇။ Customer အကြွေးစာရင်း အလိုအလျောက်တိုးခြင်း
+        if (debtAmount > 0 && customerId) {
+            batchStatements.push(
+                env.DB.prepare("UPDATE customers SET current_debt = current_debt + ? WHERE id = ?")
+                    .bind(debtAmount, Number(customerId)),
+                env.DB.prepare(`
+                    INSERT INTO customer_ledger (customer_id, branch_id, sale_id, type, amount, balance_after, payment_method, reference_note, status, created_by)
+                    VALUES (?, ?, ${saleIdSubquery}, 'DEBIT', ?, (SELECT COALESCE(current_debt, 0) FROM customers WHERE id = ?), 'credit', ?, 'completed', ?)
+                `).bind(Number(customerId), Number(branchId), invoiceNo, debtAmount, Number(customerId), `ဘောင်ချာ ${invoiceNo} အကြွေးကျန်`, currentUserId)
+            );
+        }
+
+        try {
+            const batchResults = await env.DB.batch(batchStatements);
+            const saleId = batchResults[0]?.meta?.last_row_id || null;
+
+            return jsonResponse({ message: "အရောင်းဘောင်ချာ အောင်မြင်ပါသည်", invoiceNo, saleId, finalAmount }, 201);
+        } catch (err) {
+            // Rollback is automatic in D1 batch if any statement fails (e.g. CHECK constraint fails for negative stock)
+            if (err.message.includes("CHECK constraint")) {
+                return errorResponse("တောင်းဆိုသော အရေအတွက်အတိုင်း စတော့လက်ကျန် မလုံလောက်ပါ။ ပစ္စည်းတစ်မျိုးမျိုးသည် ရောင်းထွက်သွားပြီ ဖြစ်နိုင်ပါသည်။", 400);
+            }
+            throw err;
+        }
+    }
+
+    // POS SALE VOID / CANCEL (SOFT-DELETE WITH FULL ATOMIC REVERSAL & AUDIT LOG)
+    if ((path.startsWith("/api/pos/sales/") || path.startsWith("/api/sales/")) && method === "DELETE") {
+        const saleId = Number(path.split("/").pop());
+        if (!saleId) return errorResponse("ဘောင်ချာ ID မမှန်ကန်ပါ", 400);
+
+        const sale = await env.DB.prepare(
+            "SELECT id, invoice_no, branch_id, customer_id, final_amount, debt_amount, status FROM sales WHERE id = ?"
+        ).bind(saleId).first();
+        
+        if (!sale) return errorResponse("အရောင်းဘောင်ချာ ရှာမတွေ့ပါ", 404);
+        if (sale.status === "cancelled") {
+            return errorResponse("ဤဘောင်ချာသည် ပယ်ဖျက်ထားပြီး ဖြစ်ပါသည်", 400);
+        }
+
+        if (!isAdminOrFinance && Number(sale.branch_id) !== Number(userBranchId)) {
+            return errorResponse("အခြားဆိုင်ခွဲ၏ ဘောင်ချာအား ပယ်ဖျက်ခွင့် မရှိပါ", 403);
+        }
+
+        const { results: saleItems } = await env.DB.prepare(
+            "SELECT product_id, quantity FROM sale_items WHERE sale_id = ?"
+        ).bind(saleId).all();
+
+        const batchRollback = [];
+
+        // ၁။ ရောင်းထုတ်ခဲ့သော ပစ္စည်းအရေအတွက်များကို ဆိုင်ခွဲစတော့ထဲသို့ ပြန်ပေါင်းထည့်ခြင်း
+        for (const item of (saleItems || [])) {
+            batchRollback.push(
+                env.DB.prepare(`
+                    INSERT INTO branch_inventory (branch_id, product_id, quantity) VALUES (?, ?, ?)
+                    ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = branch_inventory.quantity + excluded.quantity, updated_at = CURRENT_TIMESTAMP
+                `).bind(Number(sale.branch_id), Number(item.product_id), roundQty(item.quantity))
+            );
+        }
+
+        // ၂။ အကြွေးပါခဲ့ပါက ဖောက်သည်အကြွေးမှ ပြန်နှုတ်ပြီး Ledger တွင် cancelled သတ်မှတ်ခြင်း
+        if (Number(sale.debt_amount) > 0 && sale.customer_id) {
+            batchRollback.push(
+                env.DB.prepare("UPDATE customers SET current_debt = MAX(0, COALESCE(current_debt, 0) - ?) WHERE id = ?")
+                    .bind(roundKyat(sale.debt_amount), Number(sale.customer_id)),
+                env.DB.prepare("UPDATE customer_ledger SET status = 'cancelled' WHERE sale_id = ?").bind(saleId)
+            );
+        }
+
+        // ၃။ Cashbook နှင့် Sale မှတ်တမ်းအား Soft-Delete (status = 'cancelled') သတ်မှတ်ခြင်း (sale_items အား စာရင်းစစ်ရန် ချန်ထားသည်)
+        batchRollback.push(
+            env.DB.prepare("UPDATE cashbook_entries SET status = 'cancelled' WHERE sale_id = ?").bind(saleId),
+            env.DB.prepare(`
+                UPDATE sales 
+                SET status = 'cancelled', cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP, cancel_reason = 'Voided by user'
+                WHERE id = ?
+            `).bind(currentUserId, saleId)
+        );
+
+        await env.DB.batch(batchRollback);
+
+        await logAudit(env.DB, {
+            branchId: sale.branch_id,
+            userId: currentUserId,
+            action: "VOID_SALE",
+            tableName: "sales",
+            recordId: saleId,
+            details: { invoice_no: sale.invoice_no, final_amount: sale.final_amount, debt_amount: sale.debt_amount }
+        });
+
+        return jsonResponse({ message: "အရောင်းဘောင်ချာ ပယ်ဖျက်ပြီး စတော့၊ ငွေစာရင်းနှင့် အကြွေးစာရင်းများ ပြန်ညှိပြီးပါပြီ" });
     }
 
     return null;

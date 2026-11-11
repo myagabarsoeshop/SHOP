@@ -75,8 +75,40 @@ export async function initMasterProducts() {
         ui.toast.error("ဤစာမျက်နှာကို Admin သာလျှင် အသုံးပြုခွင့်ရှိပါသည်။");
         return;
     }
+    ensureMasterStockFields();
     bindEvents();
     await loadMasterProducts();
+}
+
+/**
+ * master_products.html ရှိ #master-product-form တွင် စာရင်းဖွင့်လက်ကျန် (#master-prod-stock) နှင့် Alert Qty အကွက် ထည့်ပေးခြင်း
+ */
+function ensureMasterStockFields() {
+    const form = document.getElementById("master-product-form");
+    if (!form || document.getElementById("master-prod-stock")) return;
+
+    const submitContainer = form.querySelector("button[type='submit']")?.parentElement;
+    if (submitContainer) {
+        const stockDiv = document.createElement("div");
+        stockDiv.className = "grid grid-cols-2 gap-3 pt-1";
+        stockDiv.innerHTML = `
+            <div>
+                <label id="lbl-master-prod-stock" class="block text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                    စာရင်းဖွင့် လက်ကျန်အရေအတွက်
+                </label>
+                <input type="number" id="master-prod-stock" min="0" step="any" value="0" placeholder="0"
+                    class="w-full text-base font-mono font-black bg-emerald-50/50 dark:bg-slate-950 border border-emerald-400 dark:border-emerald-700/80 rounded-xl px-3.5 py-2 text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    စတော့နည်း သတိပေးချက် (Alert Qty)
+                </label>
+                <input type="number" id="master-prod-alert-qty" min="0" step="any" value="5" placeholder="5"
+                    class="w-full text-base font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+        `;
+        form.insertBefore(stockDiv, submitContainer);
+    }
 }
 
 function bindEvents() {
@@ -276,10 +308,17 @@ function safeSetValue(id, value) {
 }
 
 function openMasterModal(prod = null) {
+    ensureMasterStockFields();
     const modal = document.getElementById("master-product-modal");
     const title = document.getElementById("master-modal-title");
     const btnText = document.getElementById("master-modal-btn-text");
+    const stockInput = document.getElementById("master-prod-stock");
+    const stockLabel = document.getElementById("lbl-master-prod-stock");
     document.getElementById("master-product-form")?.reset();
+
+    const rawBranchId = state.currentBranch?.id;
+    const isAllBranches = !rawBranchId || String(rawBranchId) === "ALL";
+    const branchName = isAllBranches ? "Main Home Shop" : (state.currentBranch?.name || "Main Home Shop");
 
     if (prod) {
         if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်း အချက်အလက်နှင့် ဈေးနှုန်း ပြင်ဆင်မည်";
@@ -295,11 +334,31 @@ function openMasterModal(prod = null) {
         safeSetValue("master-prod-cost", prod.cost_price || 0);
         safeSetValue("master-prod-retail", prod.retail_price || 0);
         safeSetValue("master-prod-wholesale", prod.wholesale_price || 0);
+        safeSetValue("master-prod-alert-qty", prod.alert_quantity ?? 5);
+        safeSetValue("master-prod-stock", prod.current_stock ?? 0);
+
+        if (stockInput) {
+            // Product Master table displays All-Branch sum, so disable direct stock overwrite on Edit to prevent merging all branches into one
+            stockInput.disabled = true;
+            stockInput.classList.add("opacity-50", "cursor-not-allowed");
+            if (stockLabel) stockLabel.textContent = "စုစုပေါင်း လက်ကျန် (ဆိုင်ခွဲအားလုံး)";
+        }
     } else {
-        if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်းအမည်သစ် မှတ်ပုံတင်မည်";
+        if (title) title.textContent = "ဗဟိုကုန်ပစ္စည်းအမည်သစ်နှင့် စာရင်းဖွင့်လက်ကျန် သွင်းမည်";
         if (btnText) btnText.textContent = "ဗဟိုစာရင်းသို့ သိမ်းဆည်းမည်";
         safeSetValue("master-prod-id", "");
         safeSetValue("master-prod-size", "ထည်");
+        safeSetValue("master-prod-cost", 0);
+        safeSetValue("master-prod-retail", 0);
+        safeSetValue("master-prod-wholesale", 0);
+        safeSetValue("master-prod-alert-qty", 5);
+        safeSetValue("master-prod-stock", 0);
+
+        if (stockInput) {
+            stockInput.disabled = false;
+            stockInput.classList.remove("opacity-50", "cursor-not-allowed");
+            if (stockLabel) stockLabel.textContent = `စာရင်းဖွင့် လက်ကျန်အရေအတွက် (${branchName})`;
+        }
     }
 
     modal?.classList.remove("hidden");
@@ -312,6 +371,10 @@ async function submitMasterProduct(e) {
     if (btn) btn.disabled = true;
 
     const prodId = document.getElementById("master-prod-id")?.value;
+    const rawBranchId = state.currentBranch?.id;
+    const targetBranchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
+    const stockQty = parseAnyNumber(document.getElementById("master-prod-stock")?.value, false);
+    const alertQty = parseAnyNumber(document.getElementById("master-prod-alert-qty")?.value, false);
 
     const payload = {
         sku: document.getElementById("master-prod-sku")?.value.trim() || null,
@@ -323,7 +386,8 @@ async function submitMasterProduct(e) {
         size: document.getElementById("master-prod-size")?.value.trim() || "ထည်",
         costPrice: parseAnyNumber(document.getElementById("master-prod-cost")?.value, true),
         retailPrice: parseAnyNumber(document.getElementById("master-prod-retail")?.value, true),
-        wholesalePrice: parseAnyNumber(document.getElementById("master-prod-wholesale")?.value, true)
+        wholesalePrice: parseAnyNumber(document.getElementById("master-prod-wholesale")?.value, true),
+        alertQuantity: alertQty
     };
 
     try {
@@ -331,12 +395,12 @@ async function submitMasterProduct(e) {
             await api.put(`/products/${prodId}`, payload);
             ui.toast.success("အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။ ဆိုင်ခွဲအားလုံးတွင် သက်ရောက်မည်ဖြစ်ပါသည်။");
         } else {
-            payload.initialStock = 0; 
-            payload.quantity = 0;
-            payload.targetBranchId = 1;
-            payload.branchId = 1;
+            payload.initialStock = stockQty;
+            payload.quantity = stockQty;
+            payload.targetBranchId = targetBranchId;
+            payload.branchId = targetBranchId;
             await api.post("/products", payload);
-            ui.toast.success("ဗဟိုအထည်အသစ် မှတ်ပုံတင်ပြီးပါပြီ။");
+            ui.toast.success("ဗဟိုအထည်အသစ်နှင့် စာရင်းဖွင့်လက်ကျန် မှတ်ပုံတင်ပြီးပါပြီ။");
         }
         document.getElementById("master-product-modal")?.classList.add("hidden");
         await loadMasterProducts();
@@ -421,6 +485,9 @@ async function processMasterImport(csvText) {
         return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
 
+    const rawBranchId = state.currentBranch?.id;
+    const targetBranchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
+
     const headerCols = parseCsvLine(lines[0]).map(h => h.toUpperCase());
     const isStockBalancesFormat = headerCols[0] === "SKU" && headerCols[1] === "BARCODE";
 
@@ -430,7 +497,7 @@ async function processMasterImport(csvText) {
         if (row.length < 4) continue;
 
         if (isStockBalancesFormat) {
-            // Format: SKU, Barcode, Category, Item Name, Pattern, Color, Unit/Size, Cost Price, Retail Price, Wholesale Price
+            // Format: SKU, Barcode, Category, Item Name, Pattern, Color, Unit/Size, Cost Price, Retail Price, Wholesale Price, Current Stock
             const itemName = row[3] || "";
             if (!itemName) continue;
             bulkItems.push({
@@ -443,7 +510,8 @@ async function processMasterImport(csvText) {
                 size: row[6] || "ထည်",
                 costPrice: parseAnyNumber(row[7], true),
                 retailPrice: parseAnyNumber(row[8], true),
-                wholesalePrice: parseAnyNumber(row[9] || row[8], true)
+                wholesalePrice: parseAnyNumber(row[9] || row[8], true),
+                quantity: row[10] !== undefined ? parseAnyNumber(row[10], false) : 0
             });
         } else {
             // Format: NO, BARCODE/SKU, CATEGORY, ITEM NAME, UNIT/SIZE, COLOR, PATTERN, TOTAL QTY, PURCHASE, WHOLESALE, RETAIL
@@ -457,6 +525,7 @@ async function processMasterImport(csvText) {
                 size: row[4] || "ထည်",
                 color: row[5] || null,
                 pattern: row[6] || null,
+                quantity: row[7] !== undefined ? parseAnyNumber(row[7], false) : 0,
                 costPrice: parseAnyNumber(row[8], true),
                 wholesalePrice: parseAnyNumber(row[9], true),
                 retailPrice: parseAnyNumber(row[10] || row[9], true)
@@ -470,9 +539,13 @@ async function processMasterImport(csvText) {
 
     try {
         ui.toast.info(`ပစ္စည်း (${bulkItems.length}) မျိုး ဗဟိုစာရင်းသို့ သွင်းယူနေပါသည်...`);
-        const res = await api.post("/products/bulk", { items: bulkItems });
-        const count = res.data?.count ?? bulkItems.length;
-        ui.toast.success(`ပစ္စည်းအသစ် (${count}) မျိုး အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`);
+        const res = await api.post("/products/bulk", {
+            branchId: targetBranchId,
+            items: bulkItems
+        });
+        const payload = res?.data || res;
+        const msg = payload?.message || `ပစ္စည်းအသစ် (${payload?.count ?? bulkItems.length}) မျိုး အောင်မြင်စွာ မှတ်ပုံတင်ပြီးပါပြီ။`;
+        ui.toast.success(msg);
         await loadMasterProducts();
     } catch (err) {
         ui.toast.error("CSV သွင်းယူမှု မအောင်မြင်ပါ: " + err.message);

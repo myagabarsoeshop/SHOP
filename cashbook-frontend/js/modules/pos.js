@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/pos.js
+// FILE: cashbook-frontend/js/modules/pos.js 
 // SALE COUNTER (POS), SPLIT PAYMENT, RECEIPT PRINTING & VOID SALE MODULE
 // Version: 4.1.0 (Fixes KPI Pagination Bug, ALL-View Guard & RBAC Void Check)
 // =============================================================================

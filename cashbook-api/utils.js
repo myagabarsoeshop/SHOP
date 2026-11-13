@@ -1,8 +1,15 @@
 // =============================================================================
 // FILE 1 OF 5: cashbook-api/utils.js
-// SHARED HELPERS, KYAT/QTY MATH, D1 SCHEMA GUARD, RBAC, AUDIT & CRYPTO/JWT AUTH
-// Version: 3.2.0 (Enterprise Security Hardened, Zero Plaintext & D1 Indexed)
+// SHARED HELPERS, KYAT/QTY MATH, RBAC MATRIX, BRANCH SCOPING, INVOICE SEQ & AUTH
+// Version: 4.1.0 (Ledger-Backed, Strict RBAC, Zero Runtime DDL, Race-Safe Seq)
 // =============================================================================
+
+export const APP_VERSION = "4.1.0";
+export const MM_OFFSET = "+390 minutes";
+export const MMT_OFFSET_MS = 390 * 60 * 1000; // UTC+6:30 in milliseconds
+export const HIGH_VALUE_ADJUSTMENT_THRESHOLD_KYAT = 50000;
+
+let activeRequestEnv = null;
 
 export const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -14,23 +21,37 @@ export const corsHeaders = {
 };
 
 /**
- * Request Origin အား wrangler.toml ရှိ ALLOWED_ORIGIN နှင့် တိုက်ဆိုင်စစ်ဆေးပြီး CORS သတ်မှတ်ခြင်း
+ * Custom HTTP Error for clean status & Myanmar message propagation
+ */
+export class HttpError extends Error {
+    constructor(status, message) {
+        super(message);
+        this.name = "HttpError";
+        this.status = status;
+    }
+}
+
+/**
+ * Request Origin အား wrangler.toml ရှိ ALLOWED_ORIGIN နှင့် တိုက်ဆိုင်စစ်ဆေးပြီး CORS သတ်မှတ်ခြင်း (Spec 9.5)
  */
 export function getCorsHeaders(request, env) {
     const reqOrigin = request?.headers?.get("Origin") || "";
     const rawAllowed = (env && env.ALLOWED_ORIGIN) ? String(env.ALLOWED_ORIGIN).trim() : "";
     const allowedList = rawAllowed.split(",").map(s => s.trim()).filter(Boolean);
-    const primaryOrigin = allowedList[0] || "*";
+    const isDev = env?.ENVIRONMENT === "development" || env?.ALLOW_DEV_SECRET === "true";
 
-    let resolvedOrigin = primaryOrigin;
+    let resolvedOrigin = allowedList[0] || (isDev ? "*" : "null");
+
     if (reqOrigin) {
-        const isLocal = reqOrigin.startsWith("http://localhost:") ||
-                        reqOrigin === "http://localhost" ||
-                        reqOrigin.startsWith("http://127.0.0.1:") ||
-                        reqOrigin === "http://127.0.0.1";
-        const isExplicitlyAllowed = allowedList.includes(reqOrigin);
+        const isLocal = isDev && (
+            reqOrigin.startsWith("http://localhost:") ||
+            reqOrigin === "http://localhost" ||
+            reqOrigin.startsWith("http://127.0.0.1:") ||
+            reqOrigin === "http://127.0.0.1"
+        );
+        const isExplicitlyAllowed = allowedList.includes(reqOrigin) || allowedList.includes("*");
 
-        if (isLocal || isExplicitlyAllowed) {
+        if (isExplicitlyAllowed || isLocal) {
             resolvedOrigin = reqOrigin;
         }
     }
@@ -47,6 +68,7 @@ export function getCorsHeaders(request, env) {
 }
 
 export function configureRequestContext(request, env) {
+    activeRequestEnv = env || null;
     const dynamicHeaders = getCorsHeaders(request, env);
     corsHeaders["Access-Control-Allow-Origin"] = dynamicHeaders["Access-Control-Allow-Origin"];
     return dynamicHeaders;
@@ -75,9 +97,8 @@ export function errorResponse(message, status = 400) {
 }
 
 // =============================================================================
-// MYANMAR TIMEZONE (UTC+6:30) & INDEX-FRIENDLY UTC BOUNDARY HELPERS
+// MYANMAR TIMEZONE (UTC+6:30) & INDEX-FRIENDLY UTC BOUNDARY HELPERS (Spec 9.9)
 // =============================================================================
-const MMT_OFFSET_MS = 6.5 * 60 * 60 * 1000;
 
 /**
  * မြန်မာစံတော်ချိန် (UTC+6:30) ဖြင့် ယနေ့ YYYY-MM-DD ရယူခြင်း
@@ -96,8 +117,17 @@ export function getMyanmarYesterdayDate() {
 }
 
 /**
+ * မြန်မာရက်စွဲ (YYYY-MM-DD) မှ YYMMDD date_key ထုတ်ယူခြင်း
+ */
+export function getMyanmarDateKey(mmtDateStr = null) {
+    const d = mmtDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(mmtDateStr).trim())
+        ? String(mmtDateStr).trim()
+        : getMyanmarTodayDate();
+    return d.slice(2).replace(/-/g, ""); // e.g. "2026-11-12" -> "261112"
+}
+
+/**
  * မြန်မာရက်စွဲ (YYYY-MM-DD) တစ်ခုအတွက် SQLite B-Tree Index မိစေမည့် UTC အစနှင့်အဆုံး အချိန်ရယူခြင်း
- * Example: "2026-11-10" (MMT) -> { startUtc: "2026-11-09 17:30:00", endUtc: "2026-11-10 17:29:59" }
  */
 export function getMyanmarDayUtcBounds(mmtDateStr) {
     const cleanDate = /^\d{4}-\d{2}-\d{2}$/.test(String(mmtDateStr || "").trim())
@@ -124,7 +154,7 @@ export function getMyanmarYearUtcBounds(year) {
 
     const { startUtc } = getMyanmarDayUtcBounds(`${y}-01-01`);
     const { endUtc } = getMyanmarDayUtcBounds(`${y}-12-31`);
-    return { startUtc, endUtc };
+    return { startUtc, endUtc, startDate: `${y}-01-01`, endDate: `${y}-12-31` };
 }
 
 /**
@@ -138,12 +168,9 @@ export function getQueryYear(url, defaultYear = null) {
 }
 
 // =============================================================================
-// CURRENCY (INTEGER KYAT) & QUANTITY MATH HELPERS
+// CURRENCY (INTEGER KYAT) & QUANTITY MATH HELPERS (Spec 9.8)
 // =============================================================================
 
-/**
- * ငွေပမာဏများကို Floating-point အမှားမပါစေရန် Kyat ကိန်းပြည့် (INTEGER) သို့ နီးစပ်ရာယူခြင်း
- */
 export function roundKyat(val) {
     if (typeof val === "string") {
         val = val.replace(/,/g, "").trim();
@@ -152,9 +179,6 @@ export function roundKyat(val) {
     return Number.isFinite(num) ? Math.round(num) : 0;
 }
 
-/**
- * အရေအတွက် (Quantity) ကို ဒသမ ၃ နေရာအထိ တိကျစွာ ယူခြင်း (ပေါင်/ကိုက် နှင့် အထည် နှစ်မျိုးလုံးအတွက်)
- */
 export function roundQty(val) {
     if (typeof val === "string") {
         val = val.replace(/,/g, "").trim();
@@ -164,41 +188,343 @@ export function roundQty(val) {
 }
 
 // =============================================================================
-// RBAC & MULTI-BRANCH ISOLATION HELPERS
+// ROLE & PERMISSION MATRIX (Spec Section 3.1, 3.2, 3.3)
 // =============================================================================
 
+export function normalizeRole(rawRole) {
+    const r = String(rawRole || "cashier").trim().toLowerCase();
+    if (r === "manager") return "branch_manager";
+    if (["admin", "finance", "branch_manager", "cashier"].includes(r)) return r;
+    return "cashier";
+}
+
+export const PERMISSIONS = {
+    // Products Master
+    "product.create": ["admin", "finance"],
+    "product.update": ["admin", "finance"],
+    "product.delete": ["admin", "finance"],
+    "product.bulk_import": ["admin", "finance"],
+    "product.view_cost": ["admin", "finance", "branch_manager"],
+
+    // Opening Stock Workflow
+    "opening.create": ["admin", "finance", "branch_manager"],
+    "opening.submit": ["admin", "finance", "branch_manager"],
+    "opening.approve": ["admin", "finance"],
+    "opening.reject": ["admin", "finance"],
+    "opening.view": ["admin", "finance", "branch_manager"],
+
+    // Physical Stock Count & Adjustments
+    "adjustment.create": ["admin", "finance", "branch_manager"],
+    "adjustment.submit": ["admin", "finance", "branch_manager"],
+    "adjustment.approve": ["admin", "finance"],
+    "adjustment.approve_high_value": ["admin"],
+    "adjustment.reject": ["admin", "finance"],
+    "adjustment.view": ["admin", "finance", "branch_manager"],
+
+    // Branch Transfers (State Machine)
+    "transfer.create": ["admin", "finance", "branch_manager"],
+    "transfer.dispatch": ["admin", "finance", "branch_manager"],
+    "transfer.receive": ["admin", "finance", "branch_manager", "cashier"],
+    "transfer.cancel": ["admin", "finance", "branch_manager"],
+    "transfer.view": ["admin", "finance", "branch_manager", "cashier"],
+
+    // Waste & Yarn
+    "waste.create": ["admin", "finance", "branch_manager"],
+    "waste.delete": ["admin", "finance", "branch_manager"],
+    "yarn.view": ["admin", "finance", "branch_manager"],
+    "yarn.issue": ["admin", "finance", "branch_manager"],
+
+    // Purchases & POS Sales
+    "purchase.view": ["admin", "finance", "branch_manager"],
+    "purchase.create": ["admin", "finance", "branch_manager"],
+    "purchase.update": ["admin", "finance", "branch_manager"],
+    "purchase.void": ["admin", "finance", "branch_manager"],
+    "pos.sale": ["admin", "finance", "branch_manager", "cashier"],
+    "pos.void": ["admin", "finance", "branch_manager"],
+    "pos.override_price": ["admin", "finance"],
+
+    // Finance, Cashbook & Customers
+    "cashbook.view": ["admin", "finance", "branch_manager", "cashier"],
+    "cashbook.write": ["admin", "finance", "branch_manager", "cashier"],
+    "cashbook.delete": ["admin", "finance", "branch_manager"],
+    "customer.view": ["admin", "finance", "branch_manager", "cashier"],
+    "customer.write": ["admin", "finance", "branch_manager", "cashier"],
+    "customer.edit_credit_limit": ["admin", "finance"],
+    "customer.delete": ["admin", "finance"],
+
+    // Reports, Users & System Administration
+    "report.monthly_stock": ["admin", "finance", "branch_manager"],
+    "dashboard.admin_metrics": ["admin", "finance"],
+    "user.manage": ["admin"],
+    "system.backup": ["admin"],
+    "record.delete": ["admin", "finance"]
+};
+
 /**
- * Cashier ဖြစ်ပါက မိမိဆိုင်ခွဲ (auth.branch_id) ကိုသာ အတင်းသတ်မှတ်ပြီး ဆိုင်ခွဲကျော်ကြည့်ရှုမှုကို ပိတ်ဆို့ခြင်း
+ * Permission string ဖြင့် လုပ်ဆောင်ခွင့် ရှိ/မရှိ စစ်ဆေးခြင်း (Spec 3.3)
  */
-export function resolveBranchId(auth, requestedBranchId = null, options = { allowAllForAdmin: false }) {
-    const role = String(auth?.role || "cashier").toLowerCase();
-    const userBranchId = Number(auth?.branch_id || 1);
+export function can(auth, permission) {
+    if (!auth || !auth.role) return false;
+    const role = normalizeRole(auth.role);
+    const allowedRoles = PERMISSIONS[permission];
+    if (!allowedRoles) return role === "admin";
+    return allowedRoles.includes(role);
+}
 
-    // Cashiers are strictly locked to their own assigned branch
-    if (role === "cashier") {
-        return userBranchId;
+/**
+ * Permission မရှိပါက 403 HttpError ချက်ချင်း ပစ်ပေးမည့် Helper
+ */
+export function requirePermission(auth, permission, customMessage = null) {
+    if (!can(auth, permission)) {
+        throw new HttpError(
+            403,
+            customMessage || `ဤလုပ်ဆောင်ချက်အား ဆောင်ရွက်ခွင့် မရှိပါ (လိုအပ်သော ခွင့်ပြုချက်: ${permission})`
+        );
     }
-
-    // Admin / Finance / Manager
-    if (!requestedBranchId || requestedBranchId === "ALL") {
-        return options?.allowAllForAdmin ? "ALL" : ( Number(requestedBranchId) || userBranchId );
-    }
-
-    const parsed = Number(requestedBranchId);
-    return (Number.isInteger(parsed) && parsed > 0) ? parsed : userBranchId;
+    return true;
 }
 
 /**
  * သတ်မှတ်ထားသော Role များသာ ဝင်ရောက်ခွင့်ပြုရန် စစ်ဆေးခြင်း
  */
 export function requireRole(auth, allowedRoles = ["admin"]) {
-    const role = String(auth?.role || "").toLowerCase();
-    return allowedRoles.map(r => r.toLowerCase()).includes(role);
+    const role = normalizeRole(auth?.role);
+    const normalizedAllowed = allowedRoles.map(r => normalizeRole(r));
+    return normalizedAllowed.includes(role);
+}
+
+// =============================================================================
+// MULTI-BRANCH SCOPING & ISOLATION (Spec Section 4.1 & 4.2)
+// =============================================================================
+
+/**
+ * ဆိုင်ခွဲ Scope စစ်ဆေးသတ်မှတ်ခြင်း
+ * - cashier နှင့် branch_manager သည် မိမိဆိုင်ခွဲ (auth.branch_id) တစ်ခုတည်းသာ ရမည်။
+ *   အကယ်၍ isWrite ဖြစ်ပြီး အခြားဆိုင်ခွဲ branch_id ကို တမင်ပို့လာပါက 403 ပြန်မည်။
+ * - admin နှင့် finance သာ branch parameter ရွေးနိုင်သည်။
+ * - ALL view သည် Read-only ဖြစ်သည်။ isWrite = true တွင် ALL ပို့ပါက (သို့မဟုတ် branch_id မပါပါက) 400 ပြန်မည်။
+ */
+export function resolveBranchId(auth, requestedBranchId = null, options = {}) {
+    const {
+        allowAllForAdmin = false,
+        isWrite = false,
+        strictStaffCheck = false
+    } = options;
+
+    const role = normalizeRole(auth?.role);
+    const userBranchId = Number(auth?.branch_id || 0);
+    const reqStr = requestedBranchId != null ? String(requestedBranchId).trim() : "";
+    const isAllRequested = reqStr === "" || reqStr.toUpperCase() === "ALL";
+
+    // 1. Branch Manager & Cashier: strictly locked to their own assigned branch
+    if (role === "cashier" || role === "branch_manager") {
+        if (!userBranchId || userBranchId <= 0) {
+            throw new HttpError(403, "သင့်အကောင့်တွင် သတ်မှတ်ထားသော ဆိုင်ခွဲ (branch_id) မရှိပါ");
+        }
+        if ((isWrite || strictStaffCheck) && !isAllRequested) {
+            const parsedReq = Number(reqStr);
+            if (Number.isInteger(parsedReq) && parsedReq > 0 && parsedReq !== userBranchId) {
+                throw new HttpError(403, "အခြားဆိုင်ခွဲ၏ စာရင်းအား ဝင်ရောက်ပြင်ဆင်ခွင့် မရှိပါ");
+            }
+        }
+        return userBranchId;
+    }
+
+    // 2. Admin & Finance: Write operations MUST specify a concrete branch (Never allow 'ALL' or silent fallback to 1)
+    if (isWrite) {
+        if (isAllRequested) {
+            throw new HttpError(
+                400,
+                "ဆိုင်ခွဲအားလုံး (ALL View) မှ စာရင်းသွင်း/ပြင်ဆင်၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို တိကျစွာ ရွေးချယ်ပေးပါ။"
+            );
+        }
+        const parsedWriteBranch = Number(reqStr);
+        if (!Number.isInteger(parsedWriteBranch) || parsedWriteBranch <= 0) {
+            throw new HttpError(400, "ဆိုင်ခွဲ (branch_id) မှန်ကန်စွာ ရွေးချယ်ပေးပါ");
+        }
+        return parsedWriteBranch;
+    }
+
+    // 3. Admin & Finance: Read operations
+    if (isAllRequested) {
+        if (allowAllForAdmin) return "ALL";
+        if (userBranchId > 0) return userBranchId;
+        return 1;
+    }
+
+    const parsedReadBranch = Number(reqStr);
+    if (!Number.isInteger(parsedReadBranch) || parsedReadBranch <= 0) {
+        throw new HttpError(400, "ဆိုင်ခွဲ (branch_id) မမှန်ကန်ပါ");
+    }
+    return parsedReadBranch;
+}
+
+// =============================================================================
+// RACE-SAFE INVOICE / VOUCHER NUMBER GENERATOR (Spec Section 1.2)
+// =============================================================================
+
+const branchCodeCache = new Map();
+
+async function getBranchCode(db, branchId) {
+    const bId = Number(branchId || 1);
+    if (branchCodeCache.has(bId)) return branchCodeCache.get(bId);
+    try {
+        const row = await db.prepare("SELECT code FROM branches WHERE id = ?").bind(bId).first();
+        if (row && row.code) {
+            const code = String(row.code).trim().toUpperCase();
+            branchCodeCache.set(bId, code);
+            return code;
+        }
+    } catch {
+        // Fallback if query fails
+    }
+    return `B${bId}`;
 }
 
 /**
- * စာရင်းစစ် မှတ်တမ်း (Audit Trail) ရေးသွင်းခြင်း
+ * Race-safe ဘောင်ချာနံပါတ် ထုတ်ပေးခြင်း
+ * Format: {PREFIX}-{BRANCH_CODE}-{YYMMDD}-{SEQ} (ဥပမာ - INV-MAIN-261112-001)
+ * Supports both:
+ *   await generateUniqueInvoice(env.DB, "INV", branchId)
+ *   await generateUniqueInvoice("INV", branchId)
  */
+export async function generateUniqueInvoice(dbOrPrefix, prefixOrBranchId, maybeBranchId = null) {
+    let db = null;
+    let prefix = "INV";
+    let branchId = 1;
+
+    if (typeof dbOrPrefix === "string") {
+        db = activeRequestEnv?.DB || null;
+        prefix = dbOrPrefix;
+        branchId = Number(prefixOrBranchId || 1);
+    } else {
+        db = dbOrPrefix?.DB ? dbOrPrefix.DB : dbOrPrefix;
+        prefix = String(prefixOrBranchId || "INV");
+        branchId = Number(maybeBranchId || 1);
+    }
+
+    const cleanPrefix = String(prefix || "VR").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "VR";
+    const validBranchId = Number.isInteger(branchId) && branchId > 0 ? branchId : 1;
+    const dateKey = getMyanmarDateKey();
+
+    if (!db) {
+        throw new HttpError(500, "Database connection မရှိသဖြင့် ဘောင်ချာနံပါတ် ထုတ်ပေးနိုင်ခြင်း မရှိပါ");
+    }
+
+    const branchCode = await getBranchCode(db, validBranchId);
+
+    // Check table collision target based on prefix
+    const conflictCheckSqlByPrefix = {
+        INV: "SELECT 1 FROM sales WHERE invoice_no = ? LIMIT 1",
+        PUR: "SELECT 1 FROM purchases WHERE purchase_no = ? LIMIT 1",
+        TRF: "SELECT 1 FROM stock_transfers WHERE transfer_no = ? LIMIT 1",
+        WST: "SELECT 1 FROM waste_logs WHERE reference_no = ? LIMIT 1",
+        ADJ: "SELECT 1 FROM stock_adjustments WHERE reference_no = ? LIMIT 1",
+        YRN: "SELECT 1 FROM yarn_issues WHERE reference_no = ? LIMIT 1"
+    };
+    const checkSql = conflictCheckSqlByPrefix[cleanPrefix] || null;
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const seqRow = await db.prepare(`
+            INSERT INTO invoice_sequences (branch_id, prefix, date_key, last_seq, updated_at)
+            VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(branch_id, prefix, date_key)
+            DO UPDATE SET 
+                last_seq = invoice_sequences.last_seq + 1,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING last_seq
+        `).bind(validBranchId, cleanPrefix, dateKey).first();
+
+        const seqNum = Number(seqRow?.last_seq || 1);
+        const seqStr = String(seqNum).padStart(3, "0");
+        const candidate = `${cleanPrefix}-${branchCode}-${dateKey}-${seqStr}`;
+
+        if (!checkSql) {
+            return candidate;
+        }
+
+        const existing = await db.prepare(checkSql).bind(candidate).first();
+        if (!existing) {
+            return candidate;
+        }
+    }
+
+    throw new HttpError(500, "ဘောင်ချာနံပါတ် အသစ်ထုတ်ယူရာတွင် အခက်အခဲရှိနေပါသည်။ ခေတ္တစောင့်ပြီး ပြန်လည်ကြိုးစားပါ။");
+}
+
+// =============================================================================
+// STOCK MOVEMENTS LEDGER HELPER (Spec Section 2.1)
+// =============================================================================
+
+export const VALID_MOVEMENT_TYPES = new Set([
+    "OPENING",
+    "PURCHASE_IN",
+    "PURCHASE_VOID_OUT",
+    "SALE_OUT",
+    "SALE_VOID_IN",
+    "TRANSFER_OUT",
+    "TRANSFER_IN",
+    "WASTE_OUT",
+    "YARN_ISSUE_OUT",
+    "YARN_RETURN_IN",
+    "ADJUSTMENT_IN",
+    "ADJUSTMENT_OUT"
+]);
+
+/**
+ * env.DB.batch() အတွင်း ထည့်သွင်းရန် stock_movements INSERT statement တည်ဆောက်ပေးခြင်း
+ * - ဝင်ရင် quantity (+), ထွက်ရင် quantity (-) အလိုအလျောက် စစ်ဆေးသတ်မှတ်ပေးသည်။
+ */
+export function createStockMovementStmt(db, {
+    branchId,
+    productId,
+    movementType,
+    quantity,
+    effectiveDate = null,
+    sourceTable = null,
+    sourceId = null,
+    reason = null,
+    createdBy,
+    approvedBy = null
+}) {
+    if (!VALID_MOVEMENT_TYPES.has(movementType)) {
+        throw new HttpError(400, `Stock movement အမျိုးအစား (${movementType}) မမှန်ကန်ပါ`);
+    }
+
+    const absQty = Math.abs(roundQty(quantity));
+    if (absQty <= 0) {
+        throw new HttpError(400, "Stock movement အရေအတွက်သည် သုညထက် ကြီးရပါမည်");
+    }
+
+    const isOutMovement = movementType.endsWith("_OUT");
+    const signedQty = isOutMovement ? -absQty : absQty;
+    const effDate = effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(String(effectiveDate).trim())
+        ? String(effectiveDate).trim()
+        : getMyanmarTodayDate();
+
+    return db.prepare(`
+        INSERT INTO stock_movements (
+            branch_id, product_id, movement_type, quantity, effective_date,
+            source_table, source_id, reason, created_by, approved_by, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+        Number(branchId),
+        Number(productId),
+        movementType,
+        signedQty,
+        effDate,
+        sourceTable ? String(sourceTable) : null,
+        sourceId != null ? Number(sourceId) : null,
+        reason ? String(reason).trim() : null,
+        Number(createdBy || 1),
+        approvedBy != null ? Number(approvedBy) : null
+    );
+}
+
+// =============================================================================
+// AUDIT TRAIL & D1 USAGE MONITORING HELPERS (Spec Section 8.4 & 8.5)
+// =============================================================================
+
 export async function logAudit(db, { branchId, userId, action, tableName, recordId, details }) {
     if (!db) return;
     try {
@@ -206,8 +532,8 @@ export async function logAudit(db, { branchId, userId, action, tableName, record
             INSERT INTO audit_logs (branch_id, user_id, action, table_name, record_id, details)
             VALUES (?, ?, ?, ?, ?, ?)
         `).bind(
-            Number(branchId || 1),
-            Number(userId || 1),
+            branchId != null ? Number(branchId) : null,
+            userId != null ? Number(userId) : null,
             String(action || "ACTION"),
             String(tableName || ""),
             recordId != null ? String(recordId) : null,
@@ -216,6 +542,22 @@ export async function logAudit(db, { branchId, userId, action, tableName, record
     } catch (err) {
         console.error("[Audit Log Error]:", err.message);
     }
+}
+
+/**
+ * D1 Query / Batch ရလဒ်များမှ rows_read နှင့် rows_written စုစုပေါင်းကို တွက်ချက်ခြင်း (Spec 8.4)
+ */
+export function summarizeD1Meta(resultOrArray) {
+    const items = Array.isArray(resultOrArray) ? resultOrArray : [resultOrArray];
+    let rowsRead = 0;
+    let rowsWritten = 0;
+    for (const item of items) {
+        if (item && item.meta) {
+            rowsRead += Number(item.meta.rows_read || 0);
+            rowsWritten += Number(item.meta.rows_written || 0);
+        }
+    }
+    return { rowsRead, rowsWritten };
 }
 
 // =============================================================================
@@ -238,7 +580,6 @@ export async function checkLoginRateLimit(request, db = null, username = "") {
     const key = username ? `${ip}:${String(username).toLowerCase()}` : ip;
     const now = Date.now();
 
-    // 1. Check D1 Persistent Rate Limit Table if available
     if (db) {
         try {
             const row = await db.prepare(
@@ -260,7 +601,6 @@ export async function checkLoginRateLimit(request, db = null, username = "") {
         }
     }
 
-    // 2. Fallback / Fast In-Memory Check
     const record = loginAttempts.get(key);
     if (!record) return { allowed: true };
 
@@ -278,7 +618,6 @@ export async function checkLoginRateLimit(request, db = null, username = "") {
 }
 
 export async function recordLoginAttempt(request, dbOrIsSuccess = null, username = "", isSuccess = false) {
-    // Support both legacy signature (request, isSuccess) and new signature (request, db, username, isSuccess)
     let db = null;
     let userKey = "";
     let successFlag = false;
@@ -340,346 +679,12 @@ export async function recordLoginAttempt(request, dbOrIsSuccess = null, username
     }
 }
 
-// =============================================================================
-// ONE-TIME LAZY SCHEMA, CONSTRAINT FIX & COLUMN AUTO-MIGRATION GUARD
-// =============================================================================
-let schemaVerified = false;
-
-async function ensureColumns(db, tableName, requiredColumns) {
-    const info = await db.prepare(`PRAGMA table_info(${tableName})`).all().catch(() => ({ results: [] }));
-    const existing = (info.results || []).map(r => String(r.name).toLowerCase());
-    if (existing.length === 0) return;
-
-    for (const [colName, colDef] of Object.entries(requiredColumns)) {
-        if (!existing.includes(colName.toLowerCase())) {
-            await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${colName} ${colDef}`).run().catch((e) => {
-                console.error(`[Schema Alter Error ${tableName}.${colName}]:`, e.message);
-            });
-        }
-    }
-}
-
 /**
- * customer_ledger နှင့် supplier_ledger တွင် CHECK(payment_method IN ('cash','bank')) ဖြစ်နေပါက
- * 'credit' နှင့် 'split' သွင်းနိုင်စေရန် Constraint အလိုအလျောက် ပြင်ဆင်ပေးခြင်း
+ * Runtime CREATE TABLE များကို ဖယ်ရှားထားပါသည် (Spec Section 2.6)
+ * Migration စနစ်ဖြင့်သာ Database Schema ကို စီမံပါသည်။
  */
-async function fixLedgerCheckConstraintsIfNeeded(db) {
-    try {
-        const masterRows = await db.prepare(`
-            SELECT name, sql FROM sqlite_master 
-            WHERE type = 'table' AND name IN ('customer_ledger', 'supplier_ledger')
-        `).all();
-
-        for (const row of (masterRows.results || [])) {
-            const sqlText = String(row.sql || "");
-            if (sqlText.includes("CHECK") && sqlText.includes("payment_method") && !sqlText.includes("'credit'")) {
-                if (row.name === "customer_ledger") {
-                    await db.batch([
-                        db.prepare(`
-                            CREATE TABLE IF NOT EXISTS customer_ledger_v32 (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
-                                branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                                sale_id INTEGER,
-                                type TEXT NOT NULL,
-                                amount INTEGER NOT NULL,
-                                balance_after INTEGER NOT NULL,
-                                payment_method TEXT CHECK(payment_method IN ('cash', 'bank', 'credit', 'split', 'opening')),
-                                bank_account_name TEXT,
-                                reference_note TEXT,
-                                status TEXT DEFAULT 'completed',
-                                created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                            )
-                        `),
-                        db.prepare(`
-                            INSERT INTO customer_ledger_v32 (id, customer_id, branch_id, sale_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, created_by, created_at)
-                            SELECT id, customer_id, branch_id, sale_id, type, ROUND(amount), ROUND(balance_after), payment_method, bank_account_name, reference_note, created_by, created_at
-                            FROM customer_ledger
-                        `),
-                        db.prepare("DROP TABLE customer_ledger"),
-                        db.prepare("ALTER TABLE customer_ledger_v32 RENAME TO customer_ledger"),
-                        db.prepare("CREATE INDEX IF NOT EXISTS idx_cust_ledger_cust_id ON customer_ledger(customer_id, created_at)")
-                    ]);
-                } else if (row.name === "supplier_ledger") {
-                    await db.batch([
-                        db.prepare(`
-                            CREATE TABLE IF NOT EXISTS supplier_ledger_v32 (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                supplier_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
-                                branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                                purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
-                                type TEXT NOT NULL,
-                                amount INTEGER NOT NULL,
-                                balance_after INTEGER NOT NULL,
-                                payment_method TEXT CHECK(payment_method IN ('cash', 'bank', 'credit', 'split', 'opening')),
-                                bank_account_name TEXT,
-                                reference_note TEXT,
-                                status TEXT DEFAULT 'completed',
-                                created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                            )
-                        `),
-                        db.prepare(`
-                            INSERT INTO supplier_ledger_v32 (id, supplier_id, branch_id, purchase_id, type, amount, balance_after, payment_method, bank_account_name, reference_note, created_by, created_at)
-                            SELECT id, supplier_id, branch_id, purchase_id, type, ROUND(amount), ROUND(balance_after), payment_method, bank_account_name, reference_note, created_by, created_at
-                            FROM supplier_ledger
-                        `),
-                        db.prepare("DROP TABLE supplier_ledger"),
-                        db.prepare("ALTER TABLE supplier_ledger_v32 RENAME TO supplier_ledger"),
-                        db.prepare("CREATE INDEX IF NOT EXISTS idx_supp_ledger_supp_id ON supplier_ledger(supplier_id, created_at)")
-                    ]);
-                }
-            }
-        }
-    } catch (err) {
-        console.error("[Ledger Constraint Migration Error]:", err.message);
-    }
-}
-
-export async function ensureSchemaOnce(db) {
-    if (schemaVerified || !db) return;
-    try {
-        // 1. အရေးကြီး ဇယားများ တည်ဆောက်ပေးခြင်း (Audit Logs & Rate Limit အပါအဝင်)
-        await db.batch([
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS supplier_ledger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    supplier_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
-                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                    purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL,
-                    type TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
-                    balance_after INTEGER NOT NULL,
-                    payment_method TEXT CHECK(payment_method IN ('cash', 'bank', 'credit', 'split', 'opening')),
-                    bank_account_name TEXT,
-                    reference_note TEXT,
-                    status TEXT DEFAULT 'completed',
-                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS customer_ledger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
-                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                    sale_id INTEGER,
-                    type TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
-                    balance_after INTEGER NOT NULL,
-                    payment_method TEXT CHECK(payment_method IN ('cash', 'bank', 'credit', 'split', 'opening')),
-                    bank_account_name TEXT,
-                    reference_note TEXT,
-                    status TEXT DEFAULT 'completed',
-                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS waste_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    reference_no TEXT NOT NULL UNIQUE,
-                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-                    quantity REAL NOT NULL,
-                    unit_cost INTEGER NOT NULL DEFAULT 0,
-                    reason TEXT NOT NULL,
-                    status TEXT DEFAULT 'completed',
-                    recorded_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS yarn_issues (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
-                    yarn_id INTEGER NOT NULL,
-                    product_id INTEGER,
-                    weaver_name TEXT NOT NULL,
-                    quantity REAL NOT NULL,
-                    issue_date DATE NOT NULL DEFAULT (CURRENT_DATE),
-                    notes TEXT,
-                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS daily_closings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
-                    closing_date DATE NOT NULL,
-                    opening_cash INTEGER NOT NULL DEFAULT 0,
-                    opening_bank INTEGER NOT NULL DEFAULT 0,
-                    total_cash_in INTEGER NOT NULL DEFAULT 0,
-                    total_cash_out INTEGER NOT NULL DEFAULT 0,
-                    closing_cash INTEGER NOT NULL DEFAULT 0,
-                    total_bank_in INTEGER NOT NULL DEFAULT 0,
-                    total_bank_out INTEGER NOT NULL DEFAULT 0,
-                    closing_bank INTEGER NOT NULL DEFAULT 0,
-                    actual_cash_counted INTEGER NOT NULL DEFAULT 0,
-                    cash_difference INTEGER NOT NULL DEFAULT 0,
-                    closed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-                    notes TEXT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_branch_closing_date UNIQUE (branch_id, closing_date)
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    branch_id INTEGER,
-                    user_id INTEGER,
-                    action TEXT NOT NULL,
-                    table_name TEXT,
-                    record_id TEXT,
-                    details TEXT,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            `),
-            db.prepare(`
-                CREATE TABLE IF NOT EXISTS login_attempts (
-                    attempt_key TEXT PRIMARY KEY,
-                    attempts INTEGER NOT NULL DEFAULT 1,
-                    first_attempt_ms INTEGER NOT NULL
-                )
-            `)
-        ]);
-
-        // Fix legacy CHECK(payment_method IN ('cash', 'bank')) on existing D1 tables
-        await fixLedgerCheckConstraintsIfNeeded(db);
-
-        // 2. စနစ်သုံး ငွေစာရင်းခေါင်းစဉ်များ သေချာစေခြင်း
-        await ensureColumns(db, "cash_categories", {
-            is_remittance: "INTEGER DEFAULT 0"
-        });
-
-        await db.batch([
-            db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (1, 'အထည်ရောင်းရငွေ (POS Sales)', 'INCOME', 1, 1)`),
-            db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (2, 'အကြွေးဟောင်းရငွေ (Debt Collection)', 'INCOME', 1, 1)`),
-            db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (6, 'ဝယ်ရောင်းအထည်ဝယ်ယူစရိတ် (Trading Goods Purchase)', 'EXPENSE', 1, 1)`),
-            db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active, is_remittance) VALUES (10, 'ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ', 'EXPENSE', 1, 1, 1)`),
-            db.prepare(`INSERT OR IGNORE INTO cash_categories (id, name, type, is_system, is_active) VALUES (11, 'ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)', 'EXPENSE', 1, 1)`),
-            db.prepare(`UPDATE cash_categories SET is_remittance = 1 WHERE id = 10`)
-        ]).catch(() => {});
-
-        // 3. Users Security Columns & Zero-Downtime Legacy Password Upgrade
-        await ensureColumns(db, "users", {
-            plain_password: "TEXT",
-            token_version: "INTEGER DEFAULT 1"
-        });
-
-        // Upgrade any remaining legacy '_hash' passwords to real PBKDF2-SHA256 & wipe plain_password
-        const legacyUsers = await db.prepare(
-            "SELECT id, password_hash, plain_password FROM users WHERE password_hash NOT LIKE 'pbkdf2:%' OR plain_password IS NOT NULL"
-        ).all().catch(() => ({ results: [] }));
-
-        for (const u of (legacyUsers.results || [])) {
-            const currentHash = String(u.password_hash || "");
-            if (!currentHash.startsWith("pbkdf2:")) {
-                const rawPwd = u.plain_password
-                    ? String(u.plain_password)
-                    : (currentHash.endsWith("_hash") ? currentHash.slice(0, -5) : currentHash);
-                if (rawPwd) {
-                    const pbkdf2Hash = await hashPassword(rawPwd);
-                    await db.prepare("UPDATE users SET password_hash = ?, plain_password = NULL WHERE id = ?")
-                        .bind(pbkdf2Hash, u.id).run().catch(() => {});
-                }
-            } else if (u.plain_password !== null) {
-                await db.prepare("UPDATE users SET plain_password = NULL WHERE id = ?")
-                    .bind(u.id).run().catch(() => {});
-            }
-        }
-
-        // 4. ရှိပြီးသား ဇယားများတွင် Soft-Delete နှင့် Audit ကော်လံများ အလိုအလျောက် ထည့်သွင်းခြင်း
-        await ensureColumns(db, "cashbook_entries", {
-            sale_id: "INTEGER",
-            purchase_id: "INTEGER",
-            customer_ledger_id: "INTEGER",
-            supplier_ledger_id: "INTEGER",
-            bank_account_name: "TEXT",
-            quantity: "REAL DEFAULT 1.0",
-            unit_price: "INTEGER DEFAULT 0",
-            diff_amount: "INTEGER DEFAULT 0",
-            ref_no: "TEXT",
-            status: "TEXT DEFAULT 'completed'"
-        });
-
-        await ensureColumns(db, "customers", {
-            shop_name: "TEXT",
-            entity_type: "TEXT DEFAULT 'CUSTOMER'",
-            customer_type: "TEXT DEFAULT 'retail'",
-            credit_limit: "INTEGER DEFAULT 0",
-            current_debt: "INTEGER DEFAULT 0",
-            current_payable: "INTEGER DEFAULT 0",
-            address: "TEXT",
-            is_active: "INTEGER DEFAULT 1"
-        });
-
-        await ensureColumns(db, "purchases", {
-            ref_no: "TEXT",
-            supplier_id: "INTEGER",
-            purchase_date: "DATE",
-            items_total: "INTEGER DEFAULT 0",
-            paid_amount: "INTEGER DEFAULT 0",
-            diff_amount: "INTEGER DEFAULT 0",
-            bank_account_name: "TEXT",
-            notes: "TEXT",
-            status: "TEXT DEFAULT 'completed'",
-            cancelled_by: "INTEGER",
-            cancelled_at: "DATETIME",
-            cancel_reason: "TEXT"
-        });
-
-        await ensureColumns(db, "sales", {
-            cash_amount: "INTEGER DEFAULT 0",
-            bank_amount: "INTEGER DEFAULT 0",
-            bank_account_name: "TEXT",
-            notes: "TEXT",
-            status: "TEXT DEFAULT 'completed'",
-            cancelled_by: "INTEGER",
-            cancelled_at: "DATETIME",
-            cancel_reason: "TEXT"
-        });
-
-        await ensureColumns(db, "stock_transfers", {
-            product_id: "INTEGER",
-            quantity: "REAL DEFAULT 0",
-            created_by: "INTEGER",
-            notes: "TEXT",
-            status: "TEXT DEFAULT 'completed'"
-        });
-
-        await ensureColumns(db, "waste_logs", {
-            status: "TEXT DEFAULT 'completed'"
-        });
-
-        await ensureColumns(db, "yarn_issues", {
-            branch_id: "INTEGER",
-            product_id: "INTEGER",
-            notes: "TEXT"
-        });
-
-        // 5. D1 Read Quota ၉၅%+ သက်သာစေမည့် Composite B-Tree Indexes
-        await db.batch([
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_sales_branch_created ON sales(branch_id, created_at)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_purchases_branch_created ON purchases(branch_id, created_at)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_branch_date ON cashbook_entries(branch_id, entry_date)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_waste_branch_created ON waste_logs(branch_id, created_at)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_transfers_from_created ON stock_transfers(from_branch_id, created_at)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_transfers_to_created ON stock_transfers(to_branch_id, created_at)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id, purchase_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id, sale_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_sale_id ON cashbook_entries(sale_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_purchase_id ON cashbook_entries(purchase_id)"),
-            db.prepare("CREATE INDEX IF NOT EXISTS idx_cashbook_supp_ledger ON cashbook_entries(supplier_ledger_id)")
-        ]);
-
-        schemaVerified = true;
-    } catch (err) {
-        console.error("[Schema Verification Error]:", err.message);
-    }
+export async function ensureSchemaOnce() {
+    return;
 }
 
 // =============================================================================
@@ -690,11 +695,11 @@ export function getJwtSecret(env) {
     if (env && env.JWT_SECRET && String(env.JWT_SECRET).trim().length >= 16) {
         return String(env.JWT_SECRET).trim();
     }
-    // Allow explicit local dev secret only if configured in local .dev.vars
-    if (env && env.ALLOW_DEV_SECRET === "true") {
+    if (env && env.ENVIRONMENT === "development" && env.ALLOW_DEV_SECRET === "true") {
         return "local-dev-only-jwt-secret-key-do-not-use-in-prod";
     }
-    throw new Error(
+    throw new HttpError(
+        500,
         "JWT_SECRET လုံခြုံရေးကီး သတ်မှတ်ထားခြင်း မရှိသေးပါ။ Terminal မှ `npx wrangler secret put JWT_SECRET` ဖြင့် ထည့်သွင်းပေးပါ။"
     );
 }
@@ -758,9 +763,6 @@ export async function hashPassword(password, saltHex = null) {
     return `pbkdf2:${outSaltHex}:${hashHex}`;
 }
 
-/**
- * PBKDF2-SHA256 Password ကိုသာ လက်ခံစစ်ဆေးခြင်း (Plaintext နှင့် _hash လုံးဝ လက်မခံတော့ပါ)
- */
 export async function verifyPassword(password, storedHash) {
     if (!storedHash || typeof storedHash !== "string") return false;
     if (!storedHash.startsWith("pbkdf2:")) return false;
@@ -824,9 +826,16 @@ export async function verifyToken(token, secret) {
     }
 }
 
-// Micro-cache for user token_version to prevent extra D1 reads on rapid concurrent API calls
 const tokenVersionCache = new Map();
 const TOKEN_CACHE_TTL_MS = 15000;
+
+export function invalidateUserTokenCache(userId = null) {
+    if (userId != null) {
+        tokenVersionCache.delete(Number(userId));
+    } else {
+        tokenVersionCache.clear();
+    }
+}
 
 export async function getAuthUser(request, env) {
     const authHeader = request.headers.get("Authorization") || "";
@@ -843,10 +852,9 @@ export async function getAuthUser(request, env) {
     const payload = await verifyToken(token, secret);
     if (!payload || !payload.uid) return null;
 
-    // Verify user is still active and token_version matches (if DB is bound)
     if (env && env.DB) {
         const now = Date.now();
-        const cached = tokenVersionCache.get(payload.uid);
+        const cached = tokenVersionCache.get(Number(payload.uid));
         let dbUser = null;
 
         if (cached && (now - cached.ts < TOKEN_CACHE_TTL_MS)) {
@@ -854,19 +862,22 @@ export async function getAuthUser(request, env) {
         } else {
             dbUser = await env.DB.prepare(
                 "SELECT is_active, COALESCE(token_version, 1) AS tv, role, branch_id FROM users WHERE id = ?"
-            ).bind(payload.uid).first().catch(() => null);
+            ).bind(Number(payload.uid)).first().catch(() => null);
             if (dbUser) {
-                tokenVersionCache.set(payload.uid, { ts: now, data: dbUser });
+                tokenVersionCache.set(Number(payload.uid), { ts: now, data: dbUser });
             }
         }
 
         if (!dbUser || Number(dbUser.is_active) !== 1) return null;
         if (payload.tv != null && Number(dbUser.tv) !== Number(payload.tv)) {
-            return null; // Token revoked due to password change/reset
+            return null;
         }
-        // Always enforce authoritative role & branch_id from DB
-        payload.role = String(dbUser.role || payload.role || "cashier").toLowerCase();
+
+        payload.role = normalizeRole(dbUser.role || payload.role);
         payload.branch_id = Number(dbUser.branch_id || payload.branch_id || 1);
+    } else {
+        payload.role = normalizeRole(payload.role);
+        payload.branch_id = Number(payload.branch_id || 1);
     }
 
     return payload;

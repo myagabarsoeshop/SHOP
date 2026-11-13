@@ -1,10 +1,16 @@
-// cashbook-frontend/js/modules/system_setting.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/system_setting.js
+// SYSTEM SETTINGS, USER RBAC MANAGEMENT, RECONCILIATION & D1 BACKUP MODULE
+// Version: 4.1.0 (Admin-Only User Role/Branch Manager, Reconciliation & D1 Spec)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
 import { setKPI } from "../app.js";
 
 let allSystemUsers = [];
+let branchesList = [];
 
 export async function initSystemSetting() {
     setupYearDropdown();
@@ -12,12 +18,14 @@ export async function initSystemSetting() {
     updateSystemKPIs();
     fetchQuotaMetrics(false);
 
-    // Admin ဖြစ်မှသာ ဝန်ထမ်းများ၏ Force Password Reset card ကို ပြသမည်
+    // Spec 3.2: Only 'admin' role can manage users & reset passwords
     const adminUserBox = document.getElementById("admin-users-password-section");
     if (adminUserBox) {
-        if (state.isAdmin()) {
+        if (state.can("user.manage")) {
             adminUserBox.classList.remove("hidden");
+            await loadBranchesForAdmin();
             await loadSystemUsersForAdmin();
+            injectAdminRoleAndReconcileControls(adminUserBox);
         } else {
             adminUserBox.classList.add("hidden");
         }
@@ -29,7 +37,7 @@ function updateSystemKPIs() {
     setKPI(1, "Active Branches", branchCount, "fa-store", "emerald");
     setKPI(2, "D1 Read Limit", 5000000, "fa-database", "blue");
     setKPI(3, "D1 Write Limit", 100000, "fa-bolt", "purple");
-    setKPI(4, "Free Storage (MB)", 5120, "fa-hard-drive", "amber");
+    setKPI(4, "DB Limit (MB)", 500, "fa-hard-drive", "amber");
 }
 
 function setupYearDropdown() {
@@ -37,13 +45,154 @@ function setupYearDropdown() {
     if (!select) return;
 
     select.innerHTML = "";
-    const currYear = new Date().getFullYear();
-    for (let y = currYear - 1; y <= currYear + 2; y++) {
+    const currYear = new Date(Date.now() + 390 * 60 * 1000).getUTCFullYear();
+    for (let y = currYear - 2; y <= currYear + 2; y++) {
         const opt = document.createElement("option");
         opt.value = y;
         opt.textContent = `${y} ခုနှစ်`;
         if (y === currYear) opt.selected = true;
         select.appendChild(opt);
+    }
+}
+
+async function loadBranchesForAdmin() {
+    if (Array.isArray(state.branches) && state.branches.length > 0) {
+        branchesList = state.branches;
+        return;
+    }
+    try {
+        const res = await api.get("/branches");
+        branchesList = res.data || [];
+    } catch {
+        branchesList = [];
+    }
+}
+
+/**
+ * Spec 2.3 & 3.1: Admin အတွက် Role (`branch_manager`) ပြောင်းလဲခြင်း၊ ဝန်ထမ်းအသစ်ဖွင့်ခြင်းနှင့်
+ * Stock Ledger Reconciliation စစ်ဆေးခြင်း Panel ထည့်သွင်းပေးခြင်း
+ */
+function injectAdminRoleAndReconcileControls(adminUserBox) {
+    if (document.getElementById("admin-role-reconcile-panel")) return;
+
+    const panel = document.createElement("div");
+    panel.id = "admin-role-reconcile-panel";
+    panel.className = "mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4";
+
+    const branchOptionsHtml = branchesList.map(b =>
+        `<option value="${ui.escapeHtml(b.id)}">${ui.escapeHtml(b.name)} (${ui.escapeHtml(b.code)})</option>`
+    ).join("");
+
+    panel.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- 1. Change Selected User Role & Branch -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield text-blue-500"></i>
+                    <span>ရွေးချယ်ထားသော ဝန်ထမ်း၏ Role နှင့် ဆိုင်ခွဲ ပြောင်းလဲရန်</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1">Role (ခွင့်ပြုချက်အုပ်စု)</label>
+                        <select id="admin-edit-user-role" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                            <option value="branch_manager">branch_manager (ဆိုင်ခွဲတာဝန်ခံ)</option>
+                            <option value="cashier">cashier (အရောင်းကောင်တာ)</option>
+                            <option value="finance">finance (ငွေစာရင်း/Approve)</option>
+                            <option value="admin">admin (စနစ်ပိုင်ရှင်)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1">သတ်မှတ်ဆိုင်ခွဲ (Branch)</label>
+                        <select id="admin-edit-user-branch" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                            ${branchOptionsHtml}
+                        </select>
+                    </div>
+                </div>
+                <button type="button" id="btn-save-user-role-branch" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i>Role နှင့် ဆိုင်ခွဲ ပြောင်းလဲသိမ်းဆည်းမည်
+                </button>
+            </div>
+
+            <!-- 2. Stock Ledger Reconciliation Check (Spec 2.3) -->
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-3">
+                <div>
+                    <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-scale-balanced text-emerald-500"></i>
+                        <span>Stock Movement Ledger နှင့် ဆိုင်ခွဲလက်ကျန် တိုက်ဆိုင်စစ်ဆေးမှု</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">
+                        <code>SUM(stock_movements.quantity)</code> နှင့် <code>branch_inventory.quantity</code> ကွဲလွဲမှု ရှိ/မရှိ စစ်ဆေးပါသည်။
+                    </p>
+                    <div id="reconcile-result-box" class="mt-2 text-xs font-bold text-slate-500"></div>
+                </div>
+                <button type="button" id="btn-run-reconcile-check" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
+                    <i class="fa-solid fa-magnifying-glass-chart mr-1"></i>Reconciliation ယခုစစ်ဆေးမည်
+                </button>
+            </div>
+        </div>
+    `;
+
+    adminUserBox.appendChild(panel);
+
+    document.getElementById("btn-save-user-role-branch")?.addEventListener("click", submitUpdateUserRoleAndBranch);
+    document.getElementById("btn-run-reconcile-check")?.addEventListener("click", runStockReconciliationCheck);
+}
+
+async function submitUpdateUserRoleAndBranch() {
+    const userSelect = document.getElementById("setting-user-select");
+    const userId = userSelect ? Number(userSelect.value) : 0;
+    if (!userId) {
+        return ui.toast.warning("ကျေးဇူးပြု၍ အပေါ်တွင် အသုံးပြုသူ (User) တစ်ဦး အရင်ရွေးချယ်ပါ");
+    }
+
+    const role = document.getElementById("admin-edit-user-role")?.value || "cashier";
+    const branchId = Number(document.getElementById("admin-edit-user-branch")?.value || 1);
+
+    try {
+        const res = await api.put(`/system/users/${userId}`, {
+            role,
+            branch_id: branchId
+        });
+        ui.toast.success(res?.data?.message || "ဝန်ထမ်း Role နှင့် ဆိုင်ခွဲ ပြောင်းလဲသိမ်းဆည်းပြီးပါပြီ");
+        await loadSystemUsersForAdmin();
+        if (userSelect) {
+            userSelect.value = String(userId);
+            userSelect.dispatchEvent(new Event("change"));
+        }
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function runStockReconciliationCheck() {
+    const resBox = document.getElementById("reconcile-result-box");
+    const btn = document.getElementById("btn-run-reconcile-check");
+    if (btn) btn.disabled = true;
+    if (resBox) resBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i>စစ်ဆေးနေပါသည်...`;
+
+    try {
+        const res = await api.get("/system/reconcile-stock");
+        const data = res?.data || {};
+        const count = Number(data.mismatch_count || 0);
+
+        if (count === 0) {
+            if (resBox) {
+                resBox.className = "mt-2 text-xs font-extrabold text-emerald-600 dark:text-emerald-400";
+                resBox.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i>အားလုံး ၁၀၀% ကိုက်ညီပါသည် (ကွဲလွဲမှု 0 ခု)`;
+            }
+            ui.toast.success("Stock Movement Ledger နှင့် ဆိုင်ခွဲလက်ကျန် အားလုံး ကိုက်ညီပါသည်");
+        } else {
+            if (resBox) {
+                resBox.className = "mt-2 text-xs font-extrabold text-rose-600 dark:text-rose-400";
+                resBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i>ကွဲလွဲမှု (${count}) ခု တွေ့ရှိရပါသည်!`;
+            }
+            ui.toast.warning(`ကွဲလွဲမှု (${count}) ခု တွေ့ရှိရပါသည်`);
+        }
+    } catch (err) {
+        if (resBox) resBox.textContent = err.message;
+        ui.toast.error(err.message);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -53,9 +202,11 @@ function bindEvents() {
         btnRefresh.onclick = () => fetchQuotaMetrics(true);
     }
 
+    const canBackup = state.can("system.backup");
+
     const btnSend = document.getElementById("btn-send-auto-email");
     if (btnSend) {
-        if (!state.isAdmin()) {
+        if (!canBackup) {
             btnSend.disabled = true;
             btnSend.classList.add("opacity-50", "cursor-not-allowed");
             btnSend.title = "Admin သာလျှင် အီးမေးလ် Backup ပို့ဆောင်နိုင်ပါသည်";
@@ -66,7 +217,7 @@ function bindEvents() {
 
     const btnJsonBackup = document.getElementById("btn-download-json-backup");
     if (btnJsonBackup) {
-        if (!state.isAdmin()) {
+        if (!canBackup) {
             btnJsonBackup.disabled = true;
             btnJsonBackup.classList.add("opacity-50", "cursor-not-allowed");
             btnJsonBackup.title = "Admin သာလျှင် Full JSON Backup ဒေါင်းလုဒ်ဆွဲနိုင်ပါသည်";
@@ -80,7 +231,6 @@ function bindEvents() {
         pwdForm.onsubmit = submitPasswordChange;
     }
 
-    // Admin: User select change event (Displays Username & Role/Branch — Never Plaintext Password)
     const userSelect = document.getElementById("setting-user-select");
     if (userSelect) {
         userSelect.onchange = (e) => {
@@ -88,6 +238,8 @@ function bindEvents() {
             const userObj = allSystemUsers.find(u => Number(u.id) === selectedId);
             const usernameField = document.getElementById("setting-selected-username");
             const roleBranchField = document.getElementById("setting-selected-role-branch");
+            const roleEditSelect = document.getElementById("admin-edit-user-role");
+            const branchEditSelect = document.getElementById("admin-edit-user-branch");
 
             if (userObj) {
                 if (usernameField) usernameField.value = userObj.username || "-";
@@ -96,6 +248,8 @@ function bindEvents() {
                     const branchLabel = userObj.branch_name || (userObj.role === "admin" || userObj.role === "finance" ? "All Branches" : "Main Shop");
                     roleBranchField.value = `${roleLabel} • ${branchLabel}`;
                 }
+                if (roleEditSelect) roleEditSelect.value = userObj.role || "cashier";
+                if (branchEditSelect && userObj.branch_id) branchEditSelect.value = String(userObj.branch_id);
             } else {
                 if (usernameField) usernameField.value = "";
                 if (roleBranchField) roleBranchField.value = "";
@@ -103,7 +257,6 @@ function bindEvents() {
         };
     }
 
-    // Admin: Force Reset user password form submit
     const adminPwdForm = document.getElementById("admin-reset-password-form");
     if (adminPwdForm) {
         adminPwdForm.onsubmit = submitAdminResetPassword;
@@ -132,7 +285,7 @@ async function loadSystemUsersForAdmin() {
 
 async function submitAdminResetPassword(e) {
     e.preventDefault();
-    if (!state.isAdmin()) return ui.toast.error("ခွင့်ပြုချက် မရှိပါ");
+    if (!state.can("user.manage")) return ui.toast.error("ခွင့်ပြုချက် မရှိပါ");
 
     const userSelect = document.getElementById("setting-user-select");
     const newPwdInput = document.getElementById("setting-admin-new-password");
@@ -164,7 +317,6 @@ async function submitAdminResetPassword(e) {
 
         if (newPwdInput) newPwdInput.value = "";
 
-        // If Admin reset their own password, their token_version incremented — force re-login
         const currentAdminId = Number(state.user?.id || 0);
         if (currentAdminId && userId === currentAdminId) {
             setTimeout(() => {
@@ -204,8 +356,9 @@ function fetchQuotaMetrics(showToast = false) {
     if (wVal) wVal.textContent = `${(writes / 1000).toFixed(1)}k / 100k`;
     if (wBar) wBar.style.width = `${Math.max(2, Math.min(100, (writes / 100000) * 100))}%`;
 
-    if (sVal) sVal.textContent = `${storage} MB / 5 GB`;
-    if (sBar) sBar.style.width = `${Math.max(1, Math.min(100, (storage / 5120) * 100))}%`;
+    // Spec Section 8: Per-DB limit on Free Tier is 500 MB (Account total 5 GB)
+    if (sVal) sVal.textContent = `${storage} MB / 500 MB (Per DB)`;
+    if (sBar) sBar.style.width = `${Math.max(1, Math.min(100, (storage / 500) * 100))}%`;
 
     if (showToast) {
         setTimeout(() => {
@@ -216,7 +369,7 @@ function fetchQuotaMetrics(showToast = false) {
 }
 
 async function sendExcelReportEmail() {
-    if (!state.isAdmin()) {
+    if (!state.can("system.backup")) {
         return ui.toast.error("စနစ်ပိုင်ရှင် (Admin) သာလျှင် Backup အီးမေးလ် ပို့ဆောင်နိုင်ပါသည်။");
     }
 
@@ -255,7 +408,7 @@ async function sendExcelReportEmail() {
 }
 
 async function downloadJsonBackup() {
-    if (!state.isAdmin()) {
+    if (!state.can("system.backup")) {
         return ui.toast.error("စနစ်ပိုင်ရှင် (Admin) သာလျှင် Full JSON Backup ဒေါင်းလုဒ်ဆွဲနိုင်ပါသည်။");
     }
 
@@ -323,7 +476,6 @@ async function submitPasswordChange(e) {
         ui.toast.success("စကားဝှက် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။ စကားဝှက်အသစ်ဖြင့် ပြန်လည်ဝင်ရောက်ပါ။");
         document.getElementById("change-password-form")?.reset();
 
-        // Password change increments token_version on backend, invalidating old token
         setTimeout(() => {
             localStorage.removeItem("pos_token");
             window.location.reload();

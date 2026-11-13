@@ -1,4 +1,9 @@
-// cashbook-frontend/js/modules/customers.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/customers.js
+// CUSTOMERS & SUPPLIERS RECEIVABLES / PAYABLES LEDGER MODULE
+// Version: 4.1.0 (Fixes Paginated Statement Bug, ALL-View Guard & RBAC Delete)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
@@ -10,15 +15,11 @@ let currentFilteredCustomers = [];
 let activeCustomerLedger = [];
 let currentCustomer = null;
 
-// စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable()
 });
 
-/**
- * မြန်မာဂဏန်း (၀-၉) မှ အင်္ဂလိပ်ဂဏန်း (0-9) သို့ အလိုအလျောက် ပြောင်းပေးသည့် Helper
- */
 function parseAnyNumber(val) {
     if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -30,9 +31,6 @@ function parseAnyNumber(val) {
     return isNaN(num) ? 0 : Math.round(num);
 }
 
-/**
- * ငွေရိုက်သွင်းသည့် Input တွင် ရိုက်နေစဉ် အလိုအလျောက် ကော်မာ (150,000) ခံပေးခြင်း
- */
 function formatMoneyInputLive(inputEl) {
     if (!inputEl) return;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -48,9 +46,6 @@ function formatMoneyInputLive(inputEl) {
     inputEl.value = Number(digitsOnly).toLocaleString("en-US");
 }
 
-/**
- * ဖုန်းနံပါတ်ကို မြန်မာဂဏန်းရိုက်ရိုက်/အင်္ဂလိပ်ဂဏန်းရိုက်ရိုက် သန့်ရှင်းသော 09xxxxxxxxx အဖြစ် ပြောင်းလဲခြင်း
- */
 function normalizePhoneNumber(phoneStr) {
     if (!phoneStr) return null;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -68,11 +63,9 @@ export async function initCustomers() {
 }
 
 function bindEvents() {
-    // 1. Toolbar Buttons
     document.getElementById("btn-export-customers-csv")?.addEventListener("click", exportAllCustomersToCSV);
     document.getElementById("btn-export-ledger-csv")?.addEventListener("click", exportCustomerLedgerToCSV);
 
-    // Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-customers");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -84,7 +77,6 @@ function bindEvents() {
         });
     }
 
-    // 2. Add New Button (Customer / Supplier Modal ဖွင့်ခြင်း)
     document.getElementById("btn-add-customer")?.addEventListener("click", () => {
         document.getElementById("customer-form")?.reset();
         const editIdEl = document.getElementById("cust-edit-id");
@@ -106,14 +98,12 @@ function bindEvents() {
         document.getElementById("customer-modal")?.classList.add("hidden");
     });
 
-    // Entity Type Switcher (Customer vs Supplier) in Modal
     document.querySelectorAll('input[name="entity_type"]').forEach(radio => {
         radio.addEventListener("change", (e) => {
             updateEntityModalUI(e.target.value);
         });
     });
 
-    // 3. Live Money Formatting on Opening Debt & Repay Amount
     const debtInput = document.getElementById("cust-debt");
     if (debtInput) {
         debtInput.addEventListener("input", () => formatMoneyInputLive(debtInput));
@@ -124,7 +114,6 @@ function bindEvents() {
         repayAmtInput.addEventListener("input", () => formatMoneyInputLive(repayAmtInput));
     }
 
-    // 4. Repay Modal & Ledger Modal Close
     document.getElementById("btn-close-repay-modal")?.addEventListener("click", () => {
         document.getElementById("repay-modal")?.classList.add("hidden");
     });
@@ -133,15 +122,12 @@ function bindEvents() {
         document.getElementById("customer-ledger-modal")?.classList.add("hidden");
     });
 
-    // 5. Form Submits
     document.getElementById("customer-form")?.addEventListener("submit", submitCustomerForm);
     document.getElementById("repay-form")?.addEventListener("submit", submitRepayment);
 
-    // 6. Search & Entity Type Filter
     document.getElementById("cust-search")?.addEventListener("input", filterAndRenderCustomers);
     document.getElementById("cust-filter-entity")?.addEventListener("change", filterAndRenderCustomers);
 
-    // 7. Repay Method Select: ဘဏ်ရွေးပါက Bank Input ဖွင့်ပေးခြင်း
     const repayMethodSelect = document.getElementById("repay-method");
     if (repayMethodSelect) {
         repayMethodSelect.addEventListener("change", (e) => {
@@ -155,13 +141,9 @@ function bindEvents() {
         });
     }
 
-    // 8. Statement ပရင့်ထုတ်ခြင်း
     document.getElementById("btn-print-ledger")?.addEventListener("click", printCustomerStatement);
 }
 
-/**
- * Modal ထဲတွင် Customer သို့မဟုတ် Supplier ရွေးချယ်မှုအလိုက် Label များ အလိုအလျောက် ပြောင်းလဲခြင်း
- */
 function updateEntityModalUI(entityType) {
     const isSupplier = entityType === "SUPPLIER";
     const tierContainer = document.getElementById("cust-tier-container");
@@ -204,7 +186,6 @@ async function loadCustomers() {
         customers = res.data || [];
         currentFilteredCustomers = [...customers];
 
-        // 4-KPI Boxes (Total Customers, Total Suppliers, Total Receivables, Total Payables)
         const totalCust = customers.filter(c => (c.entity_type || "CUSTOMER").toUpperCase() !== "SUPPLIER").length;
         const totalSupp = customers.filter(c => (c.entity_type || "CUSTOMER").toUpperCase() === "SUPPLIER").length;
         const totalReceivables = customers.reduce((sum, c) => sum + Number(c.current_debt || 0), 0);
@@ -241,9 +222,6 @@ function filterAndRenderCustomers() {
     renderTable();
 }
 
-/**
- * Customers & Suppliers Table Rendering (၁၀ ကော်လံစနစ် + Statement, Repay & Edit ခလုတ်များ)
- */
 function renderTable() {
     const tbody = document.getElementById("cust-table-body");
     if (!tbody) return;
@@ -264,12 +242,14 @@ function renderTable() {
 
     const pageItems = pagination.getPageItems(currentFilteredCustomers);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
+    const isAllView = state.isAllBranches();
+    const canDeleteCustomer = state.can("customer.delete");
 
     pageItems.forEach((c, idx) => {
         const isSupplier = (c.entity_type || "CUSTOMER").toUpperCase() === "SUPPLIER";
         const debt = Number(c.current_debt || 0);
         const payable = Number(c.current_payable || c.payables || 0);
-        
+
         let typeBadge = `<span class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[11px] font-bold">RETAIL</span>`;
         if (isSupplier) {
             typeBadge = `<span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono text-[11px] font-bold">SUPPLIER</span>`;
@@ -284,7 +264,7 @@ function renderTable() {
 
         if (isSupplier) {
             hasBalance = payable > 0;
-            statusBadge = hasBalance 
+            statusBadge = hasBalance
                 ? `<span class="text-amber-500 font-mono font-bold text-xs">ပေးရန်ရှိ</span>`
                 : `<span class="text-emerald-500 font-mono font-bold text-xs">ရှင်းပြီး</span>`;
         } else {
@@ -294,17 +274,28 @@ function renderTable() {
                 : `<span class="text-emerald-500 font-mono font-bold text-xs">ရှင်းပြီး</span>`;
         }
 
-        const repayBtnTitle = isSupplier ? "ပွဲရုံသို့ အကြွေးဆပ်မည်" : "အကြွေးဆပ်ငွေ လက်ခံမည်";
+        const safeId = ui.escapeHtml(c.id);
+        const repayBtnTitle = isAllView
+            ? "ALL View တွင် အကြွေးဆပ်၍ မရပါ (ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ)"
+            : (isSupplier ? "ပွဲရုံသို့ အကြွေးဆပ်မည်" : "အကြွေးဆပ်ငွေ လက်ခံမည်");
+
+        const deleteBtnHtml = (canDeleteCustomer && !hasBalance)
+            ? `<button type="button" data-id="${safeId}" title="စာရင်းမှ ဖျက်သိမ်းမည်" 
+                class="btn-delete-cust w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 text-rose-500 hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>`
+            : "";
+
         const actionButtons = `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${c.id}" title="Statement ကြည့်မည်" 
+                <button type="button" data-id="${safeId}" title="Statement ကြည့်မည်" 
                     class="btn-view-ledger w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-receipt text-xs"></i>
                 </button>
 
                 ${hasBalance ? `
-                <button type="button" data-id="${c.id}" title="${repayBtnTitle}" 
-                    class="btn-repay w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 ${isSupplier ? 'hover:bg-amber-500 text-amber-500' : 'hover:bg-emerald-600 text-emerald-600'} hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${safeId}" ${isAllView ? "disabled" : ""} title="${repayBtnTitle}" 
+                    class="btn-repay w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 ${isAllView ? 'opacity-40 cursor-not-allowed' : (isSupplier ? 'hover:bg-amber-500 text-amber-500 cursor-pointer' : 'hover:bg-emerald-600 text-emerald-600 cursor-pointer')} hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition shadow-sm active:scale-95">
                     <i class="fa-solid fa-hand-holding-dollar text-xs"></i>
                 </button>` : `
                 <button type="button" disabled title="စာရင်းရှင်းပြီးပါပြီ" 
@@ -312,69 +303,49 @@ function renderTable() {
                     <i class="fa-solid fa-check text-xs"></i>
                 </button>`}
 
-                <button type="button" data-id="${c.id}" title="အချက်အလက် ပြင်ဆင်မည်" 
+                <button type="button" data-id="${safeId}" title="အချက်အလက် ပြင်ဆင်မည်" 
                     class="btn-edit-cust w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 hover:text-white dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
+                ${deleteBtnHtml}
             </div>
         `;
 
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         row.innerHTML = `
-            <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            
-            <!-- 2. NAME -->
             <td class="py-2 px-4 text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(c.name)}">
                 ${ui.escapeHtml(c.name)}
             </td>
-
-            <!-- 3. PHONE NO -->
             <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-32">
                 ${ui.escapeHtml(cleanPhone)}
             </td>
-
-            <!-- 4. SHOP / ပွဲရုံ -->
             <td class="py-2 px-4 text-xs font-bold text-slate-700 dark:text-slate-200 w-44 truncate" title="${ui.escapeHtml(c.shop_name || "-")}">
                 ${ui.escapeHtml(c.shop_name || "-")}
             </td>
-
-            <!-- 5. ADDRESS -->
             <td class="py-2 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 min-w-[170px] max-w-xs truncate" title="${ui.escapeHtml(c.address || "-")}">
                 ${ui.escapeHtml(c.address || "-")}
             </td>
-
-            <!-- 6. TYPE -->
-            <td class="py-2 px-3 text-left w-28">
-                ${typeBadge}
-            </td>
-
-            <!-- 7. RECEIVABLES -->
+            <td class="py-2 px-3 text-left w-28">${typeBadge}</td>
             <td class="py-2 px-4 text-right font-black font-mono text-sm ${debt > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'} w-36">
                 ${debt > 0 ? debt.toLocaleString() : "-"}
             </td>
-
-            <!-- 8. PAYABLES -->
             <td class="py-2 px-4 text-right font-black font-mono text-sm ${payable > 0 ? 'text-amber-500' : 'text-slate-400'} w-36">
                 ${payable > 0 ? payable.toLocaleString() : "-"}
             </td>
-
-            <!-- 9. STATUS -->
-            <td class="py-2 px-3 text-center whitespace-nowrap w-28">
-                ${statusBadge}
-            </td>
-
-            <!-- 10. ACTION (Sticky Right) -->
-            <td class="py-2 px-3 text-center sticky right-0 z-10 w-28">
-                ${actionButtons}
-            </td>
+            <td class="py-2 px-3 text-center whitespace-nowrap w-28">${statusBadge}</td>
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-28">${actionButtons}</td>
         `;
         tbody.appendChild(row);
     });
 
     tbody.querySelectorAll(".btn-repay").forEach(btn => {
         btn.addEventListener("click", () => {
+            if (state.isAllBranches()) {
+                ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ အကြွေးဆပ်၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။");
+                return;
+            }
             const cust = customers.find(item => item.id === Number(btn.dataset.id));
             if (cust) openRepayModal(cust);
         });
@@ -394,12 +365,25 @@ function renderTable() {
         });
     });
 
+    tbody.querySelectorAll(".btn-delete-cust").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const cust = customers.find(item => item.id === Number(btn.dataset.id));
+            if (!cust) return;
+            const confirmed = await ui.confirm(`"${cust.name}" အား စာရင်းမှ ပယ်ဖျက်လိုပါသလား?`, "error");
+            if (!confirmed) return;
+            try {
+                await api.delete(`/customers/${cust.id}`);
+                ui.toast.success("စာရင်းမှ ပယ်ဖျက်ပြီးပါပြီ");
+                await loadCustomers();
+            } catch (err) {
+                ui.toast.error(err.message);
+            }
+        });
+    });
+
     pagination.renderControls("customers-pagination");
 }
 
-/**
- * ဖောက်သည် / ပွဲရုံ အချက်အလက် ပြန်လည်ပြင်ဆင်သည့် Modal ဖွင့်ခြင်း
- */
 function openEditCustomerModal(cust) {
     document.getElementById("customer-form")?.reset();
     document.getElementById("cust-edit-id").value = cust.id;
@@ -421,16 +405,20 @@ function openEditCustomerModal(cust) {
     document.getElementById("cust-shop").value = cust.shop_name || "";
     document.getElementById("cust-address").value = cust.address || "";
 
-    // ပြင်ဆင်ချိန်တွင် ကနဦးအကြွေးအကွက်ကို ဖျောက်ထားမည် (အကြွေးစာရင်းသည် Ledger မှသာ အလုပ်လုပ်ရန်)
     document.getElementById("cust-debt-container")?.classList.add("hidden");
     document.getElementById("customer-modal")?.classList.remove("hidden");
     document.getElementById("cust-name")?.focus();
 }
 
 function openRepayModal(cust) {
+    if (state.isAllBranches()) {
+        ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ အကြွေးဆပ်ငွေ လက်ခံ/ပေးချေ၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို ရွေးချယ်ပါ။");
+        return;
+    }
+
     document.getElementById("repay-form")?.reset();
     document.getElementById("repay-cust-id").value = cust.id;
-    
+
     const isSupplier = (cust.entity_type || "CUSTOMER").toUpperCase() === "SUPPLIER";
     document.getElementById("repay-entity-type").value = isSupplier ? "SUPPLIER" : "CUSTOMER";
 
@@ -472,6 +460,15 @@ function openRepayModal(cust) {
 async function submitRepayment(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-repay");
+
+    let targetBranchId;
+    try {
+        targetBranchId = state.requireWriteBranchId();
+    } catch (err) {
+        ui.toast.warning(err.message);
+        return;
+    }
+
     const customerId = parseInt(document.getElementById("repay-cust-id").value, 10);
     const entityType = document.getElementById("repay-entity-type")?.value || "CUSTOMER";
     const amount = parseAnyNumber(document.getElementById("repay-amount").value);
@@ -493,15 +490,14 @@ async function submitRepayment(e) {
 
     try {
         await api.post("/customers/repay", {
-            customerId,
-            entityType,
-            branchId: state.currentBranch?.id || 1,
+            customer_id: customerId,
+            entity_type: entityType,
+            branch_id: targetBranchId,
             amount,
-            paymentMethod,
-            bankAccountName: paymentMethod === "bank" ? bankName : null,
+            payment_method: paymentMethod,
+            bank_account_name: paymentMethod === "bank" ? bankName : null,
             note: note || (entityType === "SUPPLIER" ? `ပွဲရုံသို့ အကြွေးဆပ်ငွေ (${paymentMethod.toUpperCase()})` : `အကြွေးဆပ်ငွေ (${paymentMethod.toUpperCase()})`),
-            entryDate: repayDate,
-            createdBy: state.user?.id || 1
+            entry_date: repayDate
         });
 
         document.getElementById("repay-modal")?.classList.add("hidden");
@@ -528,19 +524,24 @@ async function submitCustomerForm(e) {
         return;
     }
 
-    if (btn) btn.disabled = true;
-
     const openingBalance = parseAnyNumber(document.getElementById("cust-debt").value);
+    if (!editId && openingBalance > 0 && state.isAllBranches()) {
+        ui.toast.warning("ကနဦးအကြွေးလက်ကျန် ထည့်သွင်းလိုပါက အပေါ်ညာဘက်တွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
+        return;
+    }
+
+    if (btn) btn.disabled = true;
 
     const payload = {
         name,
         phone: normalizePhoneNumber(document.getElementById("cust-phone").value),
-        entityType,
-        customerType: entityType === "SUPPLIER" ? "wholesale" : document.getElementById("cust-type").value,
-        shopName: document.getElementById("cust-shop").value.trim() || null,
+        entity_type: entityType,
+        customer_type: entityType === "SUPPLIER" ? "wholesale" : document.getElementById("cust-type").value,
+        shop_name: document.getElementById("cust-shop").value.trim() || null,
         address: document.getElementById("cust-address").value.trim() || null,
-        initialDebt: entityType === "CUSTOMER" ? openingBalance : 0,
-        initialPayable: entityType === "SUPPLIER" ? openingBalance : 0
+        branch_id: state.isAllBranches() ? 1 : Number(state.currentBranch?.id || 1),
+        initial_debt: entityType === "CUSTOMER" ? openingBalance : 0,
+        initial_payable: entityType === "SUPPLIER" ? openingBalance : 0
     };
 
     try {
@@ -575,7 +576,7 @@ async function openCustomerLedgerModal(cust) {
 
     if (nameEl) nameEl.textContent = cust.name;
     if (phoneEl) phoneEl.textContent = cleanPhone ? `ဖုန်း: ${cleanPhone}` : "ဖုန်း: မရှိပါ";
-    
+
     if (balTitleEl) {
         balTitleEl.textContent = isSupplier ? "လက်ရှိ ပေးရန်ကျန်ငွေ" : "လက်ရှိ အကြွေးကျန်ငွေ";
     }
@@ -600,7 +601,8 @@ async function openCustomerLedgerModal(cust) {
 
     try {
         const res = await api.get(`/customers/${cust.id}/ledger`);
-        activeCustomerLedger = res.data || [];
+        // Support both paginated { items: [...] } and flat array
+        activeCustomerLedger = Array.isArray(res.data) ? res.data : (res.data?.items || []);
         renderCustomerLedger(activeCustomerLedger, isSupplier);
     } catch (err) {
         if (tbody) {
@@ -609,22 +611,19 @@ async function openCustomerLedgerModal(cust) {
     }
 }
 
-/**
- * Statement Modal: One-Line Compact Standard
- */
 function renderCustomerLedger(ledgerList, isSupplier = false) {
     const tbody = document.getElementById("cust-ledger-table-body");
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    if (ledgerList.length === 0) {
+    if (!Array.isArray(ledgerList) || ledgerList.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="p-10 text-center text-slate-400 font-bold text-xs">မှတ်တမ်း မရှိသေးပါ</td></tr>`;
         return;
     }
 
     ledgerList.forEach(entry => {
         const isDebit = entry.type === "DEBIT" || entry.type === "PURCHASE_DEBT";
-        
+
         let dateStr = "-";
         if (entry.created_at) {
             const d = new Date(entry.created_at);
@@ -642,37 +641,24 @@ function renderCustomerLedger(ledgerList, isSupplier = false) {
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/50 transition h-11 whitespace-nowrap text-xs border-b border-slate-100 dark:border-slate-800/60";
         tr.innerHTML = `
-            <!-- 1. DATE & TIME -->
-            <td class="py-2.5 px-3 text-center font-mono text-slate-400">${dateStr}</td>
-            
-            <!-- 2. TYPE -->
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400">${ui.escapeHtml(dateStr)}</td>
             <td class="py-2.5 px-3 text-center">
                 <span class="px-2 py-0.5 rounded font-mono font-bold text-[11px] ${isDebit ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
                     ${isDebit ? 'DEBIT (+)' : 'CREDIT (-)'}
                 </span>
             </td>
-
-            <!-- 3. DESCRIPTION / REF -->
             <td class="py-2.5 px-4 font-bold text-slate-800 dark:text-slate-200 max-w-[260px] truncate" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc)}
             </td>
-
-            <!-- 4. METHOD -->
             <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400 uppercase">
                 ${ui.escapeHtml(entry.payment_method || (isDebit ? 'DEBT' : 'CASH'))}
             </td>
-
-            <!-- 5. AMOUNT -->
             <td class="py-2.5 px-4 text-right font-mono font-black ${isDebit ? 'text-rose-500' : 'text-emerald-500'}">
                 ${isDebit ? '+' : '-'}${amt.toLocaleString()}
             </td>
-
-            <!-- 6. BALANCE -->
             <td class="py-2.5 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100">
                 ${balanceAfter.toLocaleString()}
             </td>
-
-            <!-- 7. USER -->
             <td class="py-2.5 px-3 text-center text-slate-400 font-medium max-w-[130px] truncate" title="${ui.escapeHtml(entry.created_by_name || 'Admin')}">
                 ${ui.escapeHtml(entry.created_by_name || "Admin")}
             </td>
@@ -681,9 +667,6 @@ function renderCustomerLedger(ledgerList, isSupplier = false) {
     });
 }
 
-/**
- * Contacts CSV Export (9 Columns)
- */
 function exportAllCustomersToCSV() {
     const listToExport = currentFilteredCustomers.length > 0 ? currentFilteredCustomers : customers;
 
@@ -698,7 +681,7 @@ function exportAllCustomersToCSV() {
         const isSupplier = (c.entity_type || "CUSTOMER").toUpperCase() === "SUPPLIER";
         const debt = Number(c.current_debt || 0);
         const payable = Number(c.current_payable || c.payables || 0);
-        
+
         let status = "ရှင်းပြီး";
         if (isSupplier && payable > 0) status = "ပေးရန်ရှိ";
         else if (!isSupplier && debt > 0) status = "အကြွေးကျန်ရှိ";
@@ -732,9 +715,6 @@ function exportAllCustomersToCSV() {
     URL.revokeObjectURL(url);
 }
 
-/**
- * Customer / Supplier Statement CSV Export (Fixed for PURCHASE_DEBT)
- */
 function exportCustomerLedgerToCSV() {
     if (!activeCustomerLedger || activeCustomerLedger.length === 0) {
         return ui.toast.warning("ထုတ်ယူရန် မှတ်တမ်းမရှိပါ။");
@@ -771,9 +751,6 @@ function exportCustomerLedgerToCSV() {
     URL.revokeObjectURL(url);
 }
 
-/**
- * Statement ကို A4 စာရွက်ပေါ်တွင် သန့်ရှင်းစွာ ပရင့်ထုတ်ပေးသည့် Function
- */
 function printCustomerStatement() {
     if (!currentCustomer) {
         return ui.toast.warning("ပရင့်ထုတ်ရန် စာရင်းမရှိပါ။");
@@ -784,14 +761,14 @@ function printCustomerStatement() {
     const custPhone = ui.escapeHtml(normalizePhoneNumber(currentCustomer.phone) || currentCustomer.phone || "-");
     const custShop = ui.escapeHtml(currentCustomer.shop_name || "-");
     const custAddress = ui.escapeHtml(currentCustomer.address || "-");
-    const balance = isSupplier 
+    const balance = isSupplier
         ? Number(currentCustomer.current_payable || currentCustomer.payables || 0).toLocaleString()
         : Number(currentCustomer.current_debt || 0).toLocaleString();
     const balanceTitle = isSupplier ? "လက်ကျန်ပေးရန်ငွေ" : "လက်ကျန်အကြွေး";
     const todayDate = new Date().toLocaleDateString("en-GB");
 
     let tableRows = "";
-    if (activeCustomerLedger.length === 0) {
+    if (!Array.isArray(activeCustomerLedger) || activeCustomerLedger.length === 0) {
         tableRows = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #888;">စာရင်းမှတ်တမ်း မရှိသေးပါ</td></tr>`;
     } else {
         activeCustomerLedger.forEach((entry, idx) => {
@@ -812,7 +789,7 @@ function printCustomerStatement() {
             tableRows += `
                 <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
                     <td style="padding: 6px 4px; text-align: center; color: #64748b;">${idx + 1}</td>
-                    <td style="padding: 6px 8px; text-align: center; font-family: monospace;">${dateStr}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace;">${ui.escapeHtml(dateStr)}</td>
                     <td style="padding: 6px 8px; text-align: center; font-weight: bold; color: ${isDebit ? '#dc2626' : '#16a34a'};">
                         ${isDebit ? 'DEBIT (+)' : 'CREDIT (-)'}
                     </td>

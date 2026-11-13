@@ -1,4 +1,9 @@
-// cashbook-frontend/js/modules/transfers.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/transfers.js
+// INTER-BRANCH STOCK TRANSFERS MODULE (STATE MACHINE WORKFLOW)
+// Version: 4.1.0 (Spec Section 4.3 State Machine: pending -> dispatched -> received)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
@@ -15,23 +20,6 @@ const pagination = new PaginationController({
     onPageChange: () => renderTable()
 });
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
-
-/**
- * မြန်မာဂဏန်း (၀-၉) နှင့် ကော်မာများကို ဖယ်ရှားပြီး Number ပြောင်းပေးသည့် Helper
- */
 function parseAnyNumber(val, isInteger = false) {
     if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -45,6 +33,23 @@ function parseAnyNumber(val, isInteger = false) {
 }
 
 export async function initTransfers() {
+    // Spec 3.2: Cashier can receive transfers, but cannot create new transfers
+    const createBtn = document.getElementById("btn-open-create-transfer");
+    if (createBtn) {
+        if (!state.can("transfer.create")) {
+            createBtn.classList.add("hidden");
+        } else {
+            createBtn.classList.remove("hidden");
+            if (state.isAllBranches()) {
+                createBtn.disabled = true;
+                createBtn.classList.add("opacity-50", "cursor-not-allowed");
+            } else {
+                createBtn.disabled = false;
+                createBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            }
+        }
+    }
+
     bindEvents();
     await loadBranches();
     await Promise.all([
@@ -54,14 +59,11 @@ export async function initTransfers() {
 }
 
 function bindEvents() {
-    // Toolbar: Filter & Search
     document.getElementById("trf-search")?.addEventListener("input", filterAndRender);
     document.getElementById("trf-category-filter")?.addEventListener("change", filterAndRender);
 
-    // Export CSV
     document.getElementById("btn-export-trf-csv")?.addEventListener("click", exportTransfersToCSV);
 
-    // Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-transfers");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -76,7 +78,6 @@ function bindEvents() {
         });
     }
 
-    // Create Modal Events
     document.getElementById("btn-open-create-transfer")?.addEventListener("click", () => openCreateTransferModal());
     document.getElementById("btn-close-create-trf")?.addEventListener("click", () => {
         document.getElementById("create-trf-modal")?.classList.add("hidden");
@@ -93,16 +94,11 @@ function bindEvents() {
         }
     });
 
-    // Edit Modal Events
     document.getElementById("btn-close-edit-trf")?.addEventListener("click", () => {
         document.getElementById("edit-trf-modal")?.classList.add("hidden");
     });
-    document.getElementById("edit-trf-form")?.addEventListener("submit", submitEditTransfer);
 }
 
-/**
- * D1 Read Quota ချွေတာရန် Branches စာရင်းကို Memory မှ ပြန်သုံးခြင်း
- */
 async function loadBranches() {
     if (branchesList.length > 0) return;
     if (Array.isArray(state.branches) && state.branches.length > 0) {
@@ -119,9 +115,14 @@ async function loadBranches() {
 
 async function loadProductsForTransfer() {
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const branchId = state.getBranchId();
         const res = await api.get("/products", { branch_id: branchId });
-        availableProducts = (res.data || []).filter(p => Number(p.current_stock || 0) > 0);
+        availableProducts = (res.data || [])
+            .map(p => {
+                const stockVal = Number(p.current_stock ?? p.quantity ?? p.stock ?? 0);
+                return { ...p, current_stock: stockVal, quantity: stockVal };
+            })
+            .filter(p => p.current_stock > 0);
     } catch (err) {
         console.error("Products ရယူ၍မရပါ:", err);
     }
@@ -129,7 +130,7 @@ async function loadProductsForTransfer() {
 
 async function loadTransfers() {
     const tbody = document.getElementById("trf-table-body");
-    const branchId = state.currentBranch?.id || 1;
+    const branchId = state.getBranchId();
 
     if (tbody) {
         tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-purple-500 text-2xl mb-3"></i><div class="font-bold text-xs">လွှဲပြောင်းမှု မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
@@ -144,7 +145,7 @@ async function loadTransfers() {
         filterAndRender();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -154,7 +155,7 @@ function populateCategoryFilter() {
     if (!select) return;
     const current = select.value;
     const cats = [...new Set(transfersList.map(t => t.category).filter(Boolean))];
-    
+
     select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${transfersList.length})</option>`;
     cats.forEach(c => {
         const opt = document.createElement("option");
@@ -166,16 +167,17 @@ function populateCategoryFilter() {
 }
 
 function updateTransferKPIs(list = transfersList) {
-    const currentBranchId = state.currentBranch?.id || 1;
+    const activeList = list.filter(t => t.status !== "cancelled");
+    const currentBranchId = state.isAllBranches() ? null : Number(state.getBranchId());
 
-    const totalCount = list.length;
-    const totalQty = list.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-    const outboundQty = list
-        .filter(t => Number(t.from_branch_id) === currentBranchId)
-        .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-    const inboundQty = list
-        .filter(t => Number(t.to_branch_id) === currentBranchId)
-        .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+    const totalCount = activeList.length;
+    const totalQty = activeList.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+    const outboundQty = currentBranchId
+        ? activeList.filter(t => Number(t.from_branch_id) === currentBranchId).reduce((sum, t) => sum + Number(t.quantity || 0), 0)
+        : activeList.filter(t => t.status === "dispatched").reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+    const inboundQty = currentBranchId
+        ? activeList.filter(t => Number(t.to_branch_id) === currentBranchId).reduce((sum, t) => sum + Number(t.quantity || 0), 0)
+        : activeList.filter(t => t.status === "received" || t.status === "completed").reduce((sum, t) => sum + Number(t.quantity || 0), 0);
 
     setKPI(1, "Total Transfers", totalCount, "fa-right-left", "blue");
     setKPI(2, "Total Items Qty", totalQty, "fa-boxes-stacked", "emerald");
@@ -190,7 +192,7 @@ function filterAndRender() {
     currentFilteredTransfers = transfersList.filter(t => {
         if (cat && t.category !== cat) return false;
         if (!kw) return true;
-        const hay = `${t.transfer_no || ""} ${t.sku || ""} ${t.barcode || ""} ${t.item_name || ""} ${t.from_branch_name || ""} ${t.to_branch_name || ""} ${t.notes || ""}`.toLowerCase();
+        const hay = `${t.transfer_no || ""} ${t.sku || ""} ${t.barcode || ""} ${t.item_name || ""} ${t.from_branch_name || ""} ${t.to_branch_name || ""} ${t.status || ""} ${t.notes || ""}`.toLowerCase();
         return hay.includes(kw);
     });
 
@@ -199,9 +201,6 @@ function filterAndRender() {
     renderTable();
 }
 
-/**
- * Transfers Table (13 Columns - Pro Typography & Sticky Right Action)
- */
 function renderTable() {
     const tbody = document.getElementById("trf-table-body");
     if (!tbody) return;
@@ -222,110 +221,121 @@ function renderTable() {
 
     const pageItems = pagination.getPageItems(currentFilteredTransfers);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
+    const isAdminOrFinance = state.isAdmin();
+    const myBranchId = state.isAllBranches() ? null : Number(state.getBranchId());
 
     pageItems.forEach((t, idx) => {
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
         const unit = t.size || "ထည်";
+        const status = String(t.status || "pending").toLowerCase();
+        const safeId = ui.escapeHtml(t.id);
 
-        const actionButtons = state.isAdmin() ? `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${t.id}" title="ပြင်ဆင်မည်" class="btn-edit-trf w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-pen-to-square text-xs"></i>
+        const isSender = isAdminOrFinance || (myBranchId && Number(t.from_branch_id) === myBranchId);
+        const isReceiver = isAdminOrFinance || (myBranchId && Number(t.to_branch_id) === myBranchId);
+
+        const actionBtns = [];
+
+        // Spec 4.3 State Machine Transitions:
+        // 1. pending -> dispatched (Sender / Admin / Finance)
+        if (status === "pending" && isSender && state.can("transfer.dispatch")) {
+            actionBtns.push(`
+                <button type="button" data-id="${safeId}" title="ပစ္စည်းပို့ဆောင်မည် (Dispatch - ထွက်ဆိုင်မှ စတော့နုတ်မည်)" 
+                    class="btn-dispatch-trf px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[11px] font-extrabold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-truck-fast text-[10px]"></i>
+                    <span>ပို့မည်</span>
                 </button>
-                <button type="button" data-id="${t.id}" title="ဖျက်မည်" class="btn-delete-trf w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-trash-can text-xs"></i>
+            `);
+        }
+
+        // 2. dispatched -> received (Receiver / Admin / Finance - includes Cashier of receiving branch)
+        if (status === "dispatched" && isReceiver && state.can("transfer.receive")) {
+            actionBtns.push(`
+                <button type="button" data-id="${safeId}" title="ပစ္စည်းလက်ခံမည် (Receive - ဝင်ဆိုင်သို့ စတော့ပေါင်းမည်)" 
+                    class="btn-receive-trf px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-extrabold transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-box-open text-[10px]"></i>
+                    <span>လက်ခံမည်</span>
                 </button>
-            </div>
-        ` : `
-            <span class="text-xs text-slate-400 font-mono">-</span>
-        `;
+            `);
+        }
+
+        // 3. pending / dispatched -> cancelled (Sender / Admin / Finance)
+        if ((status === "pending" || status === "dispatched") && isSender && state.can("transfer.cancel")) {
+            actionBtns.push(`
+                <button type="button" data-id="${safeId}" data-status="${ui.escapeHtml(status)}" title="လွှဲပြောင်းမှု ပယ်ဖျက်မည် (Cancel)" 
+                    class="btn-cancel-trf w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 text-rose-500 hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-xs active:scale-95">
+                    <i class="fa-solid fa-ban text-xs"></i>
+                </button>
+            `);
+        }
+
+        const actionHtml = actionBtns.length > 0
+            ? `<div class="flex items-center justify-center gap-1.5">${actionBtns.join("")}</div>`
+            : `<span class="text-[10px] text-slate-400 font-bold">${status === "received" || status === "completed" ? "လက်ခံပြီး" : "ပယ်ဖျက်ပြီး"}</span>`;
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         tr.innerHTML = `
-            <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            
-            <!-- 2. DATE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
-            
-            <!-- 3. BARCODE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(t.barcode || t.sku || "-")}">${escapeHtml(t.barcode || t.sku || "-")}</td>
-            
-            <!-- 4. CATEGORY -->
-            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(t.category || "-")}">${escapeHtml(t.category || "-")}</td>
-            
-            <!-- 5. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(t.item_name || "-")}">${escapeHtml(t.item_name || "-")}</td>
-            
-            <!-- 6. COLOR -->
-            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(t.color || "-")}">${escapeHtml(t.color || "-")}</td>
-            
-            <!-- 7. UNIT -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
-            
-            <!-- 8. QTY -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${ui.escapeHtml(dateStr)}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(t.barcode || t.sku || "-")}">${ui.escapeHtml(t.barcode || t.sku || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(t.category || "-")}">${ui.escapeHtml(t.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(t.item_name || "-")}">${ui.escapeHtml(t.item_name || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(t.color || "-")}">${ui.escapeHtml(t.color || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${ui.escapeHtml(unit)}</td>
             <td class="py-2 px-4 text-right font-mono font-black text-sm text-purple-600 dark:text-purple-400 w-28">
                 ${Number(t.quantity || 0).toLocaleString()}
             </td>
-
-            <!-- 9. FROM SHOP -->
-            <td class="py-2 px-4 text-left text-xs font-bold text-slate-700 dark:text-slate-300 w-32 truncate" title="${escapeHtml(t.from_branch_name || "Main")}">
-                ${escapeHtml(t.from_branch_name || "Main")}
+            <td class="py-2 px-4 text-left text-xs font-bold text-slate-700 dark:text-slate-300 w-32 truncate" title="${ui.escapeHtml(t.from_branch_name || "Main")}">
+                ${ui.escapeHtml(t.from_branch_name || "Main")}
             </td>
-            
-            <!-- 10. TO SHOP -->
-            <td class="py-2 px-4 text-left text-xs font-bold text-blue-600 dark:text-blue-400 w-32 truncate" title="${escapeHtml(t.to_branch_name || "-")}">
-                ${escapeHtml(t.to_branch_name || "-")}
+            <td class="py-2 px-4 text-left text-xs font-bold text-blue-600 dark:text-blue-400 w-32 truncate" title="${ui.escapeHtml(t.to_branch_name || "-")}">
+                ${ui.escapeHtml(t.to_branch_name || "-")}
             </td>
-            
-            <!-- 11. REMARK -->
-            <td class="py-2 px-4 text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(t.notes || "")}">
-                ${escapeHtml(t.notes || "-")}
+            <td class="py-2 px-4 text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${ui.escapeHtml(t.notes || "")}">
+                ${ui.statusBadge(status)} <span class="ml-1">${ui.escapeHtml(t.notes || "")}</span>
             </td>
-
-            <!-- 12. TRF NO -->
-            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate" title="${escapeHtml(t.transfer_no || "-")}">
-                ${escapeHtml(t.transfer_no || "-")}
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate" title="${ui.escapeHtml(t.transfer_no || "-")}">
+                ${ui.escapeHtml(t.transfer_no || "-")}
             </td>
-            
-            <!-- 13. ACTION (Sticky Right) -->
-            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
-                ${actionButtons}
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-32">
+                ${actionHtml}
             </td>
         `;
         tbody.appendChild(tr);
     });
 
-    if (state.isAdmin()) {
-        tbody.querySelectorAll(".btn-edit-trf").forEach(btn => {
-            btn.onclick = () => {
-                const trf = transfersList.find(t => t.id === Number(btn.dataset.id));
-                if (trf) openEditTransferModal(trf);
-            };
-        });
+    tbody.querySelectorAll(".btn-dispatch-trf").forEach(btn => {
+        btn.onclick = () => dispatchTransfer(Number(btn.dataset.id));
+    });
 
-        tbody.querySelectorAll(".btn-delete-trf").forEach(btn => {
-            btn.onclick = () => deleteTransfer(Number(btn.dataset.id));
-        });
-    }
+    tbody.querySelectorAll(".btn-receive-trf").forEach(btn => {
+        btn.onclick = () => receiveTransfer(Number(btn.dataset.id));
+    });
+
+    tbody.querySelectorAll(".btn-cancel-trf").forEach(btn => {
+        btn.onclick = () => cancelTransfer(Number(btn.dataset.id), btn.dataset.status);
+    });
 
     pagination.renderControls("transfers-pagination");
 }
 
 function openCreateTransferModal() {
+    if (state.isAllBranches()) {
+        return ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ လွှဲပြောင်းမှု အသစ်ဖန်တီး၍ မရပါ။ ပေးပို့မည့် ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။");
+    }
+
     const modal = document.getElementById("create-trf-modal");
     const prodSelect = document.getElementById("create-trf-prod-id");
     const destSelect = document.getElementById("create-trf-dest-branch");
     document.getElementById("create-trf-form")?.reset();
 
-    const currentBranchId = state.currentBranch?.id || 1;
+    const currentBranchId = Number(state.getBranchId());
 
     if (prodSelect) {
         prodSelect.innerHTML = `<option value="">-- ပစ္စည်း ရွေးချယ်ပါ --</option>`;
         availableProducts.forEach(p => {
-            prodSelect.innerHTML += `<option value="${p.id}" data-stock="${p.current_stock || 0}">
-                ${escapeHtml(p.item_name)} (${escapeHtml(p.sku || "-")}) - လက်ကျန်: ${Number(p.current_stock || 0).toLocaleString()} ${escapeHtml(p.size || "ထည်")}
+            prodSelect.innerHTML += `<option value="${ui.escapeHtml(p.id)}" data-stock="${p.current_stock || 0}">
+                ${ui.escapeHtml(p.item_name)} (${ui.escapeHtml(p.sku || "-")}) - လက်ကျန်: ${Number(p.current_stock || 0).toLocaleString()} ${ui.escapeHtml(p.size || "ထည်")}
             </option>`;
         });
     }
@@ -333,8 +343,8 @@ function openCreateTransferModal() {
     if (destSelect) {
         destSelect.innerHTML = `<option value="">-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
-            if (b.id !== currentBranchId) {
-                destSelect.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code || "-")})</option>`;
+            if (Number(b.id) !== currentBranchId) {
+                destSelect.innerHTML += `<option value="${ui.escapeHtml(b.id)}">${ui.escapeHtml(b.name)} (${ui.escapeHtml(b.code || "-")})</option>`;
             }
         });
     }
@@ -361,11 +371,18 @@ function updateCreateTransferStockHint(productId) {
 async function submitCreateTransfer(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-create-trf");
+
+    let fromBranchId;
+    try {
+        fromBranchId = state.requireWriteBranchId();
+    } catch (err) {
+        return ui.toast.warning(err.message);
+    }
+
     const prodId = Number(document.getElementById("create-trf-prod-id")?.value);
     const toBranchId = Number(document.getElementById("create-trf-dest-branch")?.value);
     const qty = parseAnyNumber(document.getElementById("create-trf-qty")?.value, false);
     const notes = document.getElementById("create-trf-notes")?.value.trim();
-    const fromBranchId = state.currentBranch?.id || 1;
 
     if (!prodId || !toBranchId || qty <= 0) {
         return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
@@ -378,19 +395,16 @@ async function submitCreateTransfer(e) {
 
     if (btn) btn.disabled = true;
 
-    const payload = {
-        fromBranchId: fromBranchId,
-        toBranchId: toBranchId,
-        productId: prodId,
-        quantity: qty,
-        notes: notes,
-        createdBy: state.user?.id || 1
-    };
-
     try {
-        await api.post("/transfers", payload);
+        await api.post("/transfers", {
+            from_branch_id: fromBranchId,
+            to_branch_id: toBranchId,
+            product_id: prodId,
+            quantity: qty,
+            notes
+        });
         document.getElementById("create-trf-modal")?.classList.add("hidden");
-        ui.toast.success("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်းများ ညှိပြီးပါပြီ။");
+        ui.toast.success("ဆိုင်ခွဲလွှဲပြောင်းစာရင်း (Pending) ဖန်တီးပြီးပါပြီ။ ပစ္စည်းပို့ဆောင်ချိန်တွင် 'ပို့မည် (Dispatch)' နှိပ်ပါ။");
         await Promise.all([
             loadProductsForTransfer(),
             loadTransfers()
@@ -402,69 +416,61 @@ async function submitCreateTransfer(e) {
     }
 }
 
-function openEditTransferModal(trf) {
-    const modal = document.getElementById("edit-trf-modal");
-    document.getElementById("edit-trf-form")?.reset();
-
-    const unit = trf.size || "ထည်";
-    document.getElementById("edit-trf-id").value = trf.id;
-    document.getElementById("edit-trf-prod-name").value = `${trf.item_name} (${trf.sku || "-"})`;
-    document.getElementById("edit-trf-old-qty").value = `${Number(trf.quantity || 0).toLocaleString()} ${unit}`;
-    document.getElementById("edit-trf-qty").value = trf.quantity;
-    document.getElementById("edit-trf-notes").value = trf.notes || "";
-
-    modal?.classList.remove("hidden");
-    const qtyEl = document.getElementById("edit-trf-qty");
-    qtyEl?.focus();
-    qtyEl?.select();
-}
-
-async function submitEditTransfer(e) {
-    e.preventDefault();
-    const btn = document.getElementById("btn-save-edit-trf");
-    const id = document.getElementById("edit-trf-id")?.value;
-    const newQty = parseAnyNumber(document.getElementById("edit-trf-qty")?.value, false);
-    const notes = document.getElementById("edit-trf-notes")?.value.trim();
-
-    if (!id || newQty <= 0) {
-        return ui.toast.warning("မှန်ကန်သော အရေအတွက် ထည့်သွင်းပေးပါ။");
-    }
-
-    if (btn) btn.disabled = true;
-
-    const payload = {
-        quantity: newQty,
-        notes: notes
-    };
-
-    try {
-        await api.put(`/transfers/${id}`, payload);
-        document.getElementById("edit-trf-modal")?.classList.add("hidden");
-        ui.toast.success("လွှဲပြောင်းမှုမှတ်တမ်း ပြင်ဆင်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
-        await Promise.all([
-            loadProductsForTransfer(),
-            loadTransfers()
-        ]);
-    } catch (err) {
-        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
-async function deleteTransfer(id) {
-    const confirmed = await ui.confirm("ဤလွှဲပြောင်းမှုမှတ်တမ်းကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား?\n(ဆိုင်နှစ်ဖက်စလုံးရှိ စတော့များကို မူလအတိုင်း ပြန်လည်ညှိနှိုင်းပေးပါမည်)", "error");
+async function dispatchTransfer(id) {
+    const confirmed = await ui.confirm(
+        "ဤပစ္စည်းအား ဆိုင်ခွဲသို့ စတင်ပို့ဆောင် (Dispatch) မည်မှာ သေချာပါသလား?\n(အတည်ပြုပါက ထွက်ဆိုင်လက်ကျန်မှ TRANSFER_OUT အဖြစ် ချက်ချင်း နုတ်ယူပါမည်)",
+        "warning"
+    );
     if (!confirmed) return;
 
     try {
-        await api.delete(`/transfers/${id}`);
-        ui.toast.success("လွှဲပြောင်းမှုမှတ်တမ်း ပယ်ဖျက်ပြီး စတော့များ ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
+        await api.post(`/transfers/${id}/dispatch`, {});
+        ui.toast.success("ပစ္စည်းပို့ဆောင်မှု (Dispatched) မှတ်တမ်းတင်ပြီး ထွက်ဆိုင်စတော့မှ နုတ်ယူပြီးပါပြီ။");
         await Promise.all([
             loadProductsForTransfer(),
             loadTransfers()
         ]);
     } catch (err) {
-        ui.toast.error("ဖျက်၍မရပါ: " + err.message);
+        ui.toast.error(err.message);
+    }
+}
+
+async function receiveTransfer(id) {
+    const confirmed = await ui.confirm(
+        "လွှဲပြောင်းပေးပို့လာသော ပစ္စည်းအား လက်ခံရရှိ (Receive) ပြီမှာ သေချာပါသလား?\n(အတည်ပြုပါက ဝင်ဆိုင်လက်ကျန်သို့ TRANSFER_IN အဖြစ် ချက်ချင်း ပေါင်းထည့်ပေးပါမည်)",
+        "warning"
+    );
+    if (!confirmed) return;
+
+    try {
+        await api.post(`/transfers/${id}/receive`, {});
+        ui.toast.success("ပစ္စည်းလက်ခံရရှိမှု (Received) အတည်ပြုပြီး ဝင်ဆိုင်စတော့သို့ ပေါင်းထည့်ပြီးပါပြီ။");
+        await Promise.all([
+            loadProductsForTransfer(),
+            loadTransfers()
+        ]);
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function cancelTransfer(id, currentStatus) {
+    const msg = currentStatus === "dispatched"
+        ? "ဤလွှဲပြောင်းမှုသည် ပို့ဆောင်ထားပြီး (Dispatched) ဖြစ်ပါသည်။ ပယ်ဖျက်ပါက ထွက်ဆိုင်သို့ စတော့ ပြန်လည်ပေါင်းထည့် (Reversal) ပေးပါမည်။ ပယ်ဖျက်ရန် သေချာပါသလား?"
+        : "ဤ Pending လွှဲပြောင်းမှုစာရင်းကို ပယ်ဖျက်လိုပါသလား?";
+
+    const confirmed = await ui.confirm(msg, "error");
+    if (!confirmed) return;
+
+    try {
+        await api.post(`/transfers/${id}/cancel`, { reason: "Cancelled by user" });
+        ui.toast.success("လွှဲပြောင်းမှုမှတ်တမ်း ပယ်ဖျက်ပြီးပါပြီ။");
+        await Promise.all([
+            loadProductsForTransfer(),
+            loadTransfers()
+        ]);
+    } catch (err) {
+        ui.toast.error("ပယ်ဖျက်၍မရပါ: " + err.message);
     }
 }
 
@@ -474,25 +480,26 @@ function exportTransfersToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် လွှဲပြောင်းမှုစာရင်း မရှိပါ။");
     }
 
-    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT,QTY,FROM SHOP,TO SHOP,REMARK,TRF NO\n";
+    let csvContent = "NO,DATE,BARCODE,CATEGORY,ITEM NAME,COLOR,UNIT,QTY,FROM SHOP,TO SHOP,STATUS,REMARK,TRF NO\n";
 
     dataToExport.forEach((t, idx) => {
         const no = idx + 1;
         const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString("en-GB") : "-";
-        
+
         const row = [
             no,
-            escapeCsv(dateStr),
-            escapeCsv(t.barcode || t.sku),
-            escapeCsv(t.category),
-            escapeCsv(t.item_name),
-            escapeCsv(t.color),
-            escapeCsv(t.size || "ထည်"),
+            ui.escapeCsv(dateStr),
+            ui.escapeCsv(t.barcode || t.sku),
+            ui.escapeCsv(t.category),
+            ui.escapeCsv(t.item_name),
+            ui.escapeCsv(t.color),
+            ui.escapeCsv(t.size || "ထည်"),
             t.quantity || 0,
-            escapeCsv(t.from_branch_name),
-            escapeCsv(t.to_branch_name),
-            escapeCsv(t.notes),
-            escapeCsv(t.transfer_no)
+            ui.escapeCsv(t.from_branch_name),
+            ui.escapeCsv(t.to_branch_name),
+            ui.escapeCsv(t.status || "pending"),
+            ui.escapeCsv(t.notes),
+            ui.escapeCsv(t.transfer_no)
         ];
         csvContent += row.join(",") + "\n";
     });

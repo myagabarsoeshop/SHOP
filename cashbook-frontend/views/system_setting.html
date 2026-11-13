@@ -12,7 +12,7 @@
                     စနစ် ဆက်တင်နှင့် အရင်းအမြစ် စောင့်ကြည့်မှု (SYSTEM SETTING)
                 </h2>
                 <p class="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
-                    Cloudflare D1 Free Tier သုံးစွဲမှု၊ နှစ်ချုပ် Excel/JSON Backup နှင့် အကောင့်လုံခြုံရေး စီမံခန့်ခွဲမှု
+                    Cloudflare D1 Free Tier သုံးစွဲမှု၊ နှစ်ချုပ် Excel/JSON Backup၊ Stock Reconciliation နှင့် အကောင့်လုံခြုံရေး စီမံခန့်ခွဲမှု
                 </p>
             </div>
         </div>
@@ -48,27 +48,27 @@
             </div>
         </div>
 
-        <!-- Storage -->
+        <!-- Storage (Spec Section 8: 500 MB per DB on Free Tier) -->
         <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Database Storage</span>
                 <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-purple-500/15 text-purple-600 dark:text-purple-400">Free Tier</span>
             </div>
-            <div id="quota-storage-val" class="text-xl font-black font-mono text-slate-900 dark:text-white mb-2.5">0 MB / 5 GB</div>
+            <div id="quota-storage-val" class="text-xl font-black font-mono text-slate-900 dark:text-white mb-2.5">48 MB / 500 MB (Per DB)</div>
             <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div id="quota-storage-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 1%"></div>
+                <div id="quota-storage-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style="width: 10%"></div>
             </div>
         </div>
 
-        <!-- Plan Status -->
+        <!-- Plan Status (Spec Section 9.2: Version 4.1.0) -->
         <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-slate-500 dark:text-slate-400">Cloudflare D1 Plan</span>
                 <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400">Hardened</span>
             </div>
             <div class="my-1">
-                <div class="text-lg font-black text-emerald-600 dark:text-emerald-400">Free Tier (v3.2)</div>
-                <div class="text-[11px] font-semibold text-slate-400">PBKDF2 Auth & Composite Indexes</div>
+                <div class="text-lg font-black text-emerald-600 dark:text-emerald-400">Free Tier (v4.1.0)</div>
+                <div class="text-[11px] font-semibold text-slate-400">Ledger-Backed & Strict RBAC</div>
             </div>
         </div>
     </div>
@@ -177,7 +177,7 @@
 
     </div>
 
-    <!-- 4. Admin Only: Force Password Reset Section (Zero Plaintext Exposure) -->
+    <!-- 4. Admin Only: User Role Management, Password Reset & Stock Reconciliation Section -->
     <div id="admin-users-password-section" class="hidden p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm shrink-0">
         <div class="flex items-center gap-2.5 mb-3">
             <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm shrink-0">
@@ -185,10 +185,10 @@
             </div>
             <div>
                 <h3 class="text-sm font-extrabold text-slate-900 dark:text-white">
-                    ဝန်ထမ်းအကောင့်များ စကားဝှက် ပြန်လည်သတ်မှတ်ပေးခြင်း (Admin Force Password Reset)
+                    ဝန်ထမ်းအကောင့်များ စီမံခန့်ခွဲခြင်းနှင့် စကားဝှက် ပြန်လည်သတ်မှတ်ပေးခြင်း (Admin User & RBAC Control)
                 </h3>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
-                    စကားဝှက်များကို PBKDF2-SHA256 ဖြင့် One-Way Hash လုပ်သိမ်းဆည်းထားပါသည်။ ဝန်ထမ်းစကားဝှက်မေ့ပါက Admin မှ စကားဝှက်အသစ် တိုက်ရိုက်သတ်မှတ်ပေးနိုင်ပြီး ယခင်ဝင်ထားသော Token များ အလိုအလျောက် ပျက်ပြယ်သွားပါမည်။
+                    စကားဝှက်များကို PBKDF2-SHA256 ဖြင့် One-Way Hash လုပ်သိမ်းဆည်းထားပါသည်။ ဝန်ထမ်းစကားဝှက်မေ့ပါက Admin မှ စကားဝှက်အသစ် တိုက်ရိုက်သတ်မှတ်ပေးနိုင်သလို Role နှင့် ဆိုင်ခွဲများကိုလည်း ပြောင်းလဲပေးနိုင်ပါသည်။
                 </p>
             </div>
         </div>
@@ -212,7 +212,7 @@
                     class="w-full px-3.5 py-2.5 text-xs font-mono font-bold bg-slate-100 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-400 cursor-not-allowed">
             </div>
 
-            <!-- 3. User Role & Assigned Branch (Readonly - Replaces Plaintext Password Box) -->
+            <!-- 3. User Role & Assigned Branch (Readonly) -->
             <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">တာဝန်နှင့် ဆိုင်ခွဲ (Role & Branch)</label>
                 <input type="text" id="setting-selected-role-branch" readonly placeholder="-"

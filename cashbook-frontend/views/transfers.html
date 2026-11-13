@@ -16,7 +16,7 @@
 
             <div class="relative flex-1 max-w-md">
                 <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                <input type="text" id="trf-search" placeholder="လွှဲပြောင်းကုတ် / ပစ္စည်းအမည် / ဆိုင်ခွဲ ရှာရန်..."
+                <input type="text" id="trf-search" placeholder="လွှဲပြောင်းကုတ် / ပစ္စည်းအမည် / ဆိုင်ခွဲ / Status ရှာရန်..."
                     class="w-full pl-9 pr-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 dark:text-white transition shadow-sm">
             </div>
         </div>
@@ -37,14 +37,14 @@
             
             <button type="button" id="btn-open-create-transfer" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95">
                 <i class="fa-solid fa-plus text-xs"></i>
-                <span>Add New</span>
+                <span>Add New Transfer</span>
             </button>
         </div>
     </div>
 
-    <!-- Transfers History Table (13 Columns - Flat Design) -->
+    <!-- Transfers History Table (13 Columns - State Machine Status & Actions) -->
     <div class="flex-1 overflow-x-auto overflow-y-auto relative">
-        <table class="w-full text-left border-collapse min-w-[1500px]">
+        <table class="w-full text-left border-collapse min-w-[1550px]">
             <thead class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider sticky top-0 z-20 border-b-2 border-slate-300 dark:border-slate-700 backdrop-blur-sm whitespace-nowrap">
                 <tr class="h-11">
                     <th class="py-2.5 px-3 w-12 text-center">NO</th>
@@ -57,9 +57,9 @@
                     <th class="py-2.5 px-4 w-28 text-right">QTY</th>
                     <th class="py-2.5 px-4 w-32 text-left">FROM SHOP</th>
                     <th class="py-2.5 px-4 w-32 text-left">TO SHOP</th>
-                    <th class="py-2.5 px-4 min-w-[160px] text-left">REMARK</th>
+                    <th class="py-2.5 px-4 min-w-[200px] text-left">STATUS & REMARK</th>
                     <th class="py-2.5 px-4 w-40 text-left">TRF NO</th>
-                    <th class="py-2.5 px-3 w-24 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
+                    <th class="py-2.5 px-3 w-32 text-center sticky right-0 bg-slate-100 dark:bg-slate-800 z-30 shadow-[-4px_0_8px_rgba(0,0,0,0.06)]">
                         ACTION
                     </th>
                 </tr>
@@ -89,14 +89,14 @@
 </datalist>
 
 <!-- ===================================================================== -->
-<!-- Modal 1: Create New Stock Transfer Modal (Pro Entry Form Standard)    -->
+<!-- Modal 1: Create New Stock Transfer Modal (Spec 4.3 State Machine)     -->
 <!-- ===================================================================== -->
 <div id="create-trf-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
         <div class="p-4 bg-slate-950 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
             <div class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-parachute-box text-purple-400"></i>
-                <span>ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းပေးပို့မည်</span>
+                <span>ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းစာရင်း (Pending) ဖန်တီးမည်</span>
             </div>
             <button type="button" id="btn-close-create-trf" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
                 <i class="fa-solid fa-xmark"></i>
@@ -138,69 +138,14 @@
 
             <div class="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 rounded-xl">
                 <p class="text-[11px] text-purple-700 dark:text-purple-300 font-bold leading-relaxed">
-                    <i class="fa-solid fa-arrow-right-arrow-left mr-1"></i> အတည်ပြုပြီးပါက လက်ရှိဆိုင်ခွဲမှ စတော့နုတ်ယူပြီး လက်ခံဆိုင်တွင် အလိုအလျောက် ပေါင်းထည့်ပေးပါမည်။
+                    <i class="fa-solid fa-truck-fast mr-1"></i> လွှဲပြောင်းစာရင်း (<b>Pending</b>) အဖြစ် စတင်မှတ်တမ်းတင်ပါမည်။ ပစ္စည်းပို့ဆောင်ချိန်တွင် <b>ပို့မည် (Dispatch)</b> နှိပ်မှသာ ထွက်ဆိုင်မှ စတော့နုတ်ပြီး၊ လက်ခံဆိုင်မှ <b>လက်ခံမည် (Receive)</b> နှိပ်ချိန်တွင် ဝင်ဆိုင်စတော့သို့ ပေါင်းထည့်ပေးပါမည်။
                 </p>
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button type="submit" id="btn-submit-create-trf" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
-                    <span>အတည်ပြု၍ ဆိုင်ခွဲသို့ ပို့ဆောင်မည်</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ===================================================================== -->
-<!-- Modal 2: Edit Stock Transfer Modal (Admin - Pro Entry Form Standard)  -->
-<!-- ===================================================================== -->
-<div id="edit-trf-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
-        <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-            <div class="text-xs font-extrabold flex items-center gap-2">
-                <i class="fa-solid fa-pen-to-square text-blue-400"></i>
-                <span>လွှဲပြောင်းမှု မှတ်တမ်း ပြင်ဆင်မည်</span>
-            </div>
-            <button type="button" id="btn-close-edit-trf" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-
-        <form id="edit-trf-form" class="p-5 space-y-3.5">
-            <input type="hidden" id="edit-trf-id">
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပစ္စည်းအမည်</label>
-                <input type="text" id="edit-trf-prod-name" readonly class="w-full text-xs font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ယခင် ပမာဏ</label>
-                    <input type="text" id="edit-trf-old-qty" readonly class="w-full text-xs font-mono font-bold bg-slate-100 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-500 cursor-not-allowed">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ပြင်ဆင်မည့် ပမာဏ *</label>
-                    <input type="number" id="edit-trf-qty" required min="0.1" step="any" class="w-full text-lg font-mono font-black bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-1.5 text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">မှတ်ချက် (Remark)</label>
-                <input type="text" id="edit-trf-notes" list="trf-remark-datalist" class="w-full text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-
-            <div class="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 rounded-xl">
-                <p class="text-[11px] text-blue-700 dark:text-blue-300 font-bold leading-relaxed">
-                    <i class="fa-solid fa-calculator mr-1"></i> အရေအတွက် ကွာခြားချက်အလိုက် ဆိုင်နှစ်ဖက်စလုံးရှိ စတော့လက်ကျန်များကို စနစ်က Auto ပြန်ညှိပေးပါမည်။
-                </p>
-            </div>
-
-            <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button type="submit" id="btn-save-edit-trf" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-check"></i>
-                    <span>ပြင်ဆင်ချက် သိမ်းဆည်းမည်</span>
+                    <span>လွှဲပြောင်းစာရင်း (Pending) ဖန်တီးမည်</span>
                 </button>
             </div>
         </form>

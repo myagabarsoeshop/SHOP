@@ -1,8 +1,13 @@
-// cashbook-frontend/js/modules/pos.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/pos.js
+// SALE COUNTER (POS), SPLIT PAYMENT, RECEIPT PRINTING & VOID SALE MODULE
+// Version: 4.1.0 (Fixes KPI Pagination Bug, ALL-View Guard & RBAC Void Check)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
-import { refreshGlobalKPIs, setKPI } from "../app.js";
+import { refreshGlobalKPIs, setKPI, getLocalTodayDate } from "../app.js";
 import { PaginationController } from "../core/pagination.js";
 
 let allProducts = [];
@@ -19,28 +24,6 @@ const todaySalesPagination = new PaginationController({
     onPageChange: () => renderTodaySalesTable()
 });
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
-
-function getLocalBusinessDate() {
-    const d = new Date(Date.now() + 6.5 * 60 * 60 * 1000);
-    return d.toISOString().split("T")[0];
-}
-
-/**
- * မြန်မာဂဏန်း (၀-၉) နှင့် ကော်မာများကို ဖယ်ရှားပြီး Kyat ကိန်းပြည့်ပြောင်းပေးသည့် Helper
- */
 function parseAnyNumber(val) {
     if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -52,9 +35,6 @@ function parseAnyNumber(val) {
     return isNaN(num) ? 0 : Math.round(num);
 }
 
-/**
- * ငွေရိုက်သွင်းသည့် Input တွင် ရိုက်နေစဉ် အလိုအလျောက် ကော်မာ (150,000) ခံပေးခြင်း
- */
 function formatMoneyInputLive(inputEl) {
     if (!inputEl) return;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -71,7 +51,6 @@ function formatMoneyInputLive(inputEl) {
 }
 
 export async function initPOS() {
-    // SPA View အသစ်တင်တိုင်း DOM အသစ်ဖြစ်သဖြင့် bindEvents() ကို အမြဲခေါ်ရပါမည်
     bindEvents();
 
     cart = [];
@@ -95,9 +74,16 @@ async function loadProducts() {
     if (grid) grid.innerHTML = "";
 
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const branchId = state.getBranchId();
         const res = await api.get("/products", { branch_id: branchId });
-        allProducts = res.data || [];
+        allProducts = (res.data || []).map(p => {
+            const stockVal = Number(p.current_stock ?? p.quantity ?? p.stock ?? 0);
+            return {
+                ...p,
+                current_stock: stockVal,
+                quantity: stockVal
+            };
+        });
         populateCategoryDropdown(allProducts);
         filterAndRenderProducts();
     } catch (err) {
@@ -111,7 +97,6 @@ async function loadProducts() {
 async function loadCustomers() {
     try {
         const res = await api.get("/customers");
-        // POS တွင် ဖောက်သည် (CUSTOMER / BOTH) များကိုသာ ပြသမည်
         allCustomers = (res.data || []).filter(c => (c.entity_type || "CUSTOMER").toUpperCase() !== "SUPPLIER");
 
         const customerSelects = [
@@ -128,7 +113,7 @@ async function loadCustomers() {
             allCustomers.forEach(c => {
                 const debt = Number(c.current_debt || 0);
                 const debtStr = debt > 0 ? ` [အကြွေးကျန်: ${debt.toLocaleString()} Ks]` : "";
-                select.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)} ${c.phone ? `(${escapeHtml(c.phone)})` : ""}${debtStr}</option>`;
+                select.innerHTML += `<option value="${ui.escapeHtml(c.id)}">${ui.escapeHtml(c.name)} ${c.phone ? `(${ui.escapeHtml(c.phone)})` : ""}${debtStr}</option>`;
             });
             if (currentVal) select.value = currentVal;
         });
@@ -144,7 +129,7 @@ function populateCategoryDropdown(products) {
     const categories = [...new Set(products.map(p => (p.category || "").trim()).filter(Boolean))];
     select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${products.length})</option>`;
     categories.forEach(cat => {
-        select.innerHTML += `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`;
+        select.innerHTML += `<option value="${ui.escapeHtml(cat)}">${ui.escapeHtml(cat)}</option>`;
     });
     if (categories.includes(currentVal)) select.value = currentVal;
 }
@@ -182,6 +167,8 @@ function renderProductsGrid(products) {
     }
     empty?.classList.add("hidden");
 
+    const isAllView = state.isAllBranches();
+
     products.forEach(p => {
         const price = defaultSaleType === "retail" ? Number(p.retail_price || 0) : Number(p.wholesale_price || 0);
         const stock = Number(p.current_stock || 0);
@@ -190,23 +177,23 @@ function renderProductsGrid(products) {
         const unit = p.size || "ထည်";
 
         const card = document.createElement("div");
-        card.className = `product-card bg-white dark:bg-slate-900/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between ${isOutOfStock ? "opacity-40 pointer-events-none" : ""}`;
-        
+        card.className = `product-card bg-white dark:bg-slate-900/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between ${(isOutOfStock || isAllView) ? "opacity-40 pointer-events-none" : ""}`;
+
         card.innerHTML = `
             <div>
                 <div class="flex items-center justify-between gap-1.5 mb-1.5">
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 truncate">
-                        ${escapeHtml(p.category)}
+                        ${ui.escapeHtml(p.category)}
                     </span>
                     <span class="text-xs font-mono font-extrabold ${stock < 5 ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400"}">
-                        (${stock.toLocaleString()} ${escapeHtml(unit)})
+                        (${stock.toLocaleString()} ${ui.escapeHtml(unit)})
                     </span>
                 </div>
-                <div class="text-sm font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">${escapeHtml(p.item_name)}</div>
+                <div class="text-sm font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">${ui.escapeHtml(p.item_name)}</div>
                 <div class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1 truncate">
-                    ${escapeHtml(p.pattern || "")} ${p.color ? `• ${escapeHtml(p.color)}` : ""}
+                    ${ui.escapeHtml(p.pattern || "")} ${p.color ? `• ${ui.escapeHtml(p.color)}` : ""}
                 </div>
-                <div class="text-[10px] text-slate-400 font-mono mt-0.5">Code: ${escapeHtml(itemCode)}</div>
+                <div class="text-[10px] text-slate-400 font-mono mt-0.5">Code: ${ui.escapeHtml(itemCode)}</div>
             </div>
             <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                 <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">${price.toLocaleString()} Ks</span>
@@ -222,6 +209,11 @@ function renderProductsGrid(products) {
 }
 
 function addToCart(product) {
+    if (state.isAllBranches()) {
+        ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ အရောင်းဘောင်ချာ ဖွင့်၍ မရပါ။ ရောင်းချမည့် ဆိုင်ခွဲတစ်ခုကို အပေါ်ညာဘက်တွင် ရွေးချယ်ပါ။");
+        return;
+    }
+
     const existing = cart.find(item => item.product.id === product.id);
     const availableStock = Number(product.current_stock || 0);
 
@@ -238,7 +230,7 @@ function addToCart(product) {
         }
         const initialType = defaultSaleType;
         const initialPrice = initialType === "retail" ? Number(product.retail_price || 0) : Number(product.wholesale_price || 0);
-        
+
         cart.push({
             product,
             quantity: 1,
@@ -302,13 +294,13 @@ function renderCart() {
         row.innerHTML = `
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 mb-0.5">
-                    <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${escapeHtml(item.product.item_name)}</span>
+                    <span class="text-xs font-bold text-slate-900 dark:text-white truncate">${ui.escapeHtml(item.product.item_name)}</span>
                     <button type="button" data-idx="${index}" class="btn-toggle-price-type px-1.5 py-0.5 rounded text-[10px] font-black cursor-pointer transition ${isWholesale ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"}" title="လက်လီ/လက်ကား ဈေးနှုန်းပြောင်းရန် နှိပ်ပါ">
                         ${isWholesale ? "လက်ကား" : "လက်လီ"}
                     </button>
                 </div>
                 <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                    ${Number(item.unitPrice).toLocaleString()} Ks ${item.product.color ? `• ${escapeHtml(item.product.color)}` : ""}
+                    ${Number(item.unitPrice).toLocaleString()} Ks ${item.product.color ? `• ${ui.escapeHtml(item.product.color)}` : ""}
                 </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
@@ -335,22 +327,22 @@ function renderCart() {
     if (subtotalEl) subtotalEl.textContent = `${subtotal.toLocaleString()} Ks`;
     if (discountDisplay) discountDisplay.textContent = `-${discount.toLocaleString()} Ks`;
     if (finalTotalEl) finalTotalEl.textContent = `${finalTotal.toLocaleString()} Ks`;
-    if (checkoutBtn) checkoutBtn.disabled = false;
+    if (checkoutBtn) checkoutBtn.disabled = state.isAllBranches();
 
     container.querySelectorAll(".btn-toggle-price-type").forEach(btn => {
         btn.onclick = () => toggleCartItemPriceType(Number(btn.dataset.idx));
     });
 
     container.querySelectorAll(".btn-qty-plus").forEach(btn => {
-        btn.onclick = () => { 
+        btn.onclick = () => {
             const idx = Number(btn.dataset.idx);
             const max = parseFloat(btn.dataset.max);
             if (cart[idx].quantity >= max) {
                 ui.toast.warning(`လက်ကျန်စတော့ (${max}) ထက် ပိုမိုရောင်းချ၍ မရပါ။`);
                 return;
             }
-            cart[idx].quantity += 1; 
-            renderCart(); 
+            cart[idx].quantity += 1;
+            renderCart();
         };
     });
 
@@ -364,10 +356,10 @@ function renderCart() {
     });
 
     container.querySelectorAll(".btn-remove-item").forEach(btn => {
-        btn.onclick = () => { 
-            cart.splice(Number(btn.dataset.idx), 1); 
+        btn.onclick = () => {
+            cart.splice(Number(btn.dataset.idx), 1);
             if (cart.length === 0 && discountInput) discountInput.value = "0";
-            renderCart(); 
+            renderCart();
         };
     });
 }
@@ -388,7 +380,6 @@ function bindEvents() {
 
     if (categorySelect) categorySelect.onchange = filterAndRenderProducts;
 
-    // Smart Search & Barcode Scanner Enter Key Auto-Add
     if (searchInput) {
         searchInput.oninput = filterAndRenderProducts;
         searchInput.onkeydown = (e) => {
@@ -397,7 +388,6 @@ function bindEvents() {
                 const code = searchInput.value.trim().toLowerCase();
                 if (!code) return;
 
-                // Exact barcode or SKU match first
                 const exactMatch = allProducts.find(p =>
                     (p.barcode && String(p.barcode).toLowerCase() === code) ||
                     (p.sku && String(p.sku).toLowerCase() === code)
@@ -410,7 +400,6 @@ function bindEvents() {
                     return;
                 }
 
-                // Or if only 1 product matches the filter
                 const filtered = filterAndRenderProducts();
                 if (filtered.length === 1) {
                     addToCart(filtered[0]);
@@ -480,7 +469,6 @@ function bindEvents() {
     if (checkoutBtn) checkoutBtn.onclick = openCheckoutModal;
     if (closeModalBtn) closeModalBtn.onclick = () => modal?.classList.add("hidden");
 
-    // 4-Channel Payment Method Buttons (cash, bank, split, credit)
     document.querySelectorAll(".method-btn").forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll(".method-btn").forEach(b => {
@@ -488,7 +476,7 @@ function bindEvents() {
             });
             btn.className = "method-btn active p-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-xs font-bold flex flex-col items-center gap-1 cursor-pointer transition";
             selectedPaymentMethod = btn.dataset.method;
-            
+
             const bankGroup = document.getElementById("bank-input-group");
             const splitGroup = document.getElementById("split-input-group");
             const paidInput = document.getElementById("modal-paid-amount");
@@ -525,7 +513,6 @@ function bindEvents() {
                     paidInput.placeholder = "စရန်ငွေ ထည့်ပါ (မပေးပါက 0)";
                 }
             } else {
-                // cash
                 bankGroup?.classList.add("hidden");
                 splitGroup?.classList.add("hidden");
                 if (paidInput) {
@@ -537,7 +524,6 @@ function bindEvents() {
         };
     });
 
-    // Split Cash & Bank Inputs Sync
     const splitCashInput = document.getElementById("modal-split-cash");
     const splitBankInput = document.getElementById("modal-split-bank");
     const syncSplitInputs = (changedEl) => {
@@ -616,16 +602,21 @@ function getFinalTotal() {
 }
 
 function openCheckoutModal() {
+    if (state.isAllBranches()) {
+        ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ အရောင်းဘောင်ချာ ဖွင့်၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။");
+        return;
+    }
+
     const modal = document.getElementById("checkout-modal");
     const dueEl = document.getElementById("modal-due-amount");
     const paidInput = document.getElementById("modal-paid-amount");
     const finalTotal = getFinalTotal();
-    
+
     document.querySelector('.method-btn[data-method="cash"]')?.click();
-    
+
     if (dueEl) dueEl.textContent = `${finalTotal.toLocaleString()} Ks`;
     if (paidInput) paidInput.value = finalTotal.toLocaleString("en-US");
-    
+
     const sideCust = document.getElementById("pos-customer-select")?.value || "";
     const modalCust = document.getElementById("modal-customer-select");
     if (modalCust) {
@@ -665,16 +656,15 @@ function calculateChange() {
     }
 }
 
-/**
- * D1 Read သက်သာပြီး အတိအကျ မှန်ကန်သော POS KPIs (/pos/sales တစ်ခုတည်းမှ တွက်ချက်ခြင်း)
- */
 async function updatePOSKPIs() {
     try {
-        const branchId = state.currentBranch?.id || 1;
-        const today = getLocalBusinessDate();
+        const branchId = state.getBranchId();
+        const today = getLocalTodayDate();
 
         const salesRes = await api.get("/pos/sales", { branch_id: branchId, date: today });
-        const salesItems = salesRes.data || [];
+        const salesItems = Array.isArray(salesRes.data)
+            ? salesRes.data
+            : (salesRes.data?.items || []);
 
         const invoiceSeen = new Set();
         let cashSale = 0;
@@ -713,12 +703,20 @@ async function updatePOSKPIs() {
 }
 
 async function submitSale() {
+    let targetBranchId;
+    try {
+        targetBranchId = state.requireWriteBranchId();
+    } catch (err) {
+        ui.toast.warning(err.message);
+        return;
+    }
+
     const finalTotal = getFinalTotal();
     const paidInput = document.getElementById("modal-paid-amount");
     const paidAmount = Math.max(0, parseAnyNumber(paidInput?.value));
     const remainingDebt = Math.max(0, finalTotal - paidAmount);
 
-    const customerSelectVal = document.getElementById("modal-customer-select")?.value || 
+    const customerSelectVal = document.getElementById("modal-customer-select")?.value ||
                               document.getElementById("pos-customer-select")?.value || "";
     let customerId = null;
     let customerDisplayName = "Walk-in";
@@ -734,18 +732,14 @@ async function submitSale() {
             return;
         }
 
-        if (remainingDebt > 0 && !customerSelectVal) {
-            ui.toast.warning("အကြွေးကျန်ငွေ ရှိနေပါသဖြင့် ဖောက်သည်အမည် ဖြည့်သွင်းပေးပါ။");
-            return;
-        }
-
         try {
             const custRes = await api.post("/customers", {
                 name: newName,
                 phone: newPhone,
-                shopName: newShop,
-                customerType: defaultSaleType,
-                initialDebt: 0
+                shop_name: newShop,
+                customer_type: defaultSaleType,
+                initial_debt: 0,
+                branch_id: targetBranchId
             });
             customerId = custRes.data?.id;
             customerDisplayName = newName;
@@ -801,41 +795,41 @@ async function submitSale() {
         }
 
         const payload = {
-            branchId: state.currentBranch?.id || 1,
-            customerId: customerId,
-            saleType: defaultSaleType,
+            branch_id: targetBranchId,
+            customer_id: customerId,
+            sale_type: defaultSaleType,
             items: cart.map(i => ({
-                productId: i.product.id, 
+                product_id: i.product.id,
                 quantity: i.quantity,
-                unitPrice: i.unitPrice, 
-                costPrice: i.costPrice,
-                priceType: i.itemSaleType
+                unit_price: i.unitPrice,
+                cost_price: i.costPrice,
+                price_type: i.itemSaleType
             })),
-            discountAmount, 
-            paidAmount: actualPaid,
-            paymentMethod: selectedPaymentMethod,
-            cashAmount: pCash,
-            bankAmount: pBank,
-            bankAccountName: pBank > 0 ? bankName : null
+            discount_amount: discountAmount,
+            paid_amount: actualPaid,
+            payment_method: selectedPaymentMethod,
+            cash_amount: pCash,
+            bank_amount: pBank,
+            bank_account_name: pBank > 0 ? bankName : null
         };
 
         const res = await api.post("/pos/sales", payload);
         if (res.success !== false) {
             document.getElementById("checkout-modal")?.classList.add("hidden");
             ui.toast.success("အရောင်းဘောင်ချာ အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ");
-            
+
             showReceiptModal({
-                invoiceNo: res.data?.invoiceNo || `INV-${Date.now()}`,
+                invoiceNo: res.data?.invoiceNo || res.data?.invoice_no || "INV",
                 items: [...cart],
-                subtotal: subtotal,
+                subtotal,
                 discount: discountAmount,
-                finalTotal: finalTotal,
+                finalTotal,
                 paid: paidAmount,
                 cashAmount: pCash,
                 bankAmount: pBank,
                 customerName: customerDisplayName,
                 paymentMethod: selectedPaymentMethod,
-                bankName: bankName
+                bankName
             });
 
             cart = [];
@@ -843,7 +837,7 @@ async function submitSale() {
             if (document.getElementById("pos-customer-select")) document.getElementById("pos-customer-select").value = "";
             if (document.getElementById("modal-customer-select")) document.getElementById("modal-customer-select").value = "";
             document.getElementById("modal-new-customer-box")?.classList.add("hidden");
-            
+
             renderCart();
             await Promise.all([
                 loadProducts(),
@@ -889,7 +883,7 @@ function showReceiptModal(data) {
             const lineSub = Number(item.subtotal || Math.round(qty * price));
             tbody.innerHTML += `
                 <tr class="border-b border-dashed border-gray-300">
-                    <td class="py-1 text-[11px] font-semibold">${escapeHtml(name)}</td>
+                    <td class="py-1 text-[11px] font-semibold">${ui.escapeHtml(name)}</td>
                     <td class="py-1 text-[11px] text-center font-mono">${qty}</td>
                     <td class="py-1 text-[11px] text-right font-mono">${lineSub.toLocaleString()}</td>
                 </tr>
@@ -901,7 +895,7 @@ function showReceiptModal(data) {
     document.getElementById("rcp-discount").textContent = `-${Number(data.discount || 0).toLocaleString()}`;
     document.getElementById("rcp-final").textContent = Number(data.finalTotal || 0).toLocaleString();
     document.getElementById("rcp-paid").textContent = Number(data.paid || 0).toLocaleString();
-    
+
     const change = Number(data.paid || 0) - Number(data.finalTotal || 0);
     const changeLabel = document.getElementById("rcp-change-label");
     const changeEl = document.getElementById("rcp-change");
@@ -927,18 +921,18 @@ async function openTodaySalesModal() {
     }
 
     try {
-        const branchId = state.currentBranch?.id || 1;
-        const today = getLocalBusinessDate();
-        
+        const branchId = state.getBranchId();
+        const today = getLocalTodayDate();
+
         const res = await api.get("/pos/sales", { branch_id: branchId, date: today });
-        todaySalesList = res.data?.items || res.data || [];
+        todaySalesList = Array.isArray(res.data) ? res.data : (res.data?.items || []);
         currentFilteredTodaySales = [...todaySalesList];
 
         todaySalesPagination.reset();
         renderTodaySalesTable();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center text-rose-500 font-bold">အရောင်းစာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="p-10 text-center text-rose-500 font-bold">အရောင်းစာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -992,7 +986,8 @@ function renderTodaySalesTable() {
 
     const pageItems = todaySalesPagination.getPageItems(currentFilteredTodaySales);
     const startIdx = (todaySalesPagination.currentPage - 1) * todaySalesPagination.pageSize;
-    const canVoid = state.isAdmin ? state.isAdmin() : ["admin", "manager", "finance"].includes(state.user?.role);
+    // Spec 3.2: Only Admin, Finance, and Branch Manager can void sales (Cashier cannot void)
+    const canVoid = !state.isAllBranches() && state.can("pos.void");
 
     pageItems.forEach((s, idx) => {
         const timeStr = s.created_at ? new Date(s.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true }) : "-";
@@ -1006,7 +1001,7 @@ function renderTodaySalesTable() {
 
         let methodBadge = "";
         if (method === "bank") {
-            methodBadge = `<span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold border border-blue-500/20">ဘဏ် (${escapeHtml(s.bank_account_name || "KPay")})</span>`;
+            methodBadge = `<span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold border border-blue-500/20">ဘဏ် (${ui.escapeHtml(s.bank_account_name || "KPay")})</span>`;
         } else if (method === "split") {
             methodBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold border border-purple-500/20">နှစ်မျိုးပေါင်း</span>`;
         } else if (method === "credit") {
@@ -1020,39 +1015,39 @@ function renderTodaySalesTable() {
         tr.innerHTML = `
             <td class="p-3 text-center text-slate-400 font-mono">${startIdx + idx + 1}</td>
             <td class="p-3 font-mono text-slate-600 dark:text-slate-300">
-                <div class="font-bold text-blue-600 dark:text-blue-400">${escapeHtml(invNo)}</div>
-                <div class="text-[10px] text-slate-400">${timeStr}</div>
+                <div class="font-bold text-blue-600 dark:text-blue-400">${ui.escapeHtml(invNo)}</div>
+                <div class="text-[10px] text-slate-400">${ui.escapeHtml(timeStr)}</div>
             </td>
             <td class="p-3">
-                <div class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(s.customer_name || "Walk-in")}</div>
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold uppercase">${escapeHtml(s.sale_type || "Retail")}</span>
+                <div class="font-bold text-slate-800 dark:text-slate-200">${ui.escapeHtml(s.customer_name || "Walk-in")}</div>
+                <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold uppercase">${ui.escapeHtml(s.sale_type || "Retail")}</span>
             </td>
             <td class="p-3">
                 <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                    ${escapeHtml(s.category || "-")}
+                    ${ui.escapeHtml(s.category || "-")}
                 </span>
             </td>
             <td class="p-3">
-                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(s.item_name || "-")}</div>
-                <div class="text-[10px] text-slate-400">${escapeHtml(s.color || "")} ${s.pattern ? `• ${escapeHtml(s.pattern)}` : ""}</div>
+                <div class="font-bold text-slate-900 dark:text-white">${ui.escapeHtml(s.item_name || "-")}</div>
+                <div class="text-[10px] text-slate-400">${ui.escapeHtml(s.color || "")} ${s.pattern ? `• ${ui.escapeHtml(s.pattern)}` : ""}</div>
             </td>
             <td class="p-3 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
-                ${qty.toLocaleString()} <span class="text-[10px] font-sans font-normal text-slate-400">${escapeHtml(unit)}</span>
+                ${qty.toLocaleString()} <span class="text-[10px] font-sans font-normal text-slate-400">${ui.escapeHtml(unit)}</span>
             </td>
             <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-300">${price.toLocaleString()}</td>
             <td class="p-3 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">${amount.toLocaleString()}</td>
             <td class="p-3 text-center">${methodBadge}</td>
-            <td class="p-3 text-[11px] text-slate-500 dark:text-slate-400 max-w-[140px] truncate" title="${escapeHtml(s.notes || s.remark || "")}">
-                ${escapeHtml(s.notes || s.remark || "-")}
+            <td class="p-3 text-[11px] text-slate-500 dark:text-slate-400 max-w-[140px] truncate" title="${ui.escapeHtml(s.notes || s.remark || "")}">
+                ${ui.escapeHtml(s.notes || s.remark || "-")}
             </td>
             <td class="p-3 text-center sticky right-0 z-10">
                 <div class="flex items-center justify-center gap-1.5">
-                    <button type="button" data-inv="${escapeHtml(invNo)}" class="btn-reprint-sale px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-700 transition cursor-pointer inline-flex items-center gap-1 shadow-sm active:scale-95" title="ဘောင်ချာ မူရင်းအတိုင်း ပြန်ထုတ်မည်">
+                    <button type="button" data-inv="${ui.escapeHtml(invNo)}" class="btn-reprint-sale px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-slate-700 transition cursor-pointer inline-flex items-center gap-1 shadow-sm active:scale-95" title="ဘောင်ချာ မူရင်းအတိုင်း ပြန်ထုတ်မည်">
                         <i class="fa-solid fa-print text-xs"></i>
                         <span>Print</span>
                     </button>
                     ${canVoid ? `
-                    <button type="button" data-sale-id="${saleId}" data-inv="${escapeHtml(invNo)}" class="btn-void-sale w-7 h-7 bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white text-rose-500 rounded-lg border border-slate-300 dark:border-slate-700 transition cursor-pointer inline-flex items-center justify-center shadow-sm active:scale-95" title="ဘောင်ချာပယ်ဖျက်ပြီး စတော့ပြန်သွင်းမည်">
+                    <button type="button" data-sale-id="${ui.escapeHtml(saleId)}" data-inv="${ui.escapeHtml(invNo)}" class="btn-void-sale w-7 h-7 bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 hover:text-white text-rose-500 rounded-lg border border-slate-300 dark:border-slate-700 transition cursor-pointer inline-flex items-center justify-center shadow-sm active:scale-95" title="ဘောင်ချာပယ်ဖျက်ပြီး စတော့ပြန်သွင်းမည်">
                         <i class="fa-solid fa-trash-can text-xs"></i>
                     </button>
                     ` : ""}
@@ -1074,11 +1069,11 @@ function renderTodaySalesTable() {
 
                 showReceiptModal({
                     invoiceNo: invNo,
-                    items: items,
+                    items,
                     subtotal: sub,
                     discount: disc,
                     finalTotal: fin,
-                    paid: paid,
+                    paid,
                     cashAmount: items[0].cash_amount || 0,
                     bankAmount: items[0].bank_amount || 0,
                     customerName: items[0].customer_name || "Walk-in",
@@ -1099,7 +1094,7 @@ function renderTodaySalesTable() {
 async function voidSaleInvoice(saleId, invNo) {
     if (!saleId) return;
     const confirmed = await ui.confirm(
-        `ဘောင်ချာ (${invNo}) ကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား? ပယ်ဖျက်ပါက ရောင်းထုတ်ခဲ့သော ပစ္စည်းများ စတော့ထဲသို့ ပြန်ဝင်ပြီး ငွေစာရင်းနှင့် အကြွေးစာရင်းများ အလိုအလျောက် ပြန်ညှိပေးပါမည်။`,
+        `ဘောင်ချာ (${invNo}) ကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား? ပယ်ဖျက်ပါက ရောင်းထုတ်ခဲ့သော ပစ္စည်းများ စတော့နှင့် Movement Ledger ထဲသို့ ပြန်ဝင်ပြီး ငွေစာရင်းနှင့် အကြွေးစာရင်းများ အလိုအလျောက် ပြန်ညှိပေးပါမည်။`,
         "error"
     );
     if (!confirmed) return;
@@ -1125,7 +1120,7 @@ function exportTodaySalesToCSV() {
         return ui.toast.warning("ထုတ်ယူရန် အရောင်းစာရင်း မရှိသေးပါ။");
     }
 
-    const todayStr = getLocalBusinessDate();
+    const todayStr = getLocalTodayDate();
     let csv = "Invoice No,Time,Customer Name,Sale Type,Category,Item Name,Quantity,Unit Price,Amount,Payment Method,Remark\n";
 
     dataToExport.forEach(s => {
@@ -1135,17 +1130,17 @@ function exportTodaySalesToCSV() {
         const amount = Number(s.subtotal || Math.round(qty * price));
 
         const row = [
-            escapeCsv(s.invoice_no || `INV-${s.sale_id || s.id}`),
-            escapeCsv(timeStr),
-            escapeCsv(s.customer_name || "Walk-in"),
-            escapeCsv(s.sale_type || "Retail"),
-            escapeCsv(s.category || "-"),
-            escapeCsv(s.item_name || "-"),
+            ui.escapeCsv(s.invoice_no || `INV-${s.sale_id || s.id}`),
+            ui.escapeCsv(timeStr),
+            ui.escapeCsv(s.customer_name || "Walk-in"),
+            ui.escapeCsv(s.sale_type || "Retail"),
+            ui.escapeCsv(s.category || "-"),
+            ui.escapeCsv(s.item_name || "-"),
             qty,
             price,
             amount,
-            escapeCsv(s.payment_method || "Cash"),
-            escapeCsv(s.notes || s.remark || "-")
+            ui.escapeCsv(s.payment_method || "Cash"),
+            ui.escapeCsv(s.notes || s.remark || "-")
         ];
         csv += row.join(",") + "\n";
     });

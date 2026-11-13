@@ -1,4 +1,9 @@
-// cashbook-frontend/js/modules/inventory.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/inventory.js
+// BRANCH INVENTORY, OPENING STOCK WORKFLOW & PHYSICAL STOCK COUNT/ADJUSTMENTS
+// Version: 4.1.0 (Spec Sections 1.3, 3.2, 4, 5 & 6 Compliant)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
@@ -8,30 +13,21 @@ import { PaginationController } from "../core/pagination.js";
 let products = [];
 let currentFilteredProducts = [];
 let branchesList = [];
+let activeTab = "balances"; // 'balances' | 'opening' | 'adjustments'
+
+// Opening Stock & Adjustments State
+let openingCounts = [];
+let activeOpeningDetail = null;
+let openingDraftMap = new Map(); // product_id -> quantity
+
+let adjustmentsList = [];
+let activeAdjustmentDetail = null;
+let adjustmentDraftMap = new Map(); // product_id -> { counted_qty, reason }
 
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable()
 });
-
-function canManageCatalog() {
-    const role = String(state.user?.role || "").toLowerCase();
-    return state.isAdmin() || role === "finance" || role === "manager";
-}
-
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
 
 function parseAnyNumber(val, isInteger = true) {
     if (!val && val !== 0) return 0;
@@ -71,9 +67,134 @@ function parseCsvLine(line) {
 }
 
 export async function initInventory() {
+    activeTab = "balances";
+    activeOpeningDetail = null;
+    activeAdjustmentDetail = null;
+    openingDraftMap.clear();
+    adjustmentDraftMap.clear();
+
+    injectStockControlWorkspace();
     bindEvents();
     await loadBranches();
     await loadInventory();
+    await loadOpeningStatusBadge();
+}
+
+/**
+ * Spec 5.6 & 6.2: Opening Stock နှင့် Stock Count/Adjustment Sub-tabs နှင့် Panel များကို
+ * Inventory View အတွင်း အလိုအလျောက် ထည့်သွင်းပေးခြင်း
+ */
+function injectStockControlWorkspace() {
+    const canStockControl = state.can("opening.create") || state.can("adjustment.create") || state.canApproveStock();
+    if (!canStockControl) return;
+
+    const viewContainer = document.getElementById("view-container");
+    const mainCard = viewContainer?.firstElementChild;
+    if (!mainCard || document.getElementById("inv-subtabs-bar")) return;
+
+    const subTabsBar = document.createElement("div");
+    subTabsBar.id = "inv-subtabs-bar";
+    subTabsBar.className = "px-3 py-2 bg-slate-100/80 dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0";
+    subTabsBar.innerHTML = `
+        <div class="flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <button type="button" id="inv-tab-balances" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer bg-emerald-600 text-white shadow-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-boxes-stacked"></i>
+                <span>လက်ကျန်စာရင်း (Balances)</span>
+            </button>
+            <button type="button" id="inv-tab-opening" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-clipboard-check"></i>
+                <span>ကနဦးစတော့ (Opening Stock)</span>
+            </button>
+            <button type="button" id="inv-tab-adjustments" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5">
+                <i class="fa-solid fa-scale-balanced"></i>
+                <span>စတော့ရေတွက်/ပြင်ဆင်ချက် (Adjustment)</span>
+            </button>
+        </div>
+        <div id="inv-opening-status-badge-container" class="flex items-center gap-2 text-xs"></div>
+    `;
+
+    mainCard.prepend(subTabsBar);
+
+    const dynamicPanel = document.createElement("div");
+    dynamicPanel.id = "inv-workflow-panel";
+    dynamicPanel.className = "hidden flex-1 overflow-y-auto p-4 bg-slate-50/40 dark:bg-slate-950/40";
+    mainCard.appendChild(dynamicPanel);
+
+    document.getElementById("inv-tab-balances")?.addEventListener("click", () => switchInventoryTab("balances"));
+    document.getElementById("inv-tab-opening")?.addEventListener("click", () => switchInventoryTab("opening"));
+    document.getElementById("inv-tab-adjustments")?.addEventListener("click", () => switchInventoryTab("adjustments"));
+}
+
+async function switchInventoryTab(tabName) {
+    activeTab = tabName;
+    const tabBtns = {
+        balances: document.getElementById("inv-tab-balances"),
+        opening: document.getElementById("inv-tab-opening"),
+        adjustments: document.getElementById("inv-tab-adjustments")
+    };
+
+    Object.entries(tabBtns).forEach(([key, btn]) => {
+        if (!btn) return;
+        if (key === tabName) {
+            btn.className = "px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer bg-emerald-600 text-white shadow-xs flex items-center gap-1.5";
+        } else {
+            btn.className = "px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5";
+        }
+    });
+
+    const workflowPanel = document.getElementById("inv-workflow-panel");
+    const tableWrapper = document.getElementById("inv-table-body")?.closest("div.flex-1");
+    const paginationEl = document.getElementById("inventory-pagination");
+    const toolbarEl = document.getElementById("inv-search")?.closest("div.p-3");
+
+    if (tabName === "balances") {
+        workflowPanel?.classList.add("hidden");
+        tableWrapper?.classList.remove("hidden");
+        paginationEl?.classList.remove("hidden");
+        toolbarEl?.classList.remove("hidden");
+        await loadInventory();
+    } else {
+        tableWrapper?.classList.add("hidden");
+        paginationEl?.classList.add("hidden");
+        toolbarEl?.classList.add("hidden");
+        workflowPanel?.classList.remove("hidden");
+
+        if (tabName === "opening") {
+            await renderOpeningStockWorkspace();
+        } else if (tabName === "adjustments") {
+            await renderAdjustmentsWorkspace();
+        }
+    }
+}
+
+async function loadOpeningStatusBadge() {
+    const container = document.getElementById("inv-opening-status-badge-container");
+    if (!container || !state.can("opening.create")) return;
+
+    try {
+        const branchId = state.getBranchId();
+        const res = await api.get("/opening-stock", { branch_id: branchId });
+        openingCounts = res.data || [];
+
+        if (state.isAllBranches()) {
+            const submittedCount = openingCounts.filter(o => o.status === "submitted").length;
+            container.innerHTML = submittedCount > 0
+                ? `<span class="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-extrabold text-[11px] flex items-center gap-1.5">
+                    <i class="fa-solid fa-bell animate-bounce"></i> Opening Approve ရန် (${submittedCount}) စောင် ရှိပါသည်
+                   </span>`
+                : `<span class="text-slate-400 font-bold text-[11px]">Opening Stock: ဆိုင်အားလုံး</span>`;
+            return;
+        }
+
+        const latest = openingCounts[0];
+        if (!latest) {
+            container.innerHTML = `<span class="text-slate-400 font-bold text-[11px]">Opening Status:</span> ${ui.statusBadge("draft")}`;
+        } else {
+            container.innerHTML = `<span class="text-slate-400 font-bold text-[11px]">Opening Status:</span> ${ui.statusBadge(latest.status)}`;
+        }
+    } catch {
+        // Ignore badge error for cashiers
+    }
 }
 
 function bindEvents() {
@@ -85,12 +206,14 @@ function bindEvents() {
             const icon = refreshBtn.querySelector("i");
             icon?.classList.add("fa-spin");
             await loadInventory();
+            await loadOpeningStatusBadge();
             setTimeout(() => icon?.classList.remove("fa-spin"), 400);
             ui.toast.info("စတော့လက်ကျန် စာရင်းများ အသစ်ပြန်လည်ဆွဲယူပြီးပါပြီ");
         });
     }
 
-    if (canManageCatalog()) {
+    // Spec 3.2: Only Admin & Finance can create/edit Product Master or bulk import CSV
+    if (state.canManageCatalog()) {
         document.getElementById("btn-add-product")?.classList.remove("hidden");
         document.getElementById("btn-import-csv")?.classList.remove("hidden");
         document.getElementById("btn-add-product")?.addEventListener("click", () => openProductModal());
@@ -140,16 +263,23 @@ async function loadInventory() {
     }
 
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const branchId = state.getBranchId();
         const res = await api.get("/products", { branch_id: branchId });
-        products = res.data || [];
+        products = (res.data || []).map(p => {
+            const stockVal = Number(p.current_stock ?? p.quantity ?? p.stock ?? 0);
+            return {
+                ...p,
+                current_stock: stockVal,
+                quantity: stockVal
+            };
+        });
 
         populateCategoryFilter();
         updateInventoryKPIs();
         filterAndRender();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -170,17 +300,17 @@ function populateCategoryFilter() {
 }
 
 function updateInventoryKPIs() {
-    const isManager = canManageCatalog();
+    const canViewCost = state.canViewCost();
     const totalTypes = products.length;
     const totalPieces = products.reduce((sum, p) => sum + Number(p.current_stock || 0), 0);
-    const totalCostValue = isManager
+    const totalCostValue = canViewCost
         ? products.reduce((sum, p) => sum + Math.round(Number(p.current_stock || 0) * Number(p.cost_price || 0)), 0)
         : 0;
     const lowStockCount = products.filter(p => Number(p.current_stock || 0) <= Number(p.alert_quantity || 5)).length;
 
     setKPI(1, "Total Category", totalTypes, "fa-tags", "blue");
     setKPI(2, "Stock Balances", totalPieces, "fa-shirt", "emerald");
-    setKPI(3, "Stock Value", isManager ? totalCostValue : "-", "fa-vault", "amber");
+    setKPI(3, "Stock Value", canViewCost ? totalCostValue : "-", "fa-vault", "amber");
     setKPI(4, "Low Stock", lowStockCount, "fa-triangle-exclamation", "rose");
 }
 
@@ -217,7 +347,12 @@ function renderTable() {
         return;
     }
 
-    const isManager = canManageCatalog();
+    const canManageMaster = state.canManageCatalog();
+    const canViewCost = state.canViewCost();
+    const isAllView = state.isAllBranches();
+    const canTransfer = !isAllView && state.can("transfer.create");
+    const canWaste = !isAllView && state.can("waste.create");
+
     const pageItems = pagination.getPageItems(currentFilteredProducts);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
@@ -225,39 +360,52 @@ function renderTable() {
         const stock = Number(item.current_stock || 0);
         const isLow = stock <= Number(item.alert_quantity || 5);
         const unit = item.size || "ထည်";
-        const costDisplay = isManager ? Number(item.cost_price || 0).toLocaleString() : "-";
+        const costDisplay = canViewCost && item.cost_price !== undefined
+            ? Number(item.cost_price || 0).toLocaleString()
+            : "-";
 
-        const actionButtons = isManager ? `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်" 
-                    class="btn-edit-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+        const safeId = ui.escapeHtml(item.id);
+        const btnList = [];
+
+        if (canManageMaster) {
+            btnList.push(`
+                <button type="button" data-id="${safeId}" title="ပစ္စည်း Master အချက်အလက် ပြင်ဆင်မည် (စတော့မပါ)" 
+                    class="btn-edit-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" 
-                    class="btn-transfer-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+            `);
+        }
+
+        if (canTransfer) {
+            btnList.push(`
+                <button type="button" data-id="${safeId}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည် (Pending)" 
+                    class="btn-transfer-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-400 rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-parachute-box text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" 
-                    class="btn-waste-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+            `);
+        }
+
+        if (canWaste) {
+            btnList.push(`
+                <button type="button" data-id="${safeId}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" 
+                    class="btn-waste-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-box-open text-xs"></i>
                 </button>
-                <button type="button" data-id="${item.id}" title="စာရင်းမှ ဖျက်မည်" 
-                    class="btn-delete-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+            `);
+        }
+
+        if (canManageMaster) {
+            btnList.push(`
+                <button type="button" data-id="${safeId}" title="စာရင်းမှ ပိတ်သိမ်းမည် (Soft Delete)" 
+                    class="btn-delete-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
-            </div>
-        ` : `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်" 
-                    class="btn-transfer-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-purple-600 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-parachute-box text-xs"></i>
-                </button>
-                <button type="button" data-id="${item.id}" title="ပျက်စီး/အလေအလွင့် စာရင်းသွင်းမည်" 
-                    class="btn-waste-prod w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 dark:hover:bg-amber-500 text-amber-600 hover:text-white dark:text-amber-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-box-open text-xs"></i>
-                </button>
-            </div>
-        `;
+            `);
+        }
+
+        const actionButtons = btnList.length > 0
+            ? `<div class="flex items-center justify-center gap-1.5">${btnList.join("")}</div>`
+            : `<span class="text-[10px] text-slate-400 font-bold">View Only</span>`;
 
         const statusBadge = isLow
             ? `<span class="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-mono text-[11px] font-bold">စတော့နည်း</span>`
@@ -267,12 +415,12 @@ function renderTable() {
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         tr.innerHTML = `
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
-            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
-            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
-            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.pattern || "-")}">${escapeHtml(item.pattern || "-")}</td>
-            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(item.color || "-")}">${escapeHtml(item.color || "-")}</td>
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(unit)}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(item.barcode || item.sku || "-")}">${ui.escapeHtml(item.barcode || item.sku || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(item.category || "-")}">${ui.escapeHtml(item.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(item.item_name || "-")}">${ui.escapeHtml(item.item_name || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(item.pattern || "-")}">${ui.escapeHtml(item.pattern || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(item.color || "-")}">${ui.escapeHtml(item.color || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${ui.escapeHtml(unit)}</td>
             <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">${costDisplay}</td>
             <td class="py-2 px-4 text-right font-mono text-sm font-bold text-blue-600 dark:text-blue-400 w-28">${Number(item.wholesale_price || 0).toLocaleString()}</td>
             <td class="py-2 px-4 text-right font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400 w-28">${Number(item.retail_price || 0).toLocaleString()}</td>
@@ -299,7 +447,7 @@ function renderTable() {
         };
     });
 
-    if (isManager) {
+    if (canManageMaster) {
         tbody.querySelectorAll(".btn-edit-prod").forEach(btn => {
             btn.onclick = () => {
                 const prod = products.find(p => p.id === Number(btn.dataset.id));
@@ -322,13 +470,574 @@ function safeSetValue(id, value) {
     if (el) el.value = value;
 }
 
-// --- Stock Transfer Logic ---
+// =============================================================================
+// OPENING STOCK WORKFLOW UI (Spec Section 5)
+// =============================================================================
+async function renderOpeningStockWorkspace() {
+    const panel = document.getElementById("inv-workflow-panel");
+    if (!panel) return;
+
+    panel.innerHTML = `<div class="p-12 text-center text-slate-400 text-xs font-bold"><i class="fa-solid fa-spinner fa-spin text-xl text-emerald-500 mb-2"></i><div>Opening Stock စာရင်းများ ဆွဲယူနေပါသည်...</div></div>`;
+
+    try {
+        const branchId = state.getBranchId();
+        const [openRes, prodRes] = await Promise.all([
+            api.get("/opening-stock", { branch_id: branchId }),
+            products.length > 0 ? Promise.resolve({ data: products }) : api.get("/products", { branch_id: branchId })
+        ]);
+
+        openingCounts = openRes.data || [];
+        if (products.length === 0 && Array.isArray(prodRes.data)) {
+            products = prodRes.data;
+        }
+
+        const isAllView = state.isAllBranches();
+        const canApprove = state.canApproveStock();
+        const branchOpening = !isAllView ? openingCounts[0] : null;
+        const isApprovedLocked = branchOpening?.status === "approved";
+
+        let html = `
+            <div class="max-w-6xl mx-auto space-y-4">
+                <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-clipboard-check text-emerald-500"></i>
+                            <span>ဆိုင်ခွဲ ကနဦးစတော့ စာရင်းဖွင့်စနစ် (Opening Stock Workflow)</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">ဆိုင်ခွဲတစ်ခုလျှင် တစ်ကြိမ်သာ Opening Stock အတည်ပြုနိုင်ပါသည်။ အတည်ပြုပြီးနောက် ပြင်ဆင်လိုပါက Stock Adjustment ကို သုံးပါ။</p>
+                    </div>
+                    ${!isAllView && !isApprovedLocked && state.can("opening.create") ? `
+                        <button type="button" id="btn-start-opening-draft" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-pen"></i>
+                            <span>${branchOpening ? "Opening Draft ပြင်ဆင်မည်" : "Opening Stock မူကြမ်း စတင်ဖန်တီးမည်"}</span>
+                        </button>
+                    ` : ""}
+                </div>
+        `;
+
+        // Show Reject Reason Banner if rejected (Spec 5.6)
+        if (branchOpening && branchOpening.status === "rejected" && branchOpening.reject_reason) {
+            html += `
+                <div class="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-start gap-3">
+                    <i class="fa-solid fa-circle-xmark text-base mt-0.5"></i>
+                    <div>
+                        <div class="font-black">Opening Stock ပယ်ချခံထားရပါသည် (Rejected)</div>
+                        <div class="mt-1">အကြောင်းပြချက်: <b>${ui.escapeHtml(branchOpening.reject_reason)}</b></div>
+                        <div class="mt-1 text-[11px] opacity-80">ပစ္စည်းအရေအတွက်များကို ပြန်လည်စစ်ဆေးပြင်ဆင်ပြီး ပြန်လည် Submit တင်ပေးပါ။</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // List of Opening Stock Counts (Admin/Finance Approval Queue + Branch History)
+        html += `
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 font-extrabold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                    <span>Opening Stock စာရွက်များ စာရင်း</span>
+                    <span class="text-[11px] text-slate-400">${openingCounts.length} စောင်</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-black uppercase">
+                            <tr class="h-10">
+                                <th class="px-4">ID</th>
+                                <th class="px-4">ဆိုင်ခွဲ</th>
+                                <th class="px-4">As Of Date</th>
+                                <th class="px-4 text-center">ပစ္စည်းအမျိုးအစား</th>
+                                <th class="px-4 text-right">စုစုပေါင်းအရေအတွက်</th>
+                                <th class="px-4 text-center">Status</th>
+                                <th class="px-4">ဖန်တီးသူ / အတည်ပြုသူ</th>
+                                <th class="px-4 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                            ${openingCounts.length === 0 ? `
+                                <tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold">Opening Stock စာရွက် မရှိသေးပါ</td></tr>
+                            ` : openingCounts.map(oc => `
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 h-11">
+                                    <td class="px-4 font-mono font-bold">#${oc.id}</td>
+                                    <td class="px-4 font-bold">${ui.escapeHtml(oc.branch_name || "")}</td>
+                                    <td class="px-4 font-mono">${ui.escapeHtml(oc.as_of_date)}</td>
+                                    <td class="px-4 text-center font-mono font-bold">${Number(oc.item_count || 0)}</td>
+                                    <td class="px-4 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">${Number(oc.total_quantity || 0).toLocaleString()}</td>
+                                    <td class="px-4 text-center">${ui.statusBadge(oc.status)}</td>
+                                    <td class="px-4 text-[11px] text-slate-500">
+                                        ${ui.escapeHtml(oc.created_by_name || "-")}${oc.decided_by_name ? ` / <b>${ui.escapeHtml(oc.decided_by_name)}</b>` : ""}
+                                    </td>
+                                    <td class="px-4 text-center">
+                                        <div class="flex items-center justify-center gap-1.5">
+                                            <button type="button" data-id="${oc.id}" class="btn-view-opening px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-600 dark:text-blue-400 font-bold text-[11px] cursor-pointer transition">
+                                                အသေးစိတ် / စီမံရန်
+                                            </button>
+                                            ${canApprove && oc.status === "submitted" ? `
+                                                <button type="button" data-id="${oc.id}" class="btn-approve-opening px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer transition">
+                                                    Approve
+                                                </button>
+                                                <button type="button" data-id="${oc.id}" class="btn-reject-opening px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer transition">
+                                                    Reject
+                                                </button>
+                                            ` : ""}
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="opening-editor-box"></div>
+        </div>`;
+
+        panel.innerHTML = html;
+
+        document.getElementById("btn-start-opening-draft")?.addEventListener("click", async () => {
+            if (branchOpening) {
+                await openOpeningEditor(branchOpening.id);
+            } else {
+                await createNewOpeningDraft();
+            }
+        });
+
+        panel.querySelectorAll(".btn-view-opening").forEach(btn => {
+            btn.addEventListener("click", () => openOpeningEditor(Number(btn.dataset.id)));
+        });
+
+        panel.querySelectorAll(".btn-approve-opening").forEach(btn => {
+            btn.addEventListener("click", () => approveOpeningCount(Number(btn.dataset.id)));
+        });
+
+        panel.querySelectorAll(".btn-reject-opening").forEach(btn => {
+            btn.addEventListener("click", () => rejectOpeningCount(Number(btn.dataset.id)));
+        });
+    } catch (err) {
+        panel.innerHTML = `<div class="p-8 text-center text-rose-500 font-bold text-xs">${ui.escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function createNewOpeningDraft() {
+    try {
+        const branchId = state.requireWriteBranchId();
+        const res = await api.post("/opening-stock", {
+            branch_id: branchId,
+            as_of_date: getLocalTodayDate()
+        });
+        ui.toast.success("Opening Stock မူကြမ်း ဖန်တီးပြီးပါပြီ");
+        await renderOpeningStockWorkspace();
+        if (res.data?.id) {
+            await openOpeningEditor(res.data.id);
+        }
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function openOpeningEditor(countId) {
+    const box = document.getElementById("opening-editor-box");
+    if (!box) return;
+
+    box.innerHTML = `<div class="p-8 text-center text-slate-400 text-xs font-bold"><i class="fa-solid fa-spinner fa-spin mr-2"></i>ဖွင့်လှစ်နေပါသည်...</div>`;
+
+    try {
+        const res = await api.get(`/opening-stock/${countId}`);
+        activeOpeningDetail = res.data;
+        openingDraftMap.clear();
+
+        (activeOpeningDetail.items || []).forEach(it => {
+            openingDraftMap.set(Number(it.product_id), Number(it.quantity || 0));
+        });
+
+        const isEditable = (activeOpeningDetail.status === "draft" || activeOpeningDetail.status === "rejected") && state.can("opening.create");
+
+        box.innerHTML = `
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                <div class="p-4 bg-slate-950 text-white flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="text-xs font-extrabold flex items-center gap-2">
+                            <span>Opening Stock #${activeOpeningDetail.id} — ${ui.escapeHtml(activeOpeningDetail.branch_name)}</span>
+                            ${ui.statusBadge(activeOpeningDetail.status)}
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-0.5">As of Date: ${ui.escapeHtml(activeOpeningDetail.as_of_date)}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${isEditable ? `
+                            <button type="button" id="btn-save-opening-items" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs cursor-pointer transition">
+                                <i class="fa-solid fa-floppy-disk mr-1"></i>မူကြမ်း သိမ်းမည် (Save Draft)
+                            </button>
+                            <button type="button" id="btn-submit-opening-count" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs cursor-pointer transition">
+                                <i class="fa-solid fa-paper-plane mr-1"></i>အတည်ပြုရန် ပေးပို့မည် (Submit)
+                            </button>
+                        ` : ""}
+                    </div>
+                </div>
+                <div class="max-h-[420px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black sticky top-0">
+                            <tr class="h-10">
+                                <th class="px-4">SKU</th>
+                                <th class="px-4">အမျိုးအစား</th>
+                                <th class="px-4">ပစ္စည်းအမည်</th>
+                                <th class="px-4">ယူနစ်</th>
+                                <th class="px-4 text-right w-44">ကနဦးလက်ကျန် (Opening Qty)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                            ${products.map(p => {
+                                const val = openingDraftMap.get(Number(p.id)) ?? 0;
+                                return `
+                                    <tr class="h-10 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                                        <td class="px-4 font-mono text-slate-500">${ui.escapeHtml(p.sku || "-")}</td>
+                                        <td class="px-4 font-bold text-emerald-600 dark:text-emerald-400">${ui.escapeHtml(p.category)}</td>
+                                        <td class="px-4 font-extrabold text-slate-900 dark:text-white">${ui.escapeHtml(p.item_name)}</td>
+                                        <td class="px-4 font-mono">${ui.escapeHtml(p.size || "ထည်")}</td>
+                                        <td class="px-4 text-right">
+                                            ${isEditable ? `
+                                                <input type="number" step="any" min="0" data-pid="${p.id}" value="${val}"
+                                                    class="opening-qty-input w-28 px-2.5 py-1 text-right font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                            ` : `<span class="font-mono font-black">${Number(val).toLocaleString()}</span>`}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        document.getElementById("btn-save-opening-items")?.addEventListener("click", () => saveOpeningItems(countId, false));
+        document.getElementById("btn-submit-opening-count")?.addEventListener("click", () => saveOpeningItems(countId, true));
+    } catch (err) {
+        box.innerHTML = `<div class="p-4 text-rose-500 font-bold text-xs">${ui.escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function saveOpeningItems(countId, andSubmit = false) {
+    const inputs = Array.from(document.querySelectorAll(".opening-qty-input"));
+    const items = inputs
+        .map(inp => ({
+            product_id: Number(inp.dataset.pid),
+            quantity: parseAnyNumber(inp.value, false)
+        }))
+        .filter(it => it.quantity > 0);
+
+    if (items.length === 0) {
+        return ui.toast.warning("အနည်းဆုံး ပစ္စည်း (၁) မျိုးတွင် ကနဦးလက်ကျန် (> 0) ထည့်သွင်းပေးပါ");
+    }
+
+    try {
+        await api.put(`/opening-stock/${countId}/items`, { items });
+        if (andSubmit) {
+            await api.post(`/opening-stock/${countId}/submit`, {});
+            ui.toast.success("Opening Stock အတည်ပြုချက်တောင်းခံရန် (Submitted) ပေးပို့ပြီးပါပြီ");
+        } else {
+            ui.toast.success("Opening Stock မူကြမ်း သိမ်းဆည်းပြီးပါပြီ");
+        }
+        await loadOpeningStatusBadge();
+        await renderOpeningStockWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function approveOpeningCount(countId) {
+    const confirmed = await ui.confirm("ဤ Opening Stock စာရွက်အား အတည်ပြုပြီး ဆိုင်ခွဲလက်ကျန်နှင့် Movement Ledger ထဲသို့ ထည့်သွင်းမည်မှာ သေချာပါသလား?", "warning");
+    if (!confirmed) return;
+
+    try {
+        await api.post(`/opening-stock/${countId}/approve`, {});
+        ui.toast.success("Opening Stock အတည်ပြုပြီးပါပြီ");
+        await loadOpeningStatusBadge();
+        await renderOpeningStockWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function rejectOpeningCount(countId) {
+    const reason = window.prompt("ငြင်းပယ်ရသည့် အကြောင်းပြချက် (Reject Reason) ရေးသားပေးပါ:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+        return ui.toast.warning("ငြင်းပယ်ရသည့် အကြောင်းပြချက် မဖြစ်မနေ လိုအပ်ပါသည်");
+    }
+
+    try {
+        await api.post(`/opening-stock/${countId}/reject`, { reason: reason.trim() });
+        ui.toast.info("Opening Stock အား ပြန်လည်ပြင်ဆင်ရန် Reject ပြုလုပ်ပြီးပါပြီ");
+        await loadOpeningStatusBadge();
+        await renderOpeningStockWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+// =============================================================================
+// PHYSICAL STOCK COUNT & ADJUSTMENTS WORKFLOW UI (Spec Section 6)
+// =============================================================================
+async function renderAdjustmentsWorkspace() {
+    const panel = document.getElementById("inv-workflow-panel");
+    if (!panel) return;
+
+    panel.innerHTML = `<div class="p-12 text-center text-slate-400 text-xs font-bold"><i class="fa-solid fa-spinner fa-spin text-xl text-emerald-500 mb-2"></i><div>Stock Adjustment စာရင်းများ ဆွဲယူနေပါသည်...</div></div>`;
+
+    try {
+        const branchId = state.getBranchId();
+        const [adjRes, prodRes] = await Promise.all([
+            api.get("/adjustments", { branch_id: branchId }),
+            products.length > 0 ? Promise.resolve({ data: products }) : api.get("/products", { branch_id: branchId })
+        ]);
+
+        adjustmentsList = adjRes.data || [];
+        if (products.length === 0 && Array.isArray(prodRes.data)) {
+            products = prodRes.data;
+        }
+
+        const isAllView = state.isAllBranches();
+        const canApprove = state.can("adjustment.approve");
+
+        let html = `
+            <div class="max-w-6xl mx-auto space-y-4">
+                <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-scale-balanced text-emerald-500"></i>
+                            <span>မြေပြင်စတော့ ရေတွက်ခြင်းနှင့် ကွဲလွဲမှု ပြင်ဆင်ချက် (Stock Count & Adjustment)</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">ကွဲလွဲမှုရှိသော ပစ္စည်းတိုင်းအတွက် အကြောင်းရင်း (Reason) မဖြစ်မနေ လိုအပ်ပြီး ကျပ် 50,000 အထက် ကွဲလွဲမှုကို Admin သာ Approve လုပ်နိုင်ပါသည်။</p>
+                    </div>
+                    ${!isAllView && state.can("adjustment.create") ? `
+                        <button type="button" id="btn-open-new-adj-sheet" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1.5">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Stock Count စာရွက်အသစ် ဖွင့်မည်</span>
+                        </button>
+                    ` : ""}
+                </div>
+
+                <div id="adj-creator-box"></div>
+
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                    <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 font-extrabold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                        <span>Stock Adjustment မှတ်တမ်းများ</span>
+                        <span class="text-[11px] text-slate-400">${adjustmentsList.length} စောင်</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-black uppercase">
+                                <tr class="h-10">
+                                    <th class="px-4">Ref No</th>
+                                    <th class="px-4">ဆိုင်ခွဲ</th>
+                                    <th class="px-4">ရက်စွဲ</th>
+                                    <th class="px-4 text-right">ကွဲလွဲမှုတန်ဖိုး (Variance Value)</th>
+                                    <th class="px-4 text-center">Status</th>
+                                    <th class="px-4">တင်ပြသူ / အတည်ပြုသူ</th>
+                                    <th class="px-4 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                                ${adjustmentsList.length === 0 ? `
+                                    <tr><td colspan="7" class="p-8 text-center text-slate-400 font-bold">Stock Adjustment မှတ်တမ်း မရှိသေးပါ</td></tr>
+                                ` : adjustmentsList.map(adj => `
+                                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 h-11">
+                                        <td class="px-4 font-mono font-bold text-blue-600 dark:text-blue-400">${ui.escapeHtml(adj.reference_no)}</td>
+                                        <td class="px-4 font-bold">${ui.escapeHtml(adj.branch_name || "")}</td>
+                                        <td class="px-4 font-mono">${ui.escapeHtml(adj.effective_date)}</td>
+                                        <td class="px-4 text-right font-mono font-black ${Number(adj.total_variance_value) > 50000 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600'}">
+                                            ${Number(adj.total_variance_value || 0).toLocaleString()} Ks
+                                            ${Number(adj.total_variance_value) > 50000 ? `<span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500">Admin Only</span>` : ""}
+                                        </td>
+                                        <td class="px-4 text-center">${ui.statusBadge(adj.status)}</td>
+                                        <td class="px-4 text-[11px] text-slate-500">
+                                            ${ui.escapeHtml(adj.created_by_name || "-")}${adj.decided_by_name ? ` / <b>${ui.escapeHtml(adj.decided_by_name)}</b>` : ""}
+                                            ${adj.reject_reason ? `<div class="text-rose-500 font-bold">Reject: ${ui.escapeHtml(adj.reject_reason)}</div>` : ""}
+                                        </td>
+                                        <td class="px-4 text-center">
+                                            <div class="flex items-center justify-center gap-1.5">
+                                                ${canApprove && adj.status === "submitted" ? `
+                                                    <button type="button" data-id="${adj.id}" class="btn-approve-adj px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer transition">
+                                                        Approve
+                                                    </button>
+                                                    <button type="button" data-id="${adj.id}" class="btn-reject-adj px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer transition">
+                                                        Reject
+                                                    </button>
+                                                ` : `<span class="text-[11px] text-slate-400">-</span>`}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        panel.innerHTML = html;
+
+        document.getElementById("btn-open-new-adj-sheet")?.addEventListener("click", renderNewAdjustmentForm);
+
+        panel.querySelectorAll(".btn-approve-adj").forEach(btn => {
+            btn.addEventListener("click", () => approveAdjustment(Number(btn.dataset.id)));
+        });
+
+        panel.querySelectorAll(".btn-reject-adj").forEach(btn => {
+            btn.addEventListener("click", () => rejectAdjustment(Number(btn.dataset.id)));
+        });
+    } catch (err) {
+        panel.innerHTML = `<div class="p-8 text-center text-rose-500 font-bold text-xs">${ui.escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderNewAdjustmentForm() {
+    const box = document.getElementById("adj-creator-box");
+    if (!box) return;
+
+    box.innerHTML = `
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+            <div class="p-4 bg-slate-950 text-white flex flex-wrap items-center justify-between gap-3">
+                <div class="text-xs font-extrabold">မြေပြင်စတော့ ရေတွက်မှု စာရွက်အသစ် (Physical Stock Count)</div>
+                <button type="button" id="btn-submit-new-adj" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs cursor-pointer transition">
+                    <i class="fa-solid fa-paper-plane mr-1"></i>ကွဲလွဲမှုစာရင်း အတည်ပြုရန် ပေးပို့မည် (Submit)
+                </button>
+            </div>
+            <div class="max-h-[420px] overflow-y-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black sticky top-0">
+                        <tr class="h-10">
+                            <th class="px-4">ပစ္စည်းအမည်</th>
+                            <th class="px-4 text-right">စနစ်လက်ကျန် (System)</th>
+                            <th class="px-4 text-right w-36">ရေတွက်လက်ကျန် (Counted)</th>
+                            <th class="px-4 text-right w-28">ကွဲလွဲမှု (Diff)</th>
+                            <th class="px-4 min-w-[220px]">ကွဲလွဲရသည့် အကြောင်းရင်း (Reason *)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                        ${products.map(p => {
+                            const sysQty = Number(p.current_stock ?? p.quantity ?? 0);
+                            return `
+                                <tr class="h-11 hover:bg-slate-50 dark:hover:bg-slate-800/40" data-pid="${p.id}" data-sys="${sysQty}">
+                                    <td class="px-4 font-extrabold text-slate-900 dark:text-white">${ui.escapeHtml(p.item_name)} <span class="text-slate-400 font-mono font-normal">(${ui.escapeHtml(p.sku || "-")})</span></td>
+                                    <td class="px-4 text-right font-mono font-bold">${sysQty}</td>
+                                    <td class="px-4 text-right">
+                                        <input type="number" step="any" min="0" value="${sysQty}"
+                                            class="adj-counted-input w-28 px-2.5 py-1 text-right font-mono font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                    </td>
+                                    <td class="px-4 text-right font-mono font-black adj-diff-cell text-slate-400">0</td>
+                                    <td class="px-4">
+                                        <input type="text" placeholder="ကွဲလွဲပါက အကြောင်းရင်း ရေးပါ..."
+                                            class="adj-reason-input w-full px-2.5 py-1 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                    </td>
+                                </tr>
+                            `;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    box.querySelectorAll(".adj-counted-input").forEach(inp => {
+        inp.addEventListener("input", () => {
+            const tr = inp.closest("tr");
+            const sys = Number(tr.dataset.sys || 0);
+            const counted = parseAnyNumber(inp.value, false);
+            const diff = Math.round((counted - sys) * 1000) / 1000;
+            const diffCell = tr.querySelector(".adj-diff-cell");
+            if (diffCell) {
+                diffCell.textContent = diff > 0 ? `+${diff}` : String(diff);
+                diffCell.className = `px-4 text-right font-mono font-black adj-diff-cell ${diff === 0 ? "text-slate-400" : (diff > 0 ? "text-emerald-600" : "text-rose-600")}`;
+            }
+        });
+    });
+
+    document.getElementById("btn-submit-new-adj")?.addEventListener("click", submitNewAdjustmentSheet);
+}
+
+async function submitNewAdjustmentSheet() {
+    let branchId;
+    try {
+        branchId = state.requireWriteBranchId();
+    } catch (err) {
+        return ui.toast.warning(err.message);
+    }
+
+    const rows = Array.from(document.querySelectorAll("#adj-creator-box tbody tr"));
+    const items = [];
+
+    for (const tr of rows) {
+        const pid = Number(tr.dataset.pid);
+        const sys = Number(tr.dataset.sys || 0);
+        const counted = parseAnyNumber(tr.querySelector(".adj-counted-input")?.value, false);
+        const diff = Math.round((counted - sys) * 1000) / 1000;
+        const reason = tr.querySelector(".adj-reason-input")?.value.trim() || "";
+
+        if (diff !== 0) {
+            if (!reason) {
+                tr.querySelector(".adj-reason-input")?.focus();
+                return ui.toast.warning("ကွဲလွဲမှုရှိသော ပစ္စည်းတိုင်းအတွက် အကြောင်းရင်း (Reason) မဖြစ်မနေ ရေးသားပေးပါ");
+            }
+            items.push({
+                product_id: pid,
+                counted_qty: counted,
+                reason
+            });
+        }
+    }
+
+    if (items.length === 0) {
+        return ui.toast.warning("စနစ်လက်ကျန်နှင့် ကွဲလွဲသော ပစ္စည်း မရှိသေးပါ");
+    }
+
+    try {
+        await api.post("/adjustments", {
+            branch_id: branchId,
+            effective_date: getLocalTodayDate(),
+            submit: true,
+            items
+        });
+        ui.toast.success("Stock Adjustment တင်ပြပြီးပါပြီ (Approve စောင့်ဆိုင်းနေပါသည်)");
+        await renderAdjustmentsWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function approveAdjustment(adjId) {
+    const confirmed = await ui.confirm("ဤ Stock Adjustment အား အတည်ပြုပြီး လက်ကျန်စတော့ ပြင်ဆင်မည်မှာ သေချာပါသလား?", "warning");
+    if (!confirmed) return;
+
+    try {
+        await api.post(`/adjustments/${adjId}/approve`, {});
+        ui.toast.success("Stock Adjustment အတည်ပြုပြီးပါပြီ");
+        await renderAdjustmentsWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+async function rejectAdjustment(adjId) {
+    const reason = window.prompt("ငြင်းပယ်ရသည့် အကြောင်းပြချက် (Reject Reason) ရေးသားပေးပါ:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+        return ui.toast.warning("ငြင်းပယ်ရသည့် အကြောင်းပြချက် မဖြစ်မနေ လိုအပ်ပါသည်");
+    }
+
+    try {
+        await api.post(`/adjustments/${adjId}/reject`, { reason: reason.trim() });
+        ui.toast.info("Stock Adjustment အား Reject ပြုလုပ်ပြီးပါပြီ");
+        await renderAdjustmentsWorkspace();
+    } catch (err) {
+        ui.toast.error(err.message);
+    }
+}
+
+// =============================================================================
+// STOCK TRANSFER MODAL (CREATES PENDING TRANSFER - Spec Section 4.3)
+// =============================================================================
 function openTransferModal(prod) {
-    const currentBranchId = state.currentBranch?.id || 1;
-    if (String(currentBranchId) === "ALL") {
+    if (state.isAllBranches()) {
         return ui.toast.warning("ပစ္စည်းလွှဲပြောင်းရန် အပေါ်ဆုံးဘားတွင် မူလပေးပို့မည့် ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
     }
 
+    const currentBranchId = state.getBranchId();
     const modal = document.getElementById("transfer-modal");
     document.getElementById("transfer-form")?.reset();
 
@@ -348,7 +1057,7 @@ function openTransferModal(prod) {
         destSelect.innerHTML = `<option value="" disabled selected>-- လက်ခံမည့် ဆိုင်ခွဲ ရွေးပါ --</option>`;
         branchesList.forEach(b => {
             if (Number(b.id) !== Number(currentBranchId)) {
-                destSelect.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code || "-")})</option>`;
+                destSelect.innerHTML += `<option value="${ui.escapeHtml(b.id)}">${ui.escapeHtml(b.name)} (${ui.escapeHtml(b.code || "-")})</option>`;
             }
         });
     }
@@ -361,12 +1070,18 @@ function openTransferModal(prod) {
 async function submitStockTransfer(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-transfer");
+
+    let fromBranchId;
+    try {
+        fromBranchId = state.requireWriteBranchId();
+    } catch (err) {
+        return ui.toast.warning(err.message);
+    }
+
     const prodId = document.getElementById("transfer-prod-id")?.value;
     const toBranchId = document.getElementById("transfer-dest-branch")?.value;
     const qty = parseAnyNumber(document.getElementById("transfer-qty")?.value, false);
     const notes = document.getElementById("transfer-notes")?.value.trim();
-    const rawFromBranch = state.currentBranch?.id;
-    const fromBranchId = (!rawFromBranch || String(rawFromBranch) === "ALL") ? 1 : Number(rawFromBranch);
 
     if (!toBranchId) {
         return ui.toast.warning("ကျေးဇူးပြု၍ ပစ္စည်းပို့ဆောင်မည့် ဆိုင်ခွဲကို ရွေးချယ်ပေးပါ။");
@@ -383,19 +1098,16 @@ async function submitStockTransfer(e) {
 
     if (btn) btn.disabled = true;
 
-    const payload = {
-        fromBranchId,
-        toBranchId: Number(toBranchId),
-        productId: Number(prodId),
-        quantity: qty,
-        notes,
-        createdBy: state.user?.id || 1
-    };
-
     try {
-        await api.post("/transfers", payload);
+        await api.post("/transfers", {
+            from_branch_id: fromBranchId,
+            to_branch_id: Number(toBranchId),
+            product_id: Number(prodId),
+            quantity: qty,
+            notes
+        });
         document.getElementById("transfer-modal")?.classList.add("hidden");
-        ui.toast.success("ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမှု အောင်မြင်ပါသည်။ လက်ကျန်စာရင်း ညှိနှိုင်းပြီးပါပြီ။");
+        ui.toast.success("ဆိုင်ခွဲလွှဲပြောင်းစာရင်း (Pending) ဖန်တီးပြီးပါပြီ။ Stock Transfers စာမျက်နှာတွင် Dispatch (ပစ္စည်းပို့ဆောင်မှု) အတည်ပြုပေးပါ။");
         await loadInventory();
     } catch (err) {
         ui.toast.error("လွှဲပြောင်း၍မရပါ: " + err.message);
@@ -405,22 +1117,27 @@ async function submitStockTransfer(e) {
 }
 
 async function deleteProduct(id) {
-    const confirmed = await ui.confirm("ဤအထည်ကို စာရင်းမှ အမှန်တကယ် ဖျက်ပစ်ရန် သေချာပါသလား?", "error");
+    if (!state.canManageCatalog()) {
+        return ui.toast.error("ပစ္စည်းဖျက်သိမ်းခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်။");
+    }
+
+    const confirmed = await ui.confirm("ဤအထည်ကို စာရင်းမှ ပိတ်သိမ်း (Soft Delete) ရန် သေချာပါသလား?", "error");
     if (!confirmed) return;
 
     try {
         await api.delete(`/products/${id}`);
-        ui.toast.success("ပစ္စည်းစာရင်းမှ ဖျက်သိမ်းပြီးပါပြီ။");
+        ui.toast.success("ပစ္စည်းစာရင်းမှ ပိတ်သိမ်းပြီးပါပြီ။");
         await loadInventory();
     } catch (err) {
         ui.toast.error("ဖျက်၍မရပါ: " + err.message);
     }
 }
 
-// --- Waste Modal Logic ---
+// =============================================================================
+// WASTE MODAL LOGIC (Spec Section 1.3 & 4.1)
+// =============================================================================
 function openWasteModal(prod) {
-    const currentBranchId = state.currentBranch?.id || 1;
-    if (String(currentBranchId) === "ALL") {
+    if (state.isAllBranches()) {
         return ui.toast.warning("အလေအလွင့်စာရင်း သွင်းရန် အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပေးပါ။");
     }
 
@@ -444,30 +1161,33 @@ function openWasteModal(prod) {
 async function submitWaste(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-waste");
-    if (btn) btn.disabled = true;
+
+    let branchId;
+    try {
+        branchId = state.requireWriteBranchId();
+    } catch (err) {
+        return ui.toast.warning(err.message);
+    }
 
     const prodId = document.getElementById("waste-prod-id")?.value;
-    const rawBranchId = state.currentBranch?.id;
-    const branchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
     const qty = parseAnyNumber(document.getElementById("waste-qty")?.value, false);
     const unitCost = parseAnyNumber(document.getElementById("waste-unit-cost")?.value, true);
     const reason = document.getElementById("waste-reason")?.value.trim();
 
-    if (qty <= 0) {
-        if (btn) btn.disabled = false;
-        return ui.toast.warning("အလေအလွင့် အရေအတွက် ထည့်သွင်းပေးပါ။");
+    if (qty <= 0 || !reason) {
+        return ui.toast.warning("အလေအလွင့် အရေအတွက်နှင့် အကြောင်းရင်း ထည့်သွင်းပေးပါ။");
     }
 
-    const payload = {
-        branch_id: branchId,
-        product_id: parseInt(prodId, 10),
-        quantity: qty,
-        unit_cost: unitCost,
-        reason
-    };
+    if (btn) btn.disabled = true;
 
     try {
-        await api.post("/waste", payload);
+        await api.post("/waste", {
+            branch_id: branchId,
+            product_id: parseInt(prodId, 10),
+            quantity: qty,
+            unit_cost: unitCost,
+            reason
+        });
         document.getElementById("waste-modal")?.classList.add("hidden");
         ui.toast.success("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
         await loadInventory();
@@ -478,10 +1198,12 @@ async function submitWaste(e) {
     }
 }
 
-// --- Add / Edit Product Logic (With Opening Stock & Multi-Branch Guard) ---
+// =============================================================================
+// PRODUCT MASTER MODAL (NO DIRECT STOCK EDITING - Spec Section 5.4 & 6.1)
+// =============================================================================
 function openProductModal(prod = null) {
-    if (!canManageCatalog()) {
-        return ui.toast.error("ပစ္စည်းအချက်အလက် ပြင်ဆင်ခွင့် မရှိပါ။");
+    if (!state.canManageCatalog()) {
+        return ui.toast.error("ပစ္စည်း Master အချက်အလက် ပြင်ဆင်ခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်။");
     }
 
     const modal = document.getElementById("product-modal");
@@ -491,12 +1213,21 @@ function openProductModal(prod = null) {
     const stockHint = document.getElementById("prod-stock-hint");
     document.getElementById("product-form")?.reset();
 
-    const currentBranchId = state.currentBranch?.id || 1;
-    const isAllBranches = String(currentBranchId) === "ALL";
-    const branchName = state.currentBranch?.name || "Main Home Shop";
+    // Spec 5.4, 5.6 & 6.1: Stock input in Product Modal is strictly View-Only
+    if (stockInput) {
+        stockInput.disabled = true;
+        stockInput.readOnly = true;
+        stockInput.classList.add("opacity-50", "cursor-not-allowed");
+    }
+    if (stockLabel) {
+        stockLabel.textContent = "လက်ရှိလက်ကျန် (View-Only)";
+    }
+    if (stockHint) {
+        stockHint.innerHTML = `<i class="fa-solid fa-lock mr-1 text-amber-500"></i> စတော့လက်ကျန်ကို ဤဖောင်မှ တိုက်ရိုက်ပြင်ဆင်ခွင့် မရှိပါ။ <b>ကနဦးစတော့ (Opening Stock)</b> သို့မဟုတ် <b>စတော့ရေတွက်/ပြင်ဆင်ချက် (Adjustment)</b> စနစ်ကို အသုံးပြုပါ။`;
+    }
 
     if (prod) {
-        if (title) title.textContent = "အထည်အချက်အလက်နှင့် လက်ကျန် ပြင်ဆင်မည်";
+        if (title) title.textContent = "ပစ္စည်း Master အချက်အလက် ပြင်ဆင်မည် (စတော့မပါ)";
         safeSetValue("prod-id", prod.id);
         safeSetValue("prod-sku", prod.sku || "");
         safeSetValue("prod-barcode", prod.barcode || "");
@@ -510,26 +1241,8 @@ function openProductModal(prod = null) {
         safeSetValue("prod-wholesale", prod.wholesale_price || 0);
         safeSetValue("prod-alert-qty", prod.alert_quantity ?? 5);
         safeSetValue("prod-stock", prod.current_stock ?? 0);
-
-        if (stockInput) {
-            if (isAllBranches) {
-                stockInput.disabled = true;
-                stockInput.classList.add("opacity-50", "cursor-not-allowed");
-                if (stockLabel) stockLabel.textContent = "စုစုပေါင်း လက်ကျန် (ဆိုင်အားလုံး)";
-                if (stockHint) {
-                    stockHint.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1 text-amber-500"></i> လက်ကျန်အရေအတွက် ပြင်ဆင်လိုပါက အပေါ်ဆုံးဘားတွင် သက်ဆိုင်ရာ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။`;
-                }
-            } else {
-                stockInput.disabled = false;
-                stockInput.classList.remove("opacity-50", "cursor-not-allowed");
-                if (stockLabel) stockLabel.textContent = `လက်ရှိလက်ကျန် (${branchName})`;
-                if (stockHint) {
-                    stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> <b>${escapeHtml(branchName)}</b> အတွက် စာရင်းဖွင့်/လက်ကျန် အရေအတွက်ကို ပြင်ဆင်နိုင်ပါသည်။ (ငွေစာရင်းနှင့် အကြွေးကို မထိပါ)`;
-                }
-            }
-        }
     } else {
-        if (title) title.textContent = "အထည်အချက်အလက်သစ်နှင့် စာရင်းဖွင့်လက်ကျန် သွင်းမည်";
+        if (title) title.textContent = "ပစ္စည်း Master အသစ် ဖန်တီးမည်";
         safeSetValue("prod-id", "");
         safeSetValue("prod-size", "ထည်");
         safeSetValue("prod-cost", 0);
@@ -537,16 +1250,6 @@ function openProductModal(prod = null) {
         safeSetValue("prod-wholesale", 0);
         safeSetValue("prod-alert-qty", 5);
         safeSetValue("prod-stock", 0);
-
-        if (stockInput) {
-            stockInput.disabled = false;
-            stockInput.classList.remove("opacity-50", "cursor-not-allowed");
-            const targetShopName = isAllBranches ? "Main Home Shop" : branchName;
-            if (stockLabel) stockLabel.textContent = `Opening Stock (${targetShopName})`;
-            if (stockHint) {
-                stockHint.innerHTML = `<i class="fa-solid fa-circle-info mr-1"></i> စာရင်းဖွင့် သို့မဟုတ် ကိုယ်ပိုင်ထုတ် ကနဦးအရေအတွက်ကို တစ်ခါတည်း ထည့်သွင်းနိုင်ပါသည်။`;
-            }
-        }
     }
 
     modal?.classList.remove("hidden");
@@ -555,7 +1258,7 @@ function openProductModal(prod = null) {
 
 async function submitProduct(e) {
     e.preventDefault();
-    if (!canManageCatalog()) {
+    if (!state.canManageCatalog()) {
         return ui.toast.error("ခွင့်ပြုချက် မရှိပါ။");
     }
 
@@ -563,40 +1266,30 @@ async function submitProduct(e) {
     if (btn) btn.disabled = true;
 
     const prodId = document.getElementById("prod-id")?.value;
-    const rawBranchId = state.currentBranch?.id;
-    const isAllBranches = !rawBranchId || String(rawBranchId) === "ALL";
-    const targetBranchId = isAllBranches ? 1 : Number(rawBranchId);
-    const stockQty = parseAnyNumber(document.getElementById("prod-stock")?.value, false);
     const alertQty = parseAnyNumber(document.getElementById("prod-alert-qty")?.value, false);
 
+    // Spec 1.3, 5.4 & 6.1: Never send quantity or initialStock in Product POST/PUT
     const payload = {
         sku: document.getElementById("prod-sku")?.value.trim() || null,
         barcode: document.getElementById("prod-barcode")?.value.trim() || null,
         category: document.getElementById("prod-category")?.value.trim(),
-        itemName: document.getElementById("prod-name")?.value.trim(),
+        item_name: document.getElementById("prod-name")?.value.trim(),
         pattern: document.getElementById("prod-pattern")?.value.trim() || null,
         color: document.getElementById("prod-color")?.value.trim() || null,
         size: document.getElementById("prod-size")?.value.trim() || "ထည်",
-        costPrice: parseAnyNumber(document.getElementById("prod-cost")?.value, true),
-        retailPrice: parseAnyNumber(document.getElementById("prod-retail")?.value, true),
-        wholesalePrice: parseAnyNumber(document.getElementById("prod-wholesale")?.value, true),
-        alertQuantity: alertQty,
-        targetBranchId,
-        branchId: targetBranchId
+        cost_price: parseAnyNumber(document.getElementById("prod-cost")?.value, true),
+        retail_price: parseAnyNumber(document.getElementById("prod-retail")?.value, true),
+        wholesale_price: parseAnyNumber(document.getElementById("prod-wholesale")?.value, true),
+        alert_quantity: alertQty
     };
 
     try {
         if (prodId) {
-            if (!isAllBranches) {
-                payload.quantity = stockQty;
-            }
             await api.put(`/products/${prodId}`, payload);
-            ui.toast.success("အချက်အလက်နှင့် လက်ကျန်စာရင်း ပြင်ဆင်ပြီးပါပြီ။");
+            ui.toast.success("ပစ္စည်း Master အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
         } else {
-            payload.initialStock = stockQty;
-            payload.quantity = stockQty;
             await api.post("/products", payload);
-            ui.toast.success("အထည်အသစ်နှင့် စာရင်းဖွင့်လက်ကျန် မှတ်ပုံတင်ပြီးပါပြီ။");
+            ui.toast.success("ပစ္စည်း Master အသစ် မှတ်ပုံတင်ပြီးပါပြီ။");
         }
         document.getElementById("product-modal")?.classList.add("hidden");
         await loadInventory();
@@ -607,26 +1300,25 @@ async function submitProduct(e) {
     }
 }
 
-// --- CSV Export Logic ---
 function exportToCSV() {
     const dataToExport = currentFilteredProducts.length > 0 ? currentFilteredProducts : products;
     if (dataToExport.length === 0) {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိပါ။");
     }
 
-    const isManager = canManageCatalog();
+    const canViewCost = state.canViewCost();
     let csvContent = "SKU,Barcode,Category,Item Name,Pattern,Color,Unit/Size,Cost Price,Retail Price,Wholesale Price,Current Stock\n";
 
     dataToExport.forEach(p => {
         const row = [
-            escapeCsv(p.sku),
-            escapeCsv(p.barcode),
-            escapeCsv(p.category),
-            escapeCsv(p.item_name),
-            escapeCsv(p.pattern),
-            escapeCsv(p.color),
-            escapeCsv(p.size || "ထည်"),
-            isManager ? (p.cost_price || 0) : 0,
+            ui.escapeCsv(p.sku),
+            ui.escapeCsv(p.barcode),
+            ui.escapeCsv(p.category),
+            ui.escapeCsv(p.item_name),
+            ui.escapeCsv(p.pattern),
+            ui.escapeCsv(p.color),
+            ui.escapeCsv(p.size || "ထည်"),
+            canViewCost ? (p.cost_price || 0) : 0,
             p.retail_price || 0,
             p.wholesale_price || 0,
             p.current_stock || 0
@@ -645,9 +1337,8 @@ function exportToCSV() {
     URL.revokeObjectURL(url);
 }
 
-// --- CSV Import Logic (Uses D1 Batched /products/bulk Endpoint + Imports Stock Balance) ---
 function triggerImport() {
-    if (!canManageCatalog()) {
+    if (!state.canManageCatalog()) {
         return ui.toast.error("CSV သွင်းယူခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်။");
     }
 
@@ -673,9 +1364,6 @@ async function processImport(csvText) {
         return ui.toast.warning("CSV ဖိုင်ထဲတွင် အချက်အလက် မရှိပါ။");
     }
 
-    const rawBranchId = state.currentBranch?.id;
-    const targetBranchId = (!rawBranchId || String(rawBranchId) === "ALL") ? 1 : Number(rawBranchId);
-
     const bulkItems = [];
     for (let i = 1; i < lines.length; i++) {
         const row = parseCsvLine(lines[i]);
@@ -688,14 +1376,13 @@ async function processImport(csvText) {
             sku: row[0] || null,
             barcode: row[1] || null,
             category: row[2] || "အထွေထွေ",
-            itemName,
+            item_name: itemName,
             pattern: row[4] || null,
             color: row[5] || null,
             size: row[6] || "ထည်",
-            costPrice: parseAnyNumber(row[7], true),
-            retailPrice: parseAnyNumber(row[8], true),
-            wholesalePrice: parseAnyNumber(row[9] || row[8], true),
-            quantity: row[10] !== undefined ? parseAnyNumber(row[10], false) : 0
+            cost_price: parseAnyNumber(row[7], true),
+            retail_price: parseAnyNumber(row[8], true),
+            wholesale_price: parseAnyNumber(row[9] || row[8], true)
         });
     }
 
@@ -704,14 +1391,10 @@ async function processImport(csvText) {
     }
 
     try {
-        ui.toast.info(`ပစ္စည်း (${bulkItems.length}) မျိုး သွင်းယူနေပါသည်...`);
-        const res = await api.post("/products/bulk", {
-            branchId: targetBranchId,
-            items: bulkItems
-        });
+        ui.toast.info(`ပစ္စည်း Master (${bulkItems.length}) မျိုး သွင်းယူနေပါသည်...`);
+        const res = await api.post("/products/bulk", { items: bulkItems });
         const payload = res?.data || res;
-        const msg = payload?.message || `အထည်အချက်အလက် အသစ် (${payload?.count ?? bulkItems.length}) မျိုး အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`;
-        ui.toast.success(msg);
+        ui.toast.success(payload?.message || `ပစ္စည်း Master (${bulkItems.length}) မျိုး သွင်းယူပြီးပါပြီ။`);
         await loadInventory();
     } catch (err) {
         ui.toast.error("CSV သွင်းယူမှု မအောင်မြင်ပါ: " + err.message);

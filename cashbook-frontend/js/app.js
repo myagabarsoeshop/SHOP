@@ -1,4 +1,9 @@
-// cashbook-frontend/js/app.js
+// =============================================================================
+// FILE: cashbook-frontend/js/app.js
+// MAIN FRONTEND ROUTER, ROLE NAVIGATION GUARD, BRANCH SCOPING & GLOBAL KPI
+// Version: 4.1.0 (RBAC Permission Matrix, ALL-Branch Read-Only Lock & MMT Clock)
+// =============================================================================
+
 import { state } from "./core/state.js";
 import { api } from "./core/api.js";
 import { ui } from "./core/ui.js";
@@ -21,7 +26,7 @@ const VIEW_TITLES = {
     dashboard: "Dashboard",
     pos: "Sale Counter (POS)",
     cashbook: "Cash Book",
-    inventory: "Stock Balances",
+    inventory: "Stock Balances & Control",
     purchases: "Purchases",
     waste: "Damage & Waste",
     transfers: "Stock Transfers",
@@ -32,8 +37,60 @@ const VIEW_TITLES = {
     system_setting: "System Setting"
 };
 
+/**
+ * Role အလိုက် ဝင်ရောက်ခွင့်ရှိသော View များ (Spec Section 3.1 & 3.2)
+ */
+const ALLOWED_VIEWS_BY_ROLE = {
+    admin: new Set([
+        "dashboard", "pos", "cashbook", "inventory", "purchases",
+        "waste", "transfers", "stock_report", "master_products",
+        "yarn", "customers", "system_setting"
+    ]),
+    finance: new Set([
+        "dashboard", "pos", "cashbook", "inventory", "purchases",
+        "waste", "transfers", "stock_report", "master_products",
+        "yarn", "customers"
+    ]),
+    branch_manager: new Set([
+        "dashboard", "pos", "cashbook", "inventory", "purchases",
+        "waste", "transfers", "stock_report", "yarn", "customers"
+    ]),
+    cashier: new Set([
+        "dashboard", "pos", "cashbook", "inventory", "transfers", "customers"
+    ])
+};
+
+/**
+ * ALL Branches ရွေးထားချိန်တွင် Write ပိတ်ရမည့် ဆိုင်ခွဲအလိုက် View များ (Spec Section 4.1 & 4.2)
+ */
+const BRANCH_SCOPED_WRITE_VIEWS = new Set([
+    "pos", "cashbook", "inventory", "purchases", "waste", "transfers", "yarn"
+]);
+
 let currentActiveView = "dashboard";
 const viewTemplateCache = new Map();
+
+function normalizeUserRole(rawRole) {
+    const r = String(rawRole || "cashier").trim().toLowerCase();
+    if (r === "manager") return "branch_manager";
+    if (["admin", "finance", "branch_manager", "cashier"].includes(r)) return r;
+    return "cashier";
+}
+
+function canAccessView(viewName) {
+    const role = normalizeUserRole(state.user?.role);
+    const allowedSet = ALLOWED_VIEWS_BY_ROLE[role] || ALLOWED_VIEWS_BY_ROLE.cashier;
+    return allowedSet.has(viewName);
+}
+
+function escapeText(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
     startClock();
@@ -61,8 +118,13 @@ function setupNavigation() {
 
     document.querySelectorAll(".nav-item").forEach(btn => {
         btn.addEventListener("click", () => {
-            setActiveNavButton(btn.dataset.view);
-            navigateTo(btn.dataset.view);
+            const targetView = btn.dataset.view;
+            if (!canAccessView(targetView)) {
+                ui.toast?.("ဤစာမျက်နှာသို့ ဝင်ရောက်ခွင့် မရှိပါ", "error");
+                return;
+            }
+            setActiveNavButton(targetView);
+            navigateTo(targetView);
         });
     });
 }
@@ -73,14 +135,12 @@ function setupNavigation() {
 function setupGlobalKeyboardShortcuts() {
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
-            // Confirm dialog ပွင့်နေပါက Confirm dialog က သူ့ဘာသာ ကိုင်တွယ်မည်
             const confirmDialog = document.getElementById("global-confirm-dialog");
             if (confirmDialog && !confirmDialog.classList.contains("hidden")) {
                 document.getElementById("btn-confirm-cancel")?.click();
                 return;
             }
 
-            // View container အတွင်း ပွင့်နေသော Modal များကို အပေါ်ဆုံးမှ စပိတ်မည်
             const openModals = Array.from(
                 document.querySelectorAll("#view-container .fixed.inset-0:not(.hidden)")
             );
@@ -106,12 +166,12 @@ function setupTopKpiClickEvents() {
 }
 
 function setActiveNavButton(viewName) {
-    const isOwnerAdmin = String(state.user?.role || "").toLowerCase() === "admin";
     document.querySelectorAll(".nav-item").forEach(b => {
-        const isRestricted = b.id === "nav-master-products" || b.id === "nav-system-setting";
-        const hideClass = (isRestricted && !isOwnerAdmin) ? "hidden " : "";
+        const btnView = b.dataset.view;
+        const allowed = canAccessView(btnView);
+        const hideClass = allowed ? "" : "hidden ";
 
-        if (b.dataset.view === viewName) {
+        if (btnView === viewName && allowed) {
             b.className = `${hideClass}nav-item active flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition bg-emerald-600 text-white shadow-md shadow-emerald-600/20 cursor-pointer`;
         } else {
             b.className = `${hideClass}nav-item flex items-center gap-3 w-full px-3.5 py-2 rounded-xl transition text-slate-400 hover:bg-slate-900 hover:text-white cursor-pointer`;
@@ -146,11 +206,17 @@ function showAppLayout() {
     document.getElementById("app-layout")?.classList.remove("hidden");
 
     const user = state.user || {};
-    
-    // Admin ဖြစ်ပါက "Admin" ဟုသာ ပြရန်၊ အခြား User ဆိုလျှင် ၎င်းတို့၏ နာမည်နှင့် Role ကို ပြရန်
-    const isOwnerAdmin = String(user.role || "").toLowerCase() === "admin";
-    const displayName = isOwnerAdmin ? "Admin" : (user.fullName || user.username || "User");
-    const displayRole = isOwnerAdmin ? "Admin" : (user.role || "cashier");
+    const role = normalizeUserRole(user.role);
+
+    const roleLabelMap = {
+        admin: "Admin",
+        finance: "Finance",
+        branch_manager: "Branch Manager",
+        cashier: "Cashier"
+    };
+
+    const displayName = role === "admin" ? "Admin" : (user.fullName || user.username || "User");
+    const displayRole = roleLabelMap[role] || role;
 
     const nameEl = document.getElementById("user-name");
     const roleEl = document.getElementById("user-role");
@@ -160,16 +226,7 @@ function showAppLayout() {
     if (roleEl) roleEl.textContent = displayRole;
     if (initEl) initEl.textContent = displayName.charAt(0).toUpperCase();
 
-    // Admin တစ်ဦးတည်းသာ Product Master နှင့် System Setting မြင်ရမည်
-    const masterMenu = document.getElementById("nav-master-products");
-    const settingMenu = document.getElementById("nav-system-setting");
-
-    if (masterMenu) {
-        masterMenu.classList.toggle("hidden", !isOwnerAdmin);
-    }
-    if (settingMenu) {
-        settingMenu.classList.toggle("hidden", !isOwnerAdmin);
-    }
+    setActiveNavButton(currentActiveView);
 }
 
 async function loadBranches() {
@@ -179,26 +236,56 @@ async function loadBranches() {
     try {
         const res = await api.get("/branches");
         const branches = res.data || [];
-        state.branches = branches; // Cache branches in state to save D1 Reads across modules
+        state.branches = branches;
         select.innerHTML = "";
 
+        const role = normalizeUserRole(state.user?.role);
+        const canSelectAllBranches = role === "admin" || role === "finance";
+
+        // Admin & Finance can choose "ALL" (Read-Only) or a specific branch
+        if (canSelectAllBranches && branches.length > 1) {
+            const allOpt = document.createElement("option");
+            allOpt.value = "ALL";
+            allOpt.textContent = "🏢 ဆိုင်ခွဲအားလုံး (ALL - Read Only)";
+            select.appendChild(allOpt);
+        }
+
         if (branches.length > 0 && !state.currentBranch) {
-            const defaultBranch = branches.find(b => b.id === state.user?.branchId) || branches[0];
-            state.setBranch(defaultBranch);
+            const assignedBranch = branches.find(b => Number(b.id) === Number(state.user?.branchId)) || branches[0];
+            state.setBranch(assignedBranch);
+        }
+
+        // Force branch_manager & cashier onto their own assigned branch (Spec 4.1)
+        if (!canSelectAllBranches && branches.length > 0) {
+            const lockedBranch = branches.find(b => Number(b.id) === Number(state.user?.branchId)) || branches[0];
+            state.setBranch(lockedBranch);
         }
 
         branches.forEach(b => {
             const opt = document.createElement("option");
-            opt.value = b.id;
+            opt.value = String(b.id);
             opt.textContent = `${b.name} (${b.code})`;
-            if (state.currentBranch?.id === b.id) opt.selected = true;
+            if (String(state.currentBranch?.id) === String(b.id)) {
+                opt.selected = true;
+            }
             select.appendChild(opt);
         });
 
-        select.disabled = !state.isAdmin();
+        if (canSelectAllBranches && String(state.currentBranch?.id) === "ALL") {
+            select.value = "ALL";
+        }
+
+        // Only Admin & Finance can switch branches (Spec 4.1)
+        select.disabled = !canSelectAllBranches;
 
         select.onchange = (e) => {
-            const b = branches.find(item => item.id === parseInt(e.target.value, 10));
+            const val = e.target.value;
+            if (val === "ALL" && canSelectAllBranches) {
+                state.setBranch({ id: "ALL", code: "ALL", name: "ဆိုင်ခွဲအားလုံး (ALL)" });
+                navigateTo(currentActiveView);
+                return;
+            }
+            const b = branches.find(item => Number(item.id) === parseInt(val, 10));
             if (b) {
                 state.setBranch(b);
                 navigateTo(currentActiveView);
@@ -210,18 +297,71 @@ async function loadBranches() {
 }
 
 /**
- * မြန်မာစံတော်ချိန်နှင့် ကိုက်ညီသော YYYY-MM-DD ရက်စွဲ ထုတ်ပေးခြင်း
+ * ALL View ရွေးချယ်ထားပါက Write ခလုတ်များကို ပိတ်ပြီး Read-Only သတိပေးချက် ပြသခြင်း (Spec 4.1, 4.2 & 10)
  */
-export function getLocalTodayDate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+export function applyBranchWriteGuard(viewName = currentActiveView) {
+    const container = document.getElementById("view-container");
+    if (!container) return;
+
+    const existingBanner = document.getElementById("all-branch-readonly-banner");
+    if (existingBanner) existingBanner.remove();
+
+    const isAllView = String(state.currentBranch?.id || "").toUpperCase() === "ALL";
+    if (!isAllView || !BRANCH_SCOPED_WRITE_VIEWS.has(viewName)) {
+        return;
+    }
+
+    // 1. Insert clear Read-Only Banner at the top of the view
+    const banner = document.createElement("div");
+    banner.id = "all-branch-readonly-banner";
+    banner.className = "mb-3 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center justify-between gap-2";
+    banner.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-eye text-sm"></i>
+            <span>ဆိုင်ခွဲအားလုံး (ALL View - Read Only) ကြည့်ရှုနေပါသည်။ အသစ်သွင်းရန် သို့မဟုတ် စာရင်းပြင်ဆင်ရန် အပေါ်ညာဘက်မှ ဆိုင်ခွဲတစ်ခုကို တိကျစွာ ရွေးချယ်ပါ။</span>
+        </div>
+    `;
+    container.prepend(banner);
+
+    // 2. Disable primary write/create/checkout buttons in ALL view
+    const writeSelectors = [
+        "[data-branch-write]",
+        "#btn-add-product",
+        "#btn-open-product-modal",
+        "#btn-bulk-import",
+        "#btn-new-purchase",
+        "#btn-add-purchase",
+        "#btn-save-purchase",
+        "#btn-checkout",
+        "#btn-pos-pay",
+        "#btn-add-cashbook",
+        "#btn-new-entry",
+        "#btn-add-transfer",
+        "#btn-new-transfer",
+        "#btn-add-waste",
+        "#btn-new-waste",
+        "#btn-issue-yarn",
+        "#btn-new-opening-stock",
+        "#btn-new-adjustment"
+    ];
+
+    container.querySelectorAll(writeSelectors.join(",")).forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add("opacity-50", "cursor-not-allowed", "pointer-events-none");
+        btn.title = "ALL View တွင် စာရင်းသွင်း၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို ရွေးချယ်ပါ။";
+    });
 }
 
 /**
- * Global KPI Bar အဖွင့်/အပိတ် ထိန်းချုပ်ခြင်း (D1 Read မကုန်စေရန် သက်ဆိုင်ရာ Module ကသာ KPI ကို တွက်ချက်မည်)
+ * မြန်မာစံတော်ချိန် (UTC+6:30) နှင့် ကိုက်ညီသော YYYY-MM-DD ရက်စွဲ ထုတ်ပေးခြင်း (Spec 9.9)
+ */
+export function getLocalTodayDate() {
+    const mmtMs = Date.now() + (390 * 60 * 1000);
+    return new Date(mmtMs).toISOString().split("T")[0];
+}
+
+/**
+ * Global KPI Bar အဖွင့်/အပိတ် ထိန်းချုပ်ခြင်း
  */
 export async function refreshGlobalKPIs(viewOverride) {
     const view = viewOverride || currentActiveView;
@@ -270,6 +410,10 @@ export function setKPI(index, label, value, iconClass, colorTheme = "emerald") {
 }
 
 export async function navigateTo(viewName) {
+    if (!canAccessView(viewName)) {
+        viewName = "dashboard";
+    }
+
     currentActiveView = viewName;
     setActiveNavButton(viewName);
 
@@ -296,9 +440,9 @@ export async function navigateTo(viewName) {
         } else if (viewName === "customers") {
             await initCustomers();
         } else if (viewName === "purchases") {
-            await initPurchases(); 
+            await initPurchases();
         } else if (viewName === "master_products") {
-            await initMasterProducts(); 
+            await initMasterProducts();
         } else if (viewName === "waste") {
             await initWaste();
         } else if (viewName === "transfers") {
@@ -308,12 +452,17 @@ export async function navigateTo(viewName) {
         } else if (viewName === "system_setting") {
             await initSystemSetting();
         }
+
+        // Enforce ALL-Branch Read-Only Lock after module initialization
+        applyBranchWriteGuard(viewName);
     } catch (err) {
+        const safeTitle = escapeText(VIEW_TITLES[viewName] || viewName);
+        const safeMsg = escapeText(err?.message || "Unknown Error");
         container.innerHTML = `
             <div class="h-full w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                 <i class="fa-solid fa-layer-group text-4xl text-emerald-500 mb-3"></i>
-                <div class="text-base font-bold text-slate-700 dark:text-slate-200">${VIEW_TITLES[viewName] || viewName}</div>
-                <div class="text-xs mt-1">ဤမော်ဂျူးကို ဖွင့်လှစ်ရာတွင် အခက်အခဲရှိနေပါသည် (${err.message})</div>
+                <div class="text-base font-bold text-slate-700 dark:text-slate-200">${safeTitle}</div>
+                <div class="text-xs mt-1">ဤမော်ဂျူးကို ဖွင့်လှစ်ရာတွင် အခက်အခဲရှိနေပါသည် (${safeMsg})</div>
             </div>`;
     }
 }
@@ -324,13 +473,14 @@ function startClock() {
         const clock = document.getElementById("live-clock");
         if (!clock) return;
 
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, "0");
-        const mon = months[now.getMonth()];
-        const yr = String(now.getFullYear()).slice(-2);
+        // Display Myanmar Standard Time (UTC+6:30)
+        const now = new Date(Date.now() + (390 * 60 * 1000));
+        const day = String(now.getUTCDate()).padStart(2, "0");
+        const mon = months[now.getUTCMonth()];
+        const yr = String(now.getUTCFullYear()).slice(-2);
 
-        let hr = now.getHours();
-        const min = String(now.getMinutes()).padStart(2, "0");
+        let hr = now.getUTCHours();
+        const min = String(now.getUTCMinutes()).padStart(2, "0");
         const ampm = hr >= 12 ? "PM" : "AM";
         hr = hr % 12 || 12;
 

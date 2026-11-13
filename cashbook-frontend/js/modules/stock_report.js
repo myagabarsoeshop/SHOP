@@ -1,4 +1,9 @@
-// cashbook-frontend/js/modules/stock_report.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/stock_report.js
+// 12-MONTH LEDGER-RECONSTRUCTED STOCK REPORT & ADJUSTMENT VALUATION MODULE
+// Version: 4.1.0 (Spec Section 6.2 Adjustment Value & Section 7 Movement Report)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
@@ -8,29 +13,14 @@ import { PaginationController } from "../core/pagination.js";
 let rawReportData = [];
 let currentFilteredReport = [];
 let branchesList = [];
-let selectedYear = new Date().getFullYear();
+let selectedYear = new Date(Date.now() + 390 * 60 * 1000).getUTCFullYear();
 
 const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-// စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Controller
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable(currentFilteredReport)
 });
-
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
 
 export async function initStockReport() {
     setupYearOptions();
@@ -43,9 +33,9 @@ function setupYearOptions() {
     const yearSelect = document.getElementById("sr-year-select");
     if (!yearSelect) return;
     yearSelect.innerHTML = "";
-    
-    const currYear = new Date().getFullYear();
-    for (let y = currYear - 1; y <= currYear + 2; y++) {
+
+    const currYear = new Date(Date.now() + 390 * 60 * 1000).getUTCFullYear();
+    for (let y = currYear - 2; y <= currYear + 2; y++) {
         const opt = document.createElement("option");
         opt.value = y;
         opt.textContent = `${y} ခုနှစ်`;
@@ -83,9 +73,6 @@ function bindEvents() {
     document.getElementById("btn-export-sr-csv")?.addEventListener("click", exportStockReportToCSV);
 }
 
-/**
- * D1 Read Quota ချွေတာရန် Branches စာရင်းကို Memory မှ ပြန်သုံးခြင်း
- */
 async function loadBranches() {
     const select = document.getElementById("sr-branch-select");
     if (!select) return;
@@ -101,16 +88,22 @@ async function loadBranches() {
         }
 
         select.innerHTML = "";
-        if (state.isAdmin()) {
+        const globalBranchId = state.getBranchId();
+
+        if (state.canSwitchBranch()) {
             select.innerHTML = `<option value="ALL">ဆိုင်ခွဲအားလုံး (All Branches)</option>`;
             branchesList.forEach(b => {
-                select.innerHTML += `<option value="${b.id}">${escapeHtml(b.name)} (${escapeHtml(b.code)})</option>`;
+                const selected = String(globalBranchId) === String(b.id) ? "selected" : "";
+                select.innerHTML += `<option value="${ui.escapeHtml(b.id)}" ${selected}>${ui.escapeHtml(b.name)} (${ui.escapeHtml(b.code)})</option>`;
             });
             select.disabled = false;
         } else {
-            const currentBranch = state.currentBranch || branchesList[0] || { id: 1, name: "Main Shop" };
-            select.innerHTML = `<option value="${currentBranch.id}">${escapeHtml(currentBranch.name)}</option>`;
-            select.disabled = true; 
+            const lockedBranch = branchesList.find(b => Number(b.id) === Number(globalBranchId)) ||
+                state.currentBranch ||
+                branchesList[0] ||
+                { id: 1, name: "Assigned Branch" };
+            select.innerHTML = `<option value="${ui.escapeHtml(lockedBranch.id)}" selected>${ui.escapeHtml(lockedBranch.name)}</option>`;
+            select.disabled = true;
         }
     } catch (err) {
         console.error("Failed to load branches for report:", err);
@@ -136,6 +129,7 @@ function updateTableHeaderYears() {
     html += `
         <th class="py-2.5 px-3.5 w-24 text-right">TOTAL IN</th>
         <th class="py-2.5 px-3.5 w-24 text-right">TOTAL OUT</th>
+        <th class="py-2.5 px-3.5 w-28 text-right" title="Stock Adjustment Net Value (Cost × Qty)">ADJ VALUE</th>
         <th class="py-2.5 px-3.5 w-24 text-right">BALANCE</th>
         <th class="py-2.5 px-4 w-36 text-right">STOCK VALUE</th>
     `;
@@ -145,17 +139,15 @@ function updateTableHeaderYears() {
 async function fetchReportData() {
     const tbody = document.getElementById("sr-table-body");
     if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="20" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">အစီရင်ခံစာ အချက်အလက်များ ဆွဲယူနေပါသည်...</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="21" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-emerald-500 text-2xl mb-3"></i><div class="font-bold text-xs">အစီရင်ခံစာ အချက်အလက်များ ဆွဲယူနေပါသည်...</div></td></tr>`;
     }
 
-    const branchVal = document.getElementById("sr-branch-select")?.value || "ALL";
+    const branchVal = document.getElementById("sr-branch-select")?.value || state.getBranchId();
 
     try {
         updateTableHeaderYears();
 
-        const params = { year: selectedYear };
-        if (branchVal !== "ALL") params.branch_id = branchVal;
-
+        const params = { year: selectedYear, branch_id: branchVal };
         const res = await api.get("/reports/monthly-stock", params);
         rawReportData = res.data || [];
 
@@ -163,7 +155,7 @@ async function fetchReportData() {
         filterAndRender();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="20" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်းဆွဲယူ၍ မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="21" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်းဆွဲယူ၍ မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -175,7 +167,7 @@ function populateCategoryDropdown(data) {
     const cats = [...new Set(data.map(i => i.category).filter(Boolean))];
     select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${data.length})</option>`;
     cats.forEach(c => {
-        select.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+        select.innerHTML += `<option value="${ui.escapeHtml(c)}">${ui.escapeHtml(c)}</option>`;
     });
     if (cats.includes(currentVal)) select.value = currentVal;
 }
@@ -208,9 +200,6 @@ function filterAndRender() {
     renderTable(currentFilteredReport);
 }
 
-/**
- * 20-Column Matrix Report Table Rendering (Paginated Rows + Full Grand Total Footer)
- */
 function renderTable(list) {
     const tbody = document.getElementById("sr-table-body");
     if (!tbody) return;
@@ -219,16 +208,16 @@ function renderTable(list) {
     const tfoot = document.getElementById("sr-table-foot");
 
     if (list.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="20" class="p-16 text-center text-slate-400 font-bold text-xs"><i class="fa-solid fa-chart-column text-3xl mb-3 opacity-30"></i><div>စတော့မှတ်တမ်း မတွေ့ရှိပါ</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="21" class="p-16 text-center text-slate-400 font-bold text-xs"><i class="fa-solid fa-chart-column text-3xl mb-3 opacity-30"></i><div>စတော့မှတ်တမ်း မတွေ့ရှိပါ</div></td></tr>`;
         if (tfoot) tfoot.innerHTML = "";
         pagination.renderControls("stock-report-pagination");
         return;
     }
 
-    // 1. Compute Grand Totals across ALL filtered items
     const monthlyTotals = Array(13).fill(0);
     let sumIn = 0;
     let sumOut = 0;
+    let sumAdjVal = 0;
     let sumBal = 0;
     let sumVal = 0;
 
@@ -238,9 +227,11 @@ function renderTable(list) {
         const valuation = Math.round(currentBal * costPrice);
         const totalIn = Number(item.total_in || 0);
         const totalOut = Number(item.total_out || 0);
+        const adjVal = Number(item.adjustment_net_value || 0);
 
         sumIn += totalIn;
         sumOut += totalOut;
+        sumAdjVal += adjVal;
         sumBal += currentBal;
         sumVal += valuation;
 
@@ -250,7 +241,6 @@ function renderTable(list) {
         }
     });
 
-    // 2. Render Paginated Page Items
     const pageItems = pagination.getPageItems(list);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
 
@@ -263,12 +253,14 @@ function renderTable(list) {
         const valuation = Math.round(currentBal * costPrice);
         const totalIn = Number(item.total_in || 0);
         const totalOut = Number(item.total_out || 0);
+        const adjVal = Number(item.adjustment_net_value || 0);
+        const adjQty = Number(item.adjustment_in_qty || 0) - Number(item.adjustment_out_qty || 0);
 
         let rowHtml = `
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(item.barcode || item.sku || "-")}">${escapeHtml(item.barcode || item.sku || "-")}</td>
-            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(item.category || "-")}">${escapeHtml(item.category || "-")}</td>
-            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(item.item_name || "-")}">${escapeHtml(item.item_name || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(item.barcode || item.sku || "-")}">${ui.escapeHtml(item.barcode || item.sku || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(item.category || "-")}">${ui.escapeHtml(item.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(item.item_name || "-")}">${ui.escapeHtml(item.item_name || "-")}</td>
         `;
 
         for (let m = 1; m <= 12; m++) {
@@ -280,12 +272,18 @@ function renderTable(list) {
             `;
         }
 
+        const adjColor = adjVal === 0 ? "text-slate-400" : (adjVal > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400");
+        const adjDisplay = adjVal === 0 ? "-" : `${adjVal > 0 ? "+" : ""}${adjVal.toLocaleString()}`;
+
         rowHtml += `
             <td class="py-2 px-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs w-24">
                 ${totalIn === 0 ? "-" : "+" + totalIn.toLocaleString()}
             </td>
             <td class="py-2 px-3.5 text-right font-mono font-bold text-rose-600 dark:text-rose-400 text-xs w-24">
                 ${totalOut === 0 ? "-" : "-" + totalOut.toLocaleString()}
+            </td>
+            <td class="py-2 px-3.5 text-right font-mono font-bold ${adjColor} text-xs w-28" title="Net Adj Qty: ${adjQty}">
+                ${adjDisplay}
             </td>
             <td class="py-2 px-3.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm w-24">
                 ${currentBal.toLocaleString()}
@@ -299,7 +297,6 @@ function renderTable(list) {
         tbody.appendChild(tr);
     });
 
-    // 3. Render Sticky Grand Summary Footer
     if (tfoot) {
         let footHtml = `
             <tr class="h-11">
@@ -316,12 +313,17 @@ function renderTable(list) {
             `;
         }
 
+        const sumAdjColor = sumAdjVal === 0 ? "text-slate-400" : (sumAdjVal > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400");
+
         footHtml += `
                 <td id="sr-grand-in" class="py-2.5 px-3.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
                     +${sumIn.toLocaleString()}
                 </td>
                 <td id="sr-grand-out" class="py-2.5 px-3.5 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
                     -${sumOut.toLocaleString()}
+                </td>
+                <td id="sr-grand-adj" class="py-2.5 px-3.5 text-right font-mono font-black ${sumAdjColor} text-sm">
+                    ${sumAdjVal === 0 ? "0" : (sumAdjVal > 0 ? "+" : "") + sumAdjVal.toLocaleString()}
                 </td>
                 <td id="sr-grand-stock" class="py-2.5 px-3.5 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
                     ${sumBal.toLocaleString()}
@@ -346,18 +348,19 @@ function exportStockReportToCSV() {
     const shortYear = String(selectedYear).slice(-2);
     let csv = `NO,BARCODE,CATEGORY,ITEM NAME,`;
     MONTH_NAMES.forEach(m => { csv += `${m} '${shortYear},`; });
-    csv += `TOTAL IN,TOTAL OUT,BALANCE,COST PRICE,STOCK VALUE\n`;
+    csv += `TOTAL IN,TOTAL OUT,ADJUSTMENT VALUE,BALANCE,COST PRICE,STOCK VALUE\n`;
 
     dataToExport.forEach((item, idx) => {
         const bal = Number(item.current_balance || 0);
         const cost = Number(item.cost_price || 0);
         const val = Math.round(bal * cost);
+        const adjVal = Number(item.adjustment_net_value || 0);
 
         const row = [
             idx + 1,
-            escapeCsv(item.barcode || item.sku),
-            escapeCsv(item.category),
-            escapeCsv(item.item_name)
+            ui.escapeCsv(item.barcode || item.sku),
+            ui.escapeCsv(item.category),
+            ui.escapeCsv(item.item_name)
         ];
 
         for (let m = 1; m <= 12; m++) {
@@ -367,6 +370,7 @@ function exportStockReportToCSV() {
 
         row.push(Number(item.total_in || 0));
         row.push(Number(item.total_out || 0));
+        row.push(adjVal);
         row.push(bal);
         row.push(cost);
         row.push(val);

@@ -33,7 +33,7 @@
                 <span class="hidden sm:inline">Export CSV</span>
             </button>
 
-            <button type="button" id="btn-import-csv" title="CSV ဖြင့် အချက်အလက်သစ်များ သွင်းမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
+            <button type="button" id="btn-import-csv" title="CSV ဖြင့် ပစ္စည်း Master အသစ်များ သွင်းမည်" class="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95">
                 <i class="fa-solid fa-file-import text-amber-500 text-xs"></i>
                 <span class="hidden lg:inline">Import CSV</span>
             </button>
@@ -42,7 +42,7 @@
 
             <button type="button" id="btn-add-product" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95">
                 <i class="fa-solid fa-plus text-xs"></i>
-                <span>Add New</span>
+                <span>Add Product Master</span>
             </button>
         </div>
     </div>
@@ -86,14 +86,14 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- 1. Add / Edit Product Modal (Pro Entry Form Standard)                 -->
+<!-- 1. Add / Edit Product Master Modal (Spec 5.6 & 6.1: Stock View-Only)  -->
 <!-- ===================================================================== -->
 <div id="product-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
         <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
             <div class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-boxes-stacked text-emerald-400"></i>
-                <span id="product-modal-title">အထည်အချက်အလက်သစ် မှတ်ပုံတင်မည်</span>
+                <span id="product-modal-title">ပစ္စည်း Master အချက်အလက် မှတ်ပုံတင်မည်</span>
             </div>
             <button type="button" id="btn-close-product-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
                 <i class="fa-solid fa-xmark"></i>
@@ -161,14 +161,14 @@
                 </div>
             </div>
 
-            <!-- စာရင်းဖွင့် / လက်ရှိဆိုင် လက်ကျန်အရေအတွက် နှင့် စတော့နည်း သတိပေးချက် -->
+            <!-- View-Only Stock & Alert Qty (Spec 5.6 & 6.1) -->
             <div class="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                    <label id="lbl-prod-stock" class="block text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
-                        စာရင်းဖွင့် / လက်ရှိဆိုင် လက်ကျန်အရေအတွက်
+                    <label id="lbl-prod-stock" class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        လက်ရှိလက်ကျန် (View-Only)
                     </label>
-                    <input type="number" id="prod-stock" min="0" step="any" value="0" placeholder="0"
-                        class="w-full text-base font-mono font-black bg-emerald-50/50 dark:bg-slate-950 border border-emerald-400 dark:border-emerald-700/80 rounded-xl px-3.5 py-2 text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <input type="number" id="prod-stock" readonly disabled value="0"
+                        class="w-full text-base font-mono font-black bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-3.5 py-2 text-slate-500 cursor-not-allowed opacity-60">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -179,16 +179,16 @@
                 </div>
             </div>
 
-            <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl">
-                <p id="prod-stock-hint" class="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold leading-relaxed">
-                    <i class="fa-solid fa-circle-info mr-1"></i> စာရင်းဖွင့်လက်ကျန်ကို ဤနေရာတွင် တိုက်ရိုက်ထည့်သွင်းနိုင်ပါသည်။ လုပ်ငန်းလည်ပတ်စဉ် ကိုယ်ပိုင်ရက်ကန်းအဝင်နှင့် အဝယ်များကို "Purchases" စာမျက်နှာတွင် သွင်းပါ။
+            <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-xl">
+                <p id="prod-stock-hint" class="text-[11px] text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                    <i class="fa-solid fa-lock mr-1"></i> စတော့လက်ကျန်ကို ဤဖောင်မှ တိုက်ရိုက်ပြင်ဆင်ခွင့် မရှိပါ။ <b>ကနဦးစတော့ (Opening Stock)</b> သို့မဟုတ် <b>စတော့ရေတွက်/ပြင်ဆင်ချက် (Adjustment)</b> စနစ်ကို အသုံးပြုပါ။
                 </p>
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button type="submit" id="btn-submit-product" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
-                    <span>အချက်အလက် သိမ်းဆည်းမည်</span>
+                    <span>ပစ္စည်း Master သိမ်းဆည်းမည်</span>
                 </button>
             </div>
         </form>
@@ -196,14 +196,14 @@
 </div>
 
 <!-- ===================================================================== -->
-<!-- 2. Inter-Branch Stock Transfer Modal (Pro Entry Form Standard)        -->
+<!-- 2. Inter-Branch Stock Transfer Modal (Spec 4.3 State Machine)         -->
 <!-- ===================================================================== -->
 <div id="transfer-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
         <div class="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
             <div class="text-xs font-extrabold flex items-center gap-2">
                 <i class="fa-solid fa-parachute-box text-purple-400"></i>
-                <span>ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းမည်</span>
+                <span>ဆိုင်ခွဲသို့ ပစ္စည်းလွှဲပြောင်းစာရင်း (Pending) ဖန်တီးမည်</span>
             </div>
             <button type="button" id="btn-close-transfer-modal" class="text-slate-400 hover:text-white text-base cursor-pointer transition">
                 <i class="fa-solid fa-xmark"></i>
@@ -246,14 +246,14 @@
 
             <div class="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 rounded-xl">
                 <p class="text-[11px] text-purple-700 dark:text-purple-300 font-bold leading-relaxed">
-                    <i class="fa-solid fa-arrow-right-arrow-left mr-1"></i> အတည်ပြုပြီးပါက လက်ရှိဆိုင်မှ စတော့နုတ်ပြီး လက်ခံမည့်ဆိုင်တွင် အလိုအလျောက် ပေါင်းထည့်ပေးပါမည်။
+                    <i class="fa-solid fa-truck-fast mr-1"></i> လွှဲပြောင်းစာရင်း (Pending) အဖြစ် စတင်မှတ်တမ်းတင်ပါမည်။ ပစ္စည်းပို့ဆောင်ချိန်တွင် <b>Dispatch</b> နှိပ်မှသာ ထွက်ဆိုင်မှ စတော့နုတ်ပြီး၊ လက်ခံဆိုင်မှ <b>Receive</b> နှိပ်ချိန်တွင် ဝင်ဆိုင်စတော့သို့ ပေါင်းထည့်ပေးပါမည်။
                 </p>
             </div>
 
             <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button type="submit" id="btn-submit-transfer" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-2">
                     <i class="fa-solid fa-check"></i>
-                    <span>အတည်ပြု၍ ဆိုင်ခွဲသို့ ပို့ဆောင်မည်</span>
+                    <span>လွှဲပြောင်းစာရင်း (Pending) ဖန်တီးမည်</span>
                 </button>
             </div>
         </form>
@@ -309,7 +309,7 @@
 
             <div class="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 rounded-xl">
                 <p class="text-[11px] text-rose-700 dark:text-rose-400 font-bold leading-relaxed">
-                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> သတိပြုရန်: အတည်ပြုပြီးပါက လက်ကျန်စာရင်းမှ ချက်ချင်း နှုတ်သွားမည်ဖြစ်ပါသည်။
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> သတိပြုရန်: အတည်ပြုပြီးပါက လက်ကျန်စာရင်းနှင့် Stock Movement Ledger မှ ချက်ချင်း နှုတ်သွားမည်ဖြစ်ပါသည်။
                 </p>
             </div>
 

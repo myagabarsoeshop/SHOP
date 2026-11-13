@@ -1,4 +1,8 @@
-// cashbook-frontend/js/modules/cashbook.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/cashbook.js
+// MULTI-STORE CASHBOOK MODULE
+// Version: 4.1.0 (ALL-View Read-Only Guard, Strict RBAC & XSS Hardened)
+// =============================================================================
 
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
@@ -10,7 +14,6 @@ let entries = [];
 let categories = [];
 let currentFilteredEntries = [];
 
-// Fallback Categories ("ပိုင်ရှင်ထံ ငွေလွှဲ/အပ်ငွေ" နှင့် "ပွဲရုံအကြွေးဆပ်ငွေ" ပါဝင်သည်)
 const FALLBACK_CATEGORIES = [
     { id: 1, name: "အထည်ရောင်းရငွေ (POS Sales)", type: "INCOME", is_system: 1 },
     { id: 2, name: "အကြွေးဟောင်းရငွေ (Debt Collection)", type: "INCOME", is_system: 1 },
@@ -25,15 +28,11 @@ const FALLBACK_CATEGORIES = [
     { id: 11, name: "ပွဲရုံအကြွေးဆပ်ငွေ (Supplier Debt Payment)", type: "EXPENSE", is_system: 1 }
 ];
 
-// စာကြောင်း ၁၅ ကြောင်း ကန့်သတ်ပြသမည့် Pagination Instance
 const pagination = new PaginationController({
     pageSize: 15,
     onPageChange: () => renderTable()
 });
 
-/**
- * မြန်မာဂဏန်း (၀-၉) မှ အင်္ဂလိပ်ဂဏန်း (0-9) သို့ ပြောင်းပြီး ကိန်းပြည့်ယူသည့် Helper
- */
 function parseAnyNumber(val) {
     if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -45,9 +44,6 @@ function parseAnyNumber(val) {
     return isNaN(num) ? 0 : Math.round(num);
 }
 
-/**
- * ငွေရိုက်သွင်းသည့် Input တွင် ရိုက်နေစဉ် အလိုအလျောက် ကော်မာ (150,000) ခံပေးခြင်း
- */
 function formatMoneyInputLive(inputEl) {
     if (!inputEl) return;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -67,23 +63,31 @@ export async function initCashbook() {
     const dateInput = document.getElementById("cb-date-filter");
     if (dateInput) dateInput.value = getLocalTodayDate();
 
+    // Spec 4.1 & 10: Disable Add button in ALL branches view
+    const addBtn = document.getElementById("btn-open-add-modal");
+    if (addBtn) {
+        addBtn.setAttribute("data-branch-write", "true");
+        if (state.isAllBranches() || !state.can("cashbook.write")) {
+            addBtn.disabled = true;
+            addBtn.classList.add("opacity-50", "cursor-not-allowed");
+        } else {
+            addBtn.disabled = false;
+            addBtn.classList.remove("opacity-50", "cursor-not-allowed");
+        }
+    }
+
     bindEvents();
     await loadCategories();
     await loadEntries();
 }
 
 function bindEvents() {
-    // 1. Add New Button
     document.getElementById("btn-open-add-modal")?.addEventListener("click", () => openModal("EXPENSE"));
-
-    // Modal Close
     document.getElementById("btn-close-entry-modal")?.addEventListener("click", closeModal);
 
-    // 2. Modal Switcher Tabs
     document.getElementById("tab-btn-expense")?.addEventListener("click", () => switchModalTab("EXPENSE"));
     document.getElementById("tab-btn-income")?.addEventListener("click", () => switchModalTab("INCOME"));
 
-    // 3. Category Change Auto-Template
     document.getElementById("entry-category")?.addEventListener("change", (e) => {
         const descInput = document.getElementById("entry-desc");
         const selectedOpt = e.target.selectedOptions?.[0];
@@ -97,7 +101,6 @@ function bindEvents() {
         document.getElementById("entry-amount")?.focus();
     });
 
-    // 4. Live Comma Formatting & Keyboard Enter Navigation inside Modal
     const amountInput = document.getElementById("entry-amount");
     if (amountInput) {
         amountInput.addEventListener("input", () => formatMoneyInputLive(amountInput));
@@ -119,16 +122,13 @@ function bindEvents() {
         });
     }
 
-    // 5. Form Submit
     document.getElementById("entry-form")?.addEventListener("submit", submitEntry);
 
-    // 6. Date Filter Change
     document.getElementById("cb-date-filter")?.addEventListener("change", () => {
         pagination.reset();
         loadEntries();
     });
 
-    // 7. Search Filter
     document.getElementById("cb-search")?.addEventListener("input", (e) => {
         const kw = e.target.value.trim().toLowerCase();
         currentFilteredEntries = entries.filter(r => {
@@ -142,7 +142,6 @@ function bindEvents() {
         renderTable();
     });
 
-    // 8. Refresh Button
     const refreshBtn = document.getElementById("btn-refresh-cashbook");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -154,7 +153,6 @@ function bindEvents() {
         });
     }
 
-    // 9. Export CSV
     document.getElementById("btn-export-csv")?.addEventListener("click", exportCSV);
 }
 
@@ -162,9 +160,6 @@ function closeModal() {
     document.getElementById("entry-modal")?.classList.add("hidden");
 }
 
-/**
- * D1 Read Quota ချွေတာရန် Categories အား Memory တွင် Cache ထားခြင်း
- */
 async function loadCategories(forceRefresh = false) {
     if (!forceRefresh && categories.length > 0) return;
     try {
@@ -182,7 +177,7 @@ async function loadCategories(forceRefresh = false) {
 async function loadEntries() {
     const tbody = document.getElementById("cashbook-table-body");
     const date = document.getElementById("cb-date-filter")?.value || getLocalTodayDate();
-    const branchId = state.currentBranch?.id || 1;
+    const branchId = state.getBranchId();
 
     if (tbody) {
         tbody.innerHTML = `
@@ -237,7 +232,6 @@ async function loadEntries() {
             });
         }
 
-        // Standard KPI Boxes
         setKPI(1, "Cash Balance", cashBal, "fa-money-bill-wave", "emerald");
         setKPI(2, "Bank Balance", bankBal, "fa-building-columns", "blue");
         setKPI(3, "Total Expense", todayExpense, "fa-arrow-trend-down", "rose");
@@ -252,9 +246,6 @@ async function loadEntries() {
     }
 }
 
-/**
- * Cash Book Table Rendering (၁၁ ကော်လံစနစ် - Pro Typography & Sticky Action)
- */
 function renderTable() {
     const tbody = document.getElementById("cashbook-table-body");
     if (!tbody) return;
@@ -275,13 +266,15 @@ function renderTable() {
 
     const pageItems = pagination.getPageItems(currentFilteredEntries);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
+    const isAllView = state.isAllBranches();
+    const canEdit = !isAllView && state.can("cashbook.write");
+    const canDelete = !isAllView && state.can("cashbook.delete");
 
     pageItems.forEach((item, idx) => {
         const entryType = (item.entry_type || item.type || "EXPENSE").toUpperCase();
         const isIncome = entryType === "INCOME";
         const sign = isIncome ? "+" : "-";
 
-        // 1. Category Format & Color
         const catName = item.category_name || item.category || "General";
         const isRemittance = catName.includes("ပိုင်ရှင်") || catName.includes("အပ်ငွေ") || catName.includes("လွှဲ") || item.category_id === 10;
 
@@ -302,21 +295,16 @@ function renderTable() {
             amountColorClass = "text-rose-600 dark:text-rose-400";
         }
 
-        // 2. Description
         const desc = String(item.description || "-");
-
-        // 3. Method Badge
         const method = String(item.payment_method || "cash").toUpperCase();
         const methodBadge = method === "BANK"
             ? `<span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono text-[11px] font-bold">BANK</span>`
             : `<span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-bold">CASH</span>`;
 
-        // 4. Qty
         const qtyVal = item.total_quantity || item.quantity;
         const hasQty = qtyVal !== undefined && qtyVal !== null && Number(qtyVal) > 0;
         const qtyStr = hasQty ? Number(qtyVal).toLocaleString() : "-";
 
-        // 5. Price
         let priceVal = item.unit_price;
         if ((priceVal === undefined || priceVal === null) && hasQty && Number(item.amount) > 0) {
             priceVal = Math.round(Number(item.amount) / Number(qtyVal));
@@ -325,10 +313,8 @@ function renderTable() {
             ? Number(priceVal).toLocaleString()
             : "-";
 
-        // 6. REF
         const refNo = item.ref_no || item.reference_no || item.invoice_no || item.purchase_no || "-";
 
-        // 7. SURPLUS & DEFICIT
         const diff = Number(item.diff_amount || 0);
         let diffBadge = `<span class="text-slate-400 font-mono text-xs">-</span>`;
         if (diff > 0) {
@@ -337,77 +323,60 @@ function renderTable() {
             diffBadge = `<span class="text-rose-500 font-mono font-bold text-xs" title="ပေးရန်ကျန် အကြွေး">${diff.toLocaleString()}</span>`;
         }
 
-        // 8. Sticky Right Action Buttons
-        const actionButtons = `
-            <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${item.id}" title="ပြင်ဆင်မည်" 
+        const isSystemLinked = Boolean(item.sale_id || item.purchase_id || item.customer_ledger_id || item.supplier_ledger_id);
+        let actionButtons = `<span class="text-[10px] text-slate-400 font-bold">Read-Only</span>`;
+
+        if (isSystemLinked) {
+            actionButtons = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 text-[10px] font-bold" title="ဘောင်ချာနှင့် တိုက်ရိုက်ချိတ်ဆက်ထားသည်"><i class="fa-solid fa-lock text-[9px]"></i> Linked</span>`;
+        } else if (canEdit || canDelete) {
+            const safeId = ui.escapeHtml(item.id);
+            const editBtnHtml = canEdit
+                ? `<button type="button" data-id="${safeId}" title="ပြင်ဆင်မည်" 
                     class="btn-edit-entry w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-pen-to-square text-xs"></i>
-                </button>
-                <button type="button" data-id="${item.id}" title="ဖျက်မည်" 
+                </button>`
+                : "";
+            const delBtnHtml = canDelete
+                ? `<button type="button" data-id="${safeId}" title="ဖျက်မည်" 
                     class="btn-delete-entry w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
-                </button>
-            </div>
-        `;
+                </button>`
+                : "";
+            actionButtons = `<div class="flex items-center justify-center gap-1.5">${editBtnHtml}${delBtnHtml}</div>`;
+        }
 
         const row = document.createElement("tr");
         row.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         row.innerHTML = `
-            <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            
-            <!-- 2. DATE -->
             <td class="py-2 px-3 text-center font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${ui.escapeHtml(item.entry_date || item.date)}</td>
-            
-            <!-- 3. CATEGORY -->
             <td class="py-2 px-4 text-xs ${catColor} truncate max-w-[190px]" title="${ui.escapeHtml(catName)}">${ui.escapeHtml(catName)}</td>
-            
-            <!-- 4. DESCRIPTION -->
             <td class="py-2 px-4 text-xs font-bold text-slate-900 dark:text-slate-100 min-w-[200px] max-w-sm truncate" title="${ui.escapeHtml(desc)}">
                 ${ui.escapeHtml(desc)}
             </td>
-            
-            <!-- 5. METHOD -->
             <td class="py-2 px-3 text-center w-24">${methodBadge}</td>
-            
-            <!-- 6. QTY -->
             <td class="py-2 px-3 text-center font-mono text-xs font-bold text-slate-700 dark:text-slate-300 w-16">${qtyStr}</td>
-            
-            <!-- 7. PRICE -->
             <td class="py-2 px-4 text-right font-mono text-xs font-bold text-slate-700 dark:text-slate-300 w-28">${priceStr}</td>
-            
-            <!-- 8. AMOUNT -->
             <td class="py-2 px-4 text-right font-black font-mono text-sm ${amountColorClass} w-32">${sign}${Number(item.amount || 0).toLocaleString()}</td>
-            
-            <!-- 9. REF -->
             <td class="py-2 px-3 text-center font-mono text-xs font-bold text-blue-600 dark:text-blue-400 w-32 truncate" title="${ui.escapeHtml(refNo)}">
                 ${ui.escapeHtml(refNo)}
             </td>
-
-            <!-- 10. SURPLUS & DEFICIT -->
-            <td class="py-2 px-3 text-center font-mono text-xs w-32">
-                ${diffBadge}
-            </td>
-
-            <!-- 11. ACTION (Sticky Right) -->
-            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
-                ${actionButtons}
-            </td>
+            <td class="py-2 px-3 text-center font-mono text-xs w-32">${diffBadge}</td>
+            <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">${actionButtons}</td>
         `;
         tbody.appendChild(row);
     });
 
     tbody.querySelectorAll(".btn-edit-entry").forEach(btn => {
         btn.addEventListener("click", () => {
-            const item = entries.find(r => r.id == btn.dataset.id);
+            const item = entries.find(r => String(r.id) === String(btn.dataset.id));
             if (item) openEditModal(item);
         });
     });
 
     tbody.querySelectorAll(".btn-delete-entry").forEach(btn => {
         btn.addEventListener("click", () => {
-            const item = entries.find(r => r.id == btn.dataset.id);
+            const item = entries.find(r => String(r.id) === String(btn.dataset.id));
             deleteEntry(btn.dataset.id, item);
         });
     });
@@ -451,11 +420,16 @@ function switchModalTab(type) {
 }
 
 function openModal(defaultType = "EXPENSE") {
+    if (state.isAllBranches()) {
+        ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ ငွေစာရင်းအသစ် သွင်း၍ မရပါ။ အပေါ်ညာဘက်တွင် ဆိုင်ခွဲတစ်ခုကို ရွေးချယ်ပါ။");
+        return;
+    }
+
     const modal = document.getElementById("entry-modal");
     const headerTitle = document.getElementById("entry-modal-header-title");
-    
+
     document.getElementById("entry-form")?.reset();
-    
+
     const editIdInput = document.getElementById("entry-edit-id");
     if (editIdInput) editIdInput.value = "";
 
@@ -463,7 +437,7 @@ function openModal(defaultType = "EXPENSE") {
     if (refInput) refInput.value = "";
 
     if (headerTitle) headerTitle.textContent = "ငွေစာရင်း အသစ်ထည့်သွင်းခြင်း";
-    
+
     switchModalTab(defaultType);
 
     modal?.classList.remove("hidden");
@@ -471,6 +445,11 @@ function openModal(defaultType = "EXPENSE") {
 }
 
 function openEditModal(item) {
+    if (state.isAllBranches()) {
+        ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ ပြင်ဆင်၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို ရွေးချယ်ပါ။");
+        return;
+    }
+
     const modal = document.getElementById("entry-modal");
     const headerTitle = document.getElementById("entry-modal-header-title");
     const amountInput = document.getElementById("entry-amount");
@@ -497,22 +476,14 @@ function openEditModal(item) {
     switchModalTab(entryType);
     if (submitText) submitText.textContent = "ပြင်ဆင်ချက်များ သိမ်းဆည်းမည်";
 
-    if (select) {
-        select.value = item.category_id || "";
-    }
-    if (amountInput) {
-        amountInput.value = item.amount ? Number(item.amount).toLocaleString("en-US") : "";
-    }
-    if (methodSelect) {
-        methodSelect.value = item.payment_method || "cash";
-    }
+    if (select) select.value = item.category_id || "";
+    if (amountInput) amountInput.value = item.amount ? Number(item.amount).toLocaleString("en-US") : "";
+    if (methodSelect) methodSelect.value = item.payment_method || "cash";
     if (refInput) {
         const rawRef = item.ref_no || "";
         refInput.value = rawRef.startsWith("VR-CB-") ? "" : rawRef;
     }
-    if (descInput) {
-        descInput.value = item.description || "";
-    }
+    if (descInput) descInput.value = item.description || "";
 
     modal?.classList.remove("hidden");
     amountInput?.focus();
@@ -521,6 +492,14 @@ function openEditModal(item) {
 async function submitEntry(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-entry");
+
+    let targetBranchId;
+    try {
+        targetBranchId = state.requireWriteBranchId();
+    } catch (err) {
+        ui.toast.warning(err.message);
+        return;
+    }
 
     const editId = document.getElementById("entry-edit-id")?.value;
     const categorySelect = document.getElementById("entry-category");
@@ -544,15 +523,14 @@ async function submitEntry(e) {
     if (btn) btn.disabled = true;
 
     const payload = {
-        branchId: state.currentBranch?.id || 1,
-        categoryId,
-        entryType: document.getElementById("entry-type")?.value || "EXPENSE",
-        paymentMethod: document.getElementById("entry-payment-method")?.value || "cash",
+        branch_id: targetBranchId,
+        category_id: categoryId,
+        entry_type: document.getElementById("entry-type")?.value || "EXPENSE",
+        payment_method: document.getElementById("entry-payment-method")?.value || "cash",
         amount,
-        refNo,
+        ref_no: refNo,
         description,
-        entryDate: document.getElementById("cb-date-filter")?.value || getLocalTodayDate(),
-        createdBy: state.user?.id || 1
+        entry_date: document.getElementById("cb-date-filter")?.value || getLocalTodayDate()
     };
 
     try {
@@ -581,6 +559,11 @@ async function submitEntry(e) {
 }
 
 async function deleteEntry(id, item = null) {
+    if (!state.can("cashbook.delete")) {
+        ui.toast.error("ငွေစာရင်း ပယ်ဖျက်ခွင့် မရှိပါ။");
+        return;
+    }
+
     let msg = "ဤငွေစာရင်း မှတ်တမ်းအား အမှန်တကယ် ဖျက်လိုပါသလား?";
     if (item && (item.sale_id || item.purchase_id)) {
         const ref = item.ref_no || item.reference_no || "";
@@ -589,7 +572,7 @@ async function deleteEntry(id, item = null) {
 
     const confirmed = await ui.confirm(msg, "error");
     if (!confirmed) return;
-    
+
     try {
         await api.delete(`/cashbook/entries/${id}`);
         ui.toast.success("မှတ်တမ်းကို ပယ်ဖျက်ပြီးပါပြီ။");
@@ -599,16 +582,13 @@ async function deleteEntry(id, item = null) {
     }
 }
 
-/**
- * CSV Export (10 Columns)
- */
 function exportCSV() {
     const listToExport = currentFilteredEntries.length > 0 ? currentFilteredEntries : entries;
 
     if (listToExport.length === 0) {
         return ui.toast.warning("ထုတ်ယူရန် စာရင်းမရှိသေးပါ။");
     }
-    
+
     let csv = "NO,DATE,CATEGORY,DESCRIPTION,METHOD,QTY,PRICE,AMOUNT,REF,SURPLUS_DEFICIT\n";
 
     listToExport.forEach((item, idx) => {
@@ -638,7 +618,7 @@ function exportCSV() {
 
         csv += `${no},${ui.escapeCsv(date)},${ui.escapeCsv(catName)},${ui.escapeCsv(desc)},${ui.escapeCsv(method)},${ui.escapeCsv(qtyStr)},${ui.escapeCsv(priceStr)},${ui.escapeCsv(amountStr)},${ui.escapeCsv(refNo)},${diffAmount}\n`;
     });
-    
+
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

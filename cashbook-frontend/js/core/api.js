@@ -1,4 +1,8 @@
-// cashbook-frontend/js/core/api.js
+// =============================================================================
+// FILE: cashbook-frontend/js/core/api.js
+// CENTRAL API CLIENT, SNAKE_CASE <-> CAMELCASE MAPPER & D1 READ MICRO-CACHE
+// Version: 4.1.0 (Spec 1.3 Payload Mapping Layer & D1 Quota Optimizer)
+// =============================================================================
 
 const isLocalHost =
     window.location.hostname === "localhost" ||
@@ -9,7 +13,7 @@ export const API_BASE_URL =
         ? "http://localhost:8787/api"
         : "/api";
 
-// D1 Read Quota Saver: In-flight GET deduplication & short-TTL cache
+// D1 Read Quota Saver: In-flight GET deduplication & short-TTL cache (Spec 8.4)
 const inflightGets = new Map();
 const responseCache = new Map();
 
@@ -18,6 +22,78 @@ function getCacheTTL(endpoint) {
         return 60000; // 60 seconds for static config lists
     }
     return 1500; // 1.5 seconds micro-cache to prevent rapid tab-switch duplicate reads
+}
+
+/**
+ * camelCase key မှ snake_case key သို့ ပြောင်းလဲခြင်း (Spec 1.3)
+ */
+function toSnakeCase(str) {
+    return String(str).replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * snake_case key မှ camelCase key သို့ ပြောင်းလဲခြင်း
+ */
+function toCamelCase(str) {
+    return String(str).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Frontend မှ Backend သို့ ပို့မည့် Request Payload အား snake_case စံနှုန်းသို့ ပြောင်းလဲခြင်း (Spec 1.3)
+ * - targetBranchId -> branch_id
+ * - camelCase keys -> snake_case keys
+ */
+export function normalizeRequestPayload(payload) {
+    if (payload === null || payload === undefined || typeof payload !== "object") {
+        return payload;
+    }
+    if (Array.isArray(payload)) {
+        return payload.map(item => normalizeRequestPayload(item));
+    }
+
+    const normalized = {};
+    for (const [key, value] of Object.entries(payload)) {
+        const cleanVal = normalizeRequestPayload(value);
+        const snakeKey = key === "targetBranchId" ? "branch_id" : toSnakeCase(key);
+
+        normalized[key] = cleanVal;
+        if (!(snakeKey in normalized)) {
+            normalized[snakeKey] = cleanVal;
+        }
+    }
+    return normalized;
+}
+
+/**
+ * Backend မှ ပြန်လာသော Response Data အား snake_case ရော camelCase ပါ ဖတ်နိုင်အောင် ပြင်ဆင်ခြင်း
+ * - Cashier အတွက် Backend မှ ဖယ်ရှားထားသော cost_price ကို လုံးဝ မထည့်ပါ (Spec 1.3 & 10)
+ */
+export function normalizeResponsePayload(data) {
+    if (data === null || data === undefined || typeof data !== "object") {
+        return data;
+    }
+    if (Array.isArray(data)) {
+        return data.map(item => normalizeResponsePayload(item));
+    }
+
+    const enriched = {};
+    for (const [key, value] of Object.entries(data)) {
+        const normalizedVal = normalizeResponsePayload(value);
+        enriched[key] = normalizedVal;
+
+        if (key.includes("_")) {
+            const camelKey = toCamelCase(key);
+            if (!(camelKey in enriched)) {
+                enriched[camelKey] = normalizedVal;
+            }
+        } else if (/[A-Z]/.test(key)) {
+            const snakeKey = toSnakeCase(key);
+            if (!(snakeKey in enriched)) {
+                enriched[snakeKey] = normalizedVal;
+            }
+        }
+    }
+    return enriched;
 }
 
 /**
@@ -82,7 +158,6 @@ export const api = {
         let response;
         try {
             response = await fetch(url, config);
-            // Server ထံမှ Response ပြန်ရသည်နှင့် Online ဖြစ်ကြောင်း သတ်မှတ်မည်
             setOnlineStatus(response.status < 502);
         } catch (netErr) {
             clearTimeout(timeoutId);
@@ -96,7 +171,7 @@ export const api = {
             clearTimeout(timeoutId);
         }
 
-        const data = await response.json().catch(() => ({}));
+        const rawJson = await response.json().catch(() => ({}));
 
         // Token သက်တမ်းကုန်ဆုံးသွားပါက Login ပြန်ဝင်ခိုင်းခြင်း
         if (response.status === 401 && !cleanEndpoint.includes("/auth/login")) {
@@ -107,18 +182,28 @@ export const api = {
         }
 
         if (!response.ok) {
-            const errMsg = data.error || data.message || `HTTP error! status: ${response.status}`;
+            const errMsg = rawJson.error || rawJson.message || `HTTP error! status: ${response.status}`;
             console.warn(`API Validation/Error [${cleanEndpoint}]:`, errMsg);
             throw new Error(errMsg);
         }
 
-        return data;
+        if (rawJson && typeof rawJson === "object" && "data" in rawJson) {
+            return {
+                ...rawJson,
+                data: normalizeResponsePayload(rawJson.data)
+            };
+        }
+
+        return normalizeResponsePayload(rawJson);
     },
 
     get(endpoint, params = {}) {
         const cleanParams = {};
-        Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null && value !== "") {
+        const normalizedParams = normalizeRequestPayload(params || {});
+
+        Object.entries(normalizedParams).forEach(([key, value]) => {
+            // Keep snake_case query params clean
+            if (value !== undefined && value !== null && value !== "" && !/[A-Z]/.test(key)) {
                 cleanParams[key] = value;
             }
         });
@@ -156,16 +241,18 @@ export const api = {
     },
 
     post(endpoint, body = {}) {
+        const mappedBody = normalizeRequestPayload(body);
         return this.request(endpoint, {
             method: "POST",
-            body: JSON.stringify(body)
+            body: JSON.stringify(mappedBody)
         });
     },
 
     put(endpoint, body = {}) {
+        const mappedBody = normalizeRequestPayload(body);
         return this.request(endpoint, {
             method: "PUT",
-            body: JSON.stringify(body)
+            body: JSON.stringify(mappedBody)
         });
     },
 

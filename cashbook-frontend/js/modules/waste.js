@@ -1,4 +1,9 @@
-// cashbook-frontend/js/modules/waste.js
+// =============================================================================
+// FILE: cashbook-frontend/js/modules/waste.js
+// DAMAGE & WASTE LOGS MODULE (LEDGER-BACKED WASTE_OUT & REVERSAL)
+// Version: 4.1.0 (Fixes Stock Field Mapping, ALL-View Guard & RBAC Void)
+// =============================================================================
+
 import { api } from "../core/api.js";
 import { state } from "../core/state.js";
 import { ui } from "../core/ui.js";
@@ -14,23 +19,6 @@ const pagination = new PaginationController({
     onPageChange: () => renderTable()
 });
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
-
-/**
- * မြန်မာဂဏန်း (၀-၉) နှင့် ကော်မာများကို ဖယ်ရှားပြီး Number ပြောင်းပေးသည့် Helper
- */
 function parseAnyNumber(val, isInteger = false) {
     if (!val && val !== 0) return 0;
     const myanmarDigits = ["၀", "၁", "၂", "၃", "၄", "၅", "၆", "၇", "၈", "၉"];
@@ -44,6 +32,22 @@ function parseAnyNumber(val, isInteger = false) {
 }
 
 export async function initWaste() {
+    const createBtn = document.getElementById("btn-open-create-waste");
+    if (createBtn) {
+        if (!state.can("waste.create")) {
+            createBtn.classList.add("hidden");
+        } else {
+            createBtn.classList.remove("hidden");
+            if (state.isAllBranches()) {
+                createBtn.disabled = true;
+                createBtn.classList.add("opacity-50", "cursor-not-allowed");
+            } else {
+                createBtn.disabled = false;
+                createBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            }
+        }
+    }
+
     bindEvents();
     await Promise.all([
         loadProductsForWaste(),
@@ -52,14 +56,11 @@ export async function initWaste() {
 }
 
 function bindEvents() {
-    // Search & Filter
     document.getElementById("waste-search")?.addEventListener("input", filterAndRender);
     document.getElementById("waste-category-filter")?.addEventListener("change", filterAndRender);
-    
-    // Export CSV
+
     document.getElementById("btn-export-waste-csv")?.addEventListener("click", exportWasteToCSV);
-    
-    // Refresh Button
+
     const refreshBtn = document.getElementById("btn-refresh-waste");
     if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
@@ -74,7 +75,6 @@ function bindEvents() {
         });
     }
 
-    // Create Modal Events
     document.getElementById("btn-open-create-waste")?.addEventListener("click", () => openCreateWasteModal());
     document.getElementById("btn-close-create-waste")?.addEventListener("click", () => {
         document.getElementById("create-waste-modal")?.classList.add("hidden");
@@ -91,18 +91,21 @@ function bindEvents() {
         }
     });
 
-    // Edit Modal Events
     document.getElementById("btn-close-waste-edit-modal")?.addEventListener("click", () => {
         document.getElementById("waste-edit-modal")?.classList.add("hidden");
     });
-    document.getElementById("waste-edit-form")?.addEventListener("submit", submitEditWaste);
 }
 
 async function loadProductsForWaste() {
     try {
-        const branchId = state.currentBranch?.id || 1;
+        const branchId = state.getBranchId();
         const res = await api.get("/products", { branch_id: branchId });
-        availableProducts = (res.data || []).filter(p => Number(p.current_stock || 0) > 0);
+        availableProducts = (res.data || [])
+            .map(p => {
+                const stockVal = Number(p.current_stock ?? p.quantity ?? p.stock ?? 0);
+                return { ...p, current_stock: stockVal, quantity: stockVal };
+            })
+            .filter(p => p.current_stock > 0);
     } catch (err) {
         console.error("Products ရယူ၍မရပါ:", err);
     }
@@ -110,7 +113,7 @@ async function loadProductsForWaste() {
 
 async function loadWasteLogs() {
     const tbody = document.getElementById("waste-table-body");
-    const branchId = state.currentBranch?.id || 1;
+    const branchId = state.getBranchId();
 
     if (tbody) {
         tbody.innerHTML = `<tr><td colspan="13" class="p-16 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-amber-500 text-2xl mb-3"></i><div class="font-bold text-xs">မှတ်တမ်းများ ဆွဲယူနေပါသည်...</div></td></tr>`;
@@ -125,7 +128,7 @@ async function loadWasteLogs() {
         filterAndRender();
     } catch (err) {
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${escapeHtml(err.message)})</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="p-12 text-center text-rose-500 font-bold text-xs">စာရင်း ရယူ၍မရပါ (${ui.escapeHtml(err.message)})</td></tr>`;
         }
     }
 }
@@ -135,7 +138,7 @@ function populateCategoryFilter() {
     if (!select) return;
     const current = select.value;
     const cats = [...new Set(wasteLogs.map(w => w.category).filter(Boolean))];
-    
+
     select.innerHTML = `<option value="">အမျိုးအစား အားလုံး (${wasteLogs.length})</option>`;
     cats.forEach(c => {
         const opt = document.createElement("option");
@@ -147,12 +150,15 @@ function populateCategoryFilter() {
 }
 
 function updateWasteKPIs(list = wasteLogs) {
-    const totalWasteValue = list.reduce((sum, w) => sum + Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0);
+    const canViewCost = state.canViewCost();
+    const totalWasteValue = canViewCost
+        ? list.reduce((sum, w) => sum + Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0)), 0)
+        : 0;
     const uniqueCategories = new Set(list.map(w => w.category).filter(Boolean)).size;
     const totalItems = list.reduce((sum, w) => sum + Number(w.quantity || 0), 0);
     const totalEntries = list.length;
 
-    setKPI(1, "Total Waste Value", totalWasteValue, "fa-vault", "rose");
+    setKPI(1, "Total Waste Value", canViewCost ? totalWasteValue : "-", "fa-vault", "rose");
     setKPI(2, "Total Category", uniqueCategories, "fa-tags", "blue");
     setKPI(3, "Total Items", totalItems, "fa-shirt", "amber");
     setKPI(4, "Total Entries", totalEntries, "fa-clipboard-list", "emerald");
@@ -174,9 +180,6 @@ function filterAndRender() {
     renderTable();
 }
 
-/**
- * Waste Table Rendering (13 Columns - Pro Typography & Sticky Right Action)
- */
 function renderTable() {
     const tbody = document.getElementById("waste-table-body");
     if (!tbody) return;
@@ -197,72 +200,47 @@ function renderTable() {
 
     const pageItems = pagination.getPageItems(currentFilteredWaste);
     const startIdx = (pagination.currentPage - 1) * pagination.pageSize;
+    const canDeleteWaste = !state.isAllBranches() && state.can("waste.delete");
+    const canViewCost = state.canViewCost();
 
     pageItems.forEach((w, idx) => {
         const dateStr = w.created_at ? new Date(w.created_at).toLocaleDateString("en-GB") : "-";
         const subtotal = Math.round(Number(w.quantity || 0) * Number(w.unit_cost || 0));
+        const safeId = ui.escapeHtml(w.id);
 
-        const actionButtons = state.isAdmin() ? `
+        const actionButtons = canDeleteWaste ? `
             <div class="flex items-center justify-center gap-1.5">
-                <button type="button" data-id="${w.id}" title="ပြင်ဆင်မည်" class="btn-edit-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
-                    <i class="fa-solid fa-pen-to-square text-xs"></i>
-                </button>
-                <button type="button" data-id="${w.id}" title="ဖျက်သိမ်းပြီး စတော့ပြန်သွင်းမည်" class="btn-delete-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
+                <button type="button" data-id="${safeId}" title="ပယ်ဖျက်ပြီး စတော့ပြန်သွင်းမည် (Void & Reversal)" class="btn-delete-waste w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-rose-600 dark:hover:bg-rose-600 text-rose-500 hover:text-white dark:text-rose-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700/80 transition cursor-pointer shadow-sm active:scale-95">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                 </button>
             </div>
-        ` : `<span class="text-xs text-slate-400 font-mono">-</span>`;
+        ` : `<span class="text-[10px] text-slate-400 font-bold">Read-Only</span>`;
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 dark:hover:bg-slate-900/60 transition h-11 whitespace-nowrap";
         tr.innerHTML = `
-            <!-- 1. NO -->
             <td class="py-2 px-3 text-center font-mono text-xs text-slate-400 w-12">${startIdx + idx + 1}</td>
-            
-            <!-- 2. DATE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${dateStr}</td>
-            
-            <!-- 3. BARCODE -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${escapeHtml(w.barcode || w.sku || "-")}">${escapeHtml(w.barcode || w.sku || "-")}</td>
-            
-            <!-- 4. CATEGORY -->
-            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${escapeHtml(w.category || "-")}">${escapeHtml(w.category || "-")}</td>
-            
-            <!-- 5. ITEM NAME -->
-            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${escapeHtml(w.item_name || "-")}">${escapeHtml(w.item_name || "-")}</td>
-            
-            <!-- 6. COLOR -->
-            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${escapeHtml(w.color || "-")}">${escapeHtml(w.color || "-")}</td>
-            
-            <!-- 7. UNIT -->
-            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${escapeHtml(w.size || "ထည်")}</td>
-            
-            <!-- 8. DAMAGE QTY -->
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-300 w-28">${ui.escapeHtml(dateStr)}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 w-28 truncate" title="${ui.escapeHtml(w.barcode || w.sku || "-")}">${ui.escapeHtml(w.barcode || w.sku || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 w-32 truncate" title="${ui.escapeHtml(w.category || "-")}">${ui.escapeHtml(w.category || "-")}</td>
+            <td class="py-2 px-4 text-left text-xs font-extrabold text-slate-900 dark:text-slate-100 min-w-[180px] truncate" title="${ui.escapeHtml(w.item_name || "-")}">${ui.escapeHtml(w.item_name || "-")}</td>
+            <td class="py-2 px-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 w-24 truncate" title="${ui.escapeHtml(w.color || "-")}">${ui.escapeHtml(w.color || "-")}</td>
+            <td class="py-2 px-3 text-left font-mono text-xs font-bold text-slate-600 dark:text-slate-400 w-20">${ui.escapeHtml(w.size || "ထည်")}</td>
             <td class="py-2 px-4 text-center font-mono font-black text-sm text-rose-600 dark:text-rose-400 w-32">
                 -${Number(w.quantity || 0).toLocaleString()}
             </td>
-
-            <!-- 9. PURCHASE -->
             <td class="py-2 px-4 text-right font-mono text-sm font-bold text-slate-700 dark:text-slate-300 w-28">
-                ${Number(w.unit_cost || 0).toLocaleString()}
+                ${canViewCost ? Number(w.unit_cost || 0).toLocaleString() : "-"}
             </td>
-            
-            <!-- 10. WASTE VALUE -->
             <td class="py-2 px-4 text-right font-mono font-black text-sm text-rose-600 dark:text-rose-400 w-32">
-                ${subtotal.toLocaleString()}
+                ${canViewCost ? subtotal.toLocaleString() : "-"}
             </td>
-            
-            <!-- 11. REASON -->
-            <td class="py-2 px-4 text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${escapeHtml(w.reason || "")}">
-                ${escapeHtml(w.reason || "-")}
+            <td class="py-2 px-4 text-xs font-semibold text-slate-600 dark:text-slate-300 min-w-[160px] truncate" title="${ui.escapeHtml(w.reason || "")}">
+                ${ui.escapeHtml(w.reason || "-")}
             </td>
-
-            <!-- 12. REF NO -->
-            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate" title="${escapeHtml(w.reference_no || "-")}">
-                ${escapeHtml(w.reference_no || "-")}
+            <td class="py-2 px-4 text-left font-mono text-[11px] font-bold text-slate-400 w-40 truncate" title="${ui.escapeHtml(w.reference_no || "-")}">
+                ${ui.escapeHtml(w.reference_no || "-")}
             </td>
-            
-            <!-- 13. ACTION (Sticky Right) -->
             <td class="py-2 px-3 text-center sticky right-0 z-10 w-24">
                 ${actionButtons}
             </td>
@@ -270,14 +248,7 @@ function renderTable() {
         tbody.appendChild(tr);
     });
 
-    if (state.isAdmin()) {
-        tbody.querySelectorAll(".btn-edit-waste").forEach(btn => {
-            btn.onclick = () => {
-                const log = wasteLogs.find(w => w.id === Number(btn.dataset.id));
-                if (log) openEditWasteModal(log);
-            };
-        });
-
+    if (canDeleteWaste) {
         tbody.querySelectorAll(".btn-delete-waste").forEach(btn => {
             btn.onclick = () => deleteWasteLog(Number(btn.dataset.id));
         });
@@ -287,6 +258,10 @@ function renderTable() {
 }
 
 function openCreateWasteModal() {
+    if (state.isAllBranches()) {
+        return ui.toast.warning("ဆိုင်ခွဲအားလုံး (ALL View) မှ အလေအလွင့်စာရင်း သွင်း၍ မရပါ။ ဆိုင်ခွဲတစ်ခုကို အရင်ရွေးချယ်ပါ။");
+    }
+
     const modal = document.getElementById("create-waste-modal");
     const prodSelect = document.getElementById("create-waste-prod-id");
     document.getElementById("create-waste-form")?.reset();
@@ -294,8 +269,8 @@ function openCreateWasteModal() {
     if (prodSelect) {
         prodSelect.innerHTML = `<option value="">-- ပစ္စည်း ရွေးချယ်ပါ --</option>`;
         availableProducts.forEach(p => {
-            prodSelect.innerHTML += `<option value="${p.id}" data-stock="${p.current_stock || 0}" data-cost="${p.cost_price || 0}">
-                ${escapeHtml(p.item_name)} (${escapeHtml(p.sku || "-")}) - လက်ကျန်: ${Number(p.current_stock || 0).toLocaleString()} ${escapeHtml(p.size || "ထည်")}
+            prodSelect.innerHTML += `<option value="${ui.escapeHtml(p.id)}" data-stock="${p.current_stock || 0}" data-cost="${p.cost_price || 0}">
+                ${ui.escapeHtml(p.item_name)} (${ui.escapeHtml(p.sku || "-")}) - လက်ကျန်: ${Number(p.current_stock || 0).toLocaleString()} ${ui.escapeHtml(p.size || "ထည်")}
             </option>`;
         });
     }
@@ -322,10 +297,17 @@ function updateCreateWasteStockHint(productId) {
 async function submitCreateWaste(e) {
     e.preventDefault();
     const btn = document.getElementById("btn-submit-create-waste");
+
+    let branchId;
+    try {
+        branchId = state.requireWriteBranchId();
+    } catch (err) {
+        return ui.toast.warning(err.message);
+    }
+
     const prodId = Number(document.getElementById("create-waste-prod-id")?.value);
     const qty = parseAnyNumber(document.getElementById("create-waste-qty")?.value, false);
     const reason = document.getElementById("create-waste-reason")?.value.trim();
-    const branchId = state.currentBranch?.id || 1;
 
     if (!prodId || qty <= 0 || !reason) {
         return ui.toast.warning("ကျေးဇူးပြု၍ အချက်အလက်များ ပြည့်စုံစွာ ဖြည့်သွင်းပါ။");
@@ -338,16 +320,14 @@ async function submitCreateWaste(e) {
 
     if (btn) btn.disabled = true;
 
-    const payload = {
-        branch_id: branchId,
-        product_id: prodId,
-        quantity: qty,
-        unit_cost: prod ? Number(prod.cost_price || 0) : 0,
-        reason: reason
-    };
-
     try {
-        await api.post("/waste", payload);
+        await api.post("/waste", {
+            branch_id: branchId,
+            product_id: prodId,
+            quantity: qty,
+            unit_cost: prod ? Number(prod.cost_price || 0) : 0,
+            reason
+        });
         document.getElementById("create-waste-modal")?.classList.add("hidden");
         ui.toast.success("အလေအလွင့်စာရင်း အောင်မြင်စွာ မှတ်တမ်းတင်ပြီးပါပြီ။");
         await Promise.all([
@@ -361,53 +341,13 @@ async function submitCreateWaste(e) {
     }
 }
 
-function openEditWasteModal(log) {
-    document.getElementById("edit-waste-id").value = log.id;
-    document.getElementById("edit-waste-name").value = `${log.item_name} (${log.sku || "-"})`;
-    document.getElementById("edit-waste-qty").value = log.quantity;
-    document.getElementById("edit-waste-reason").value = log.reason || "";
-
-    document.getElementById("waste-edit-modal")?.classList.remove("hidden");
-    const qtyEl = document.getElementById("edit-waste-qty");
-    qtyEl?.focus();
-    qtyEl?.select();
-}
-
-async function submitEditWaste(e) {
-    e.preventDefault();
-    const btn = document.getElementById("btn-save-waste-edit");
-    const id = document.getElementById("edit-waste-id")?.value;
-    const qty = parseAnyNumber(document.getElementById("edit-waste-qty")?.value, false);
-    const reason = document.getElementById("edit-waste-reason")?.value.trim();
-
-    if (!qty || qty <= 0) {
-        return ui.toast.warning("ကျေးဇူးပြု၍ မှန်ကန်သော အရေအတွက် ရိုက်ထည့်ပေးပါ။");
-    }
-
-    if (btn) btn.disabled = true;
-
-    try {
-        await api.put(`/waste/${id}`, { quantity: qty, reason });
-        document.getElementById("waste-edit-modal")?.classList.add("hidden");
-        ui.toast.success("ပျက်စီးစာရင်း ပြင်ဆင်ပြီး စတော့လက်ကျန် ပြန်လည်ညှိနှိုင်းပြီးပါပြီ။");
-        await Promise.all([
-            loadProductsForWaste(),
-            loadWasteLogs()
-        ]);
-    } catch (err) {
-        ui.toast.error("ပြင်ဆင်၍မရပါ: " + err.message);
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
 async function deleteWasteLog(id) {
-    const confirmed = await ui.confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ဖျက်လိုပါသလား?\n(စတော့ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)", "error");
+    const confirmed = await ui.confirm("ဤပျက်စီးစာရင်းကို အမှန်တကယ် ပယ်ဖျက်လိုပါသလား?\n(စတော့နှင့် Movement Ledger ထဲသို့ အရေအတွက် အပြည့်အဝ ပြန်လည်ပေါင်းထည့်ပေးပါမည်)", "error");
     if (!confirmed) return;
 
     try {
         await api.delete(`/waste/${id}`);
-        ui.toast.success("မှတ်တမ်း ဖျက်သိမ်းပြီး စတော့ထဲ ပြန်ထည့်ပြီးပါပြီ။");
+        ui.toast.success("မှတ်တမ်း ပယ်ဖျက်ပြီး စတော့နှင့် Movement Ledger ထဲ ပြန်ထည့်ပြီးပါပြီ။");
         await Promise.all([
             loadProductsForWaste(),
             loadWasteLogs()
@@ -432,17 +372,17 @@ function exportWasteToCSV() {
 
         const row = [
             no,
-            escapeCsv(dateStr),
-            escapeCsv(w.barcode || w.sku),
-            escapeCsv(w.category),
-            escapeCsv(w.item_name),
-            escapeCsv(w.color),
-            escapeCsv(w.size || "ထည်"),
+            ui.escapeCsv(dateStr),
+            ui.escapeCsv(w.barcode || w.sku),
+            ui.escapeCsv(w.category),
+            ui.escapeCsv(w.item_name),
+            ui.escapeCsv(w.color),
+            ui.escapeCsv(w.size || "ထည်"),
             w.quantity || 0,
             w.unit_cost || 0,
             subtotal,
-            escapeCsv(w.reason),
-            escapeCsv(w.reference_no)
+            ui.escapeCsv(w.reason),
+            ui.escapeCsv(w.reference_no)
         ];
         csvContent += row.join(",") + "\n";
     });

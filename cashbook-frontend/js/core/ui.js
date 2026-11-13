@@ -1,8 +1,8 @@
-// cashbook-frontend/js/core/ui.js
-
-/**
- * Global UI Utilities for Professional Notifications, Confirmations & Security Helpers
- */
+// =============================================================================
+// FILE: cashbook-frontend/js/core/ui.js
+// GLOBAL UI UTILITIES: TOASTS, CONFIRM DIALOG, STATUS BADGES & XSS SANITIZER
+// Version: 4.1.0 (Spec 5.6 Status Badges & Spec 9.7 XSS Escape Helpers)
+// =============================================================================
 
 const toastConfig = {
     duration: 3000,
@@ -35,20 +35,112 @@ const toastConfig = {
     }
 };
 
+/**
+ * XSS ကာကွယ်ရေး Single-Source String Sanitizer (Single Quote အပါအဝင် - Spec 9.7)
+ */
+export function escapeHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+/**
+ * CSV Formula Injection (=, +, -, @) ကာကွယ်ရေး Escaper
+ */
+export function escapeCsv(val) {
+    let str = String(val ?? "").trim();
+    if (/^[=+@-]/.test(str)) str = "'" + str;
+    return `"${str.replace(/"/g, '""')}"`;
+}
+
+/**
+ * ငွေပမာဏ ကော်မာထည့်သွင်းဖော်ပြခြင်း
+ */
+export function formatMoney(val) {
+    return `${Number(val || 0).toLocaleString()} Ks`;
+}
+
+/**
+ * Opening Stock, Adjustment နှင့် Transfer State Machine အတွက် Status Badge HTML ထုတ်ပေးခြင်း (Spec 4.3 & 5.6)
+ */
+export function statusBadge(status) {
+    const s = String(status || "").trim().toLowerCase();
+    const map = {
+        draft: {
+            label: "မူကြမ်း (Draft)",
+            cls: "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-400/30",
+            icon: "fa-file-pen"
+        },
+        submitted: {
+            label: "အတည်ပြုရန်တင်ထား (Submitted)",
+            cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+            icon: "fa-clock"
+        },
+        approved: {
+            label: "အတည်ပြုပြီး (Approved)",
+            cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+            icon: "fa-circle-check"
+        },
+        rejected: {
+            label: "ပယ်ချထား (Rejected)",
+            cls: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+            icon: "fa-circle-xmark"
+        },
+        pending: {
+            label: "ပို့ရန်စောင့်ဆိုင်း (Pending)",
+            cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+            icon: "fa-hourglass-half"
+        },
+        dispatched: {
+            label: "လမ်းခရီး/ပို့ထားပြီး (Dispatched)",
+            cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+            icon: "fa-truck-fast"
+        },
+        received: {
+            label: "လက်ခံပြီး (Received)",
+            cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+            icon: "fa-box-open"
+        },
+        completed: {
+            label: "ပြီးဆုံး (Completed)",
+            cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+            icon: "fa-check-double"
+        },
+        cancelled: {
+            label: "ပယ်ဖျက်ထား (Cancelled)",
+            cls: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+            icon: "fa-ban"
+        }
+    };
+
+    const cfg = map[s] || {
+        label: escapeHtml(status || "Unknown"),
+        cls: "bg-slate-500/10 text-slate-500 border-slate-500/20",
+        icon: "fa-circle-info"
+    };
+
+    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-extrabold border ${cfg.cls}">
+        <i class="fa-solid ${cfg.icon}"></i>
+        <span>${cfg.label}</span>
+    </span>`;
+}
+
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
     if (!container) return console.warn("Toast container not found");
 
-    // အများဆုံး ၃ ခုထက် ပိုနေပါက အဟောင်းဆုံး Toast ကို ဖယ်ရှားမည်
     while (container.children.length >= toastConfig.maxVisible) {
         container.firstElementChild?.remove();
     }
 
     const theme = toastConfig.colors[type] || toastConfig.colors.success;
-    
+
     const toast = document.createElement("div");
     toast.className = `flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-md shadow-xl animate-slide-in-right pointer-events-auto min-w-[290px] max-w-sm ${theme.bg} ${theme.border} ${theme.text}`;
-    
+
     toast.innerHTML = `
         <i class="fa-solid ${theme.icon} text-base shrink-0"></i>
         <div class="text-xs font-extrabold flex-1 leading-relaxed">${escapeHtml(message)}</div>
@@ -78,7 +170,6 @@ function showToast(message, type = "success") {
 
 /**
  * Global Confirm Dialog Promise
- * Usage: const confirmed = await ui.confirm("ဖျက်သိမ်းရန် သေချာပါသလား?", "error");
  */
 function confirmDialog(message, type = "warning") {
     return new Promise((resolve) => {
@@ -88,7 +179,7 @@ function confirmDialog(message, type = "warning") {
         const msgEl = document.getElementById("confirm-message");
         const iconBoxEl = document.getElementById("confirm-icon-box");
         const iconEl = document.getElementById("confirm-icon");
-        
+
         const btnCancel = document.getElementById("btn-confirm-cancel");
         const btnOk = document.getElementById("btn-confirm-ok");
 
@@ -116,14 +207,13 @@ function confirmDialog(message, type = "warning") {
         }
 
         if (msgEl) msgEl.textContent = message;
-        
+
         dialog.classList.remove("hidden");
         setTimeout(() => {
             if (box) {
                 box.classList.remove("scale-90", "opacity-0");
                 box.classList.add("scale-100", "opacity-100");
             }
-            // ဖျက်သိမ်းမည့် Confirm ဖြစ်ပါက မှားမနှိပ်မိစေရန် Cancel ပေါ်တွင် Focus ထားပေးမည်
             if (type === "error") btnCancel?.focus();
             else btnOk?.focus();
         }, 15);
@@ -149,43 +239,17 @@ function confirmDialog(message, type = "warning") {
     });
 }
 
-/**
- * XSS ကာကွယ်ရေး Single-Source String Sanitizer (Single Quote အပါအဝင်)
- */
-export function escapeHtml(str) {
-    return String(str ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
+// Support both ui.toast("msg", "error") and ui.toast.error("msg")
+const toastCallable = (msg, type = "success") => showToast(msg, type);
+toastCallable.success = (msg) => showToast(msg, "success");
+toastCallable.error = (msg) => showToast(msg, "error");
+toastCallable.warning = (msg) => showToast(msg, "warning");
+toastCallable.info = (msg) => showToast(msg, "info");
 
-/**
- * CSV Formula Injection (=, +, -, @) ကာကွယ်ရေး Escaper
- */
-export function escapeCsv(val) {
-    let str = String(val ?? "").trim();
-    if (/^[=+@-]/.test(str)) str = "'" + str;
-    return `"${str.replace(/"/g, '""')}"`;
-}
-
-/**
- * ငွေပမာဏ ကော်မာထည့်သွင်းဖော်ပြခြင်း
- */
-export function formatMoney(val) {
-    return `${Number(val || 0).toLocaleString()} Ks`;
-}
-
-// Unified UI Object
 export const ui = {
-    toast: {
-        success: (msg) => showToast(msg, "success"),
-        error: (msg) => showToast(msg, "error"),
-        warning: (msg) => showToast(msg, "warning"),
-        info: (msg) => showToast(msg, "info")
-    },
+    toast: toastCallable,
     confirm: confirmDialog,
+    statusBadge,
     escapeHtml,
     escapeCsv,
     formatMoney

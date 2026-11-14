@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/core/api.js
+// FILE: cashbook-frontend/js/core/api.js 
 // CENTRAL API CLIENT, SNAKE_CASE <-> CAMELCASE MAPPER & D1 READ MICRO-CACHE
 // Version: 4.1.0 (Spec 1.3 Payload Mapping Layer & D1 Quota Optimizer)
 // =============================================================================

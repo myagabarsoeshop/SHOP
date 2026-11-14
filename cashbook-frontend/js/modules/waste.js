@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/waste.js
+// FILE: cashbook-frontend/js/modules/waste.js 
 // DAMAGE & WASTE LOGS MODULE (LEDGER-BACKED WASTE_OUT & REVERSAL)
 // Version: 4.1.0 (Fixes Stock Field Mapping, ALL-View Guard & RBAC Void)
 // =============================================================================

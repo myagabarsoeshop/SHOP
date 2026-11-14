@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE 4 OF 5: cashbook-api/routes-finance.js 
+// FILE 4 OF 5: cashbook-api/routes-finance.js  
 // MULTI-STORE CASHBOOK & CUSTOMERS / SUPPLIERS DEBT & PAYABLE LEDGERS
 // Version: 4.1.0 (Strict RBAC Permission Matrix, Branch Scoping & Race-Safe Ref)
 // =============================================================================

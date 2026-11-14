@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/inventory.js 
+// FILE: cashbook-frontend/js/modules/inventory.js  
 // BRANCH INVENTORY, OPENING STOCK WORKFLOW & PHYSICAL STOCK COUNT/ADJUSTMENTS
 // Version: 4.1.0 (Spec Sections 1.3, 3.2, 4, 5 & 6 Compliant)
 // =============================================================================

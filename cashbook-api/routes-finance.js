@@ -1,7 +1,7 @@
 // =============================================================================
-// FILE 4 OF 5: cashbook-api/routes-finance.js  
+// FILE 4 OF 5: cashbook-api/routes-finance.js
 // MULTI-STORE CASHBOOK & CUSTOMERS / SUPPLIERS DEBT & PAYABLE LEDGERS
-// Version: 4.1.0 (Strict RBAC Permission Matrix, Branch Scoping & Race-Safe Ref)
+// Version: 4.1.1 (Strict Opening Debt Branch Scoping & Spec 3.2 RBAC Alignment)
 // =============================================================================
 
 import {
@@ -313,7 +313,7 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
     }
 
     if (path.startsWith("/api/cashbook/entries/") && method === "DELETE") {
-        requirePermission(auth, "cashbook.delete", "ငွေစာရင်း ပယ်ဖျက်ခွင့် မရှိပါ");
+        requirePermission(auth, "cashbook.delete", "ငွေစာရင်း ပယ်ဖျက်ခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်");
 
         const id = Number(path.split("/").pop());
         const existing = await env.DB.prepare(
@@ -322,10 +322,6 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
 
         if (!existing || existing.status === "cancelled") {
             return errorResponse("ငွေစာရင်းမှတ်တမ်း ရှာမတွေ့ပါ", 404);
-        }
-
-        if (currentUserRole === "branch_manager" && Number(existing.branch_id) !== userBranchId) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ ငွေစာရင်းအား ဖျက်သိမ်းခွင့် မရှိပါ", 403);
         }
 
         if (existing.sale_id || existing.purchase_id || existing.customer_ledger_id || existing.supplier_ledger_id) {
@@ -392,17 +388,17 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         const cleanShop = (body.shopName || body.shop_name) ? String(body.shopName || body.shop_name).trim() : null;
         const cleanAddr = body.address ? String(body.address).trim() : null;
 
+        // If opening balance > 0, strictly enforce concrete branch (never allow ALL -> 1 fallback)
+        const validBranchId = openingBalance > 0
+            ? resolveBranchId(auth, body.branch_id ?? body.branchId, { isWrite: true, strictStaffCheck: true })
+            : userBranchId;
+
         if (cleanPhone) {
             const dupPhone = await env.DB.prepare("SELECT id FROM customers WHERE phone = ? LIMIT 1").bind(cleanPhone).first();
             if (dupPhone) {
                 return errorResponse("ဤဖုန်းနံပါတ်သည် အခြားဖောက်သည်/ပွဲရုံတစ်ခုတွင် သုံးထားပြီး ဖြစ်နေပါသည်", 409);
             }
         }
-
-        const ledgerBranchId = openingBalance > 0
-            ? resolveBranchId(auth, body.branch_id ?? body.branchId ?? userBranchId, { isWrite: false })
-            : userBranchId;
-        const validBranchId = ledgerBranchId === "ALL" ? 1 : Number(ledgerBranchId);
 
         const res = await env.DB.prepare(`
             INSERT INTO customers (name, phone, shop_name, entity_type, customer_type, credit_limit, current_debt, current_payable, address)
@@ -532,7 +528,7 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         return jsonResponse({ message: "စာရင်းမှ အောင်မြင်စွာ ပယ်ဖျက်ပြီးပါပြီ" });
     }
 
-    // UNIVERSAL DEBT REPAYMENT POST (ဖောက်သည်အကြွေးဆပ်ငွေ လက်ခံခြင်း / ပွဲရုံသို့ အကြွေးဆပ်ခြင်း)
+    // UNIVERSAL DEBT REPAYMENT POST
     if (path === "/api/customers/repay" && method === "POST") {
         requirePermission(auth, "customer.write", "အကြွေးဆပ်စာရင်း သွင်းခွင့် မရှိပါ");
 
@@ -644,7 +640,7 @@ export async function handleFinanceRoutes(request, env, url, path, method, auth)
         }
     }
 
-    // STATEMENT LEDGER GET (Customer Statement သို့မဟုတ် Supplier Statement)
+    // STATEMENT LEDGER GET
     if (path.startsWith("/api/customers/") && path.endsWith("/ledger") && method === "GET") {
         requirePermission(auth, "customer.view");
 

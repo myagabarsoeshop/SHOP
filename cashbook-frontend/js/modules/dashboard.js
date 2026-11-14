@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/dashboard.js
+// FILE: cashbook-frontend/js/modules/dashboard.js 
 // DUAL-MODE EXECUTIVE & STAFF DASHBOARD MODULE (WITH APPROVAL QUEUE & D1 META)
 // Version: 4.1.0 (Spec 5.6 Approval Queue & Spec 8.4 D1 Rows-Read Monitor)
 // =============================================================================

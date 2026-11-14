@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/master_products.js 
+// FILE: cashbook-frontend/js/modules/master_products.js  
 // CENTRAL PRODUCT MASTER CATALOG MODULE (GLOBAL ACROSS ALL BRANCHES)
 // Version: 4.1.0 (Decoupled from Direct Stock Mutation per Spec 5.4 & 6.1)
 // =============================================================================

@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/transfers.js
+// FILE: cashbook-frontend/js/modules/transfers.js 
 // INTER-BRANCH STOCK TRANSFERS MODULE (STATE MACHINE WORKFLOW)
 // Version: 4.1.0 (Spec Section 4.3 State Machine: pending -> dispatched -> received)
 // =============================================================================

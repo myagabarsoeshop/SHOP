@@ -1,10 +1,10 @@
 // =============================================================================
 // FILE 1 OF 5: cashbook-api/utils.js
 // SHARED HELPERS, KYAT/QTY MATH, RBAC MATRIX, BRANCH SCOPING, INVOICE SEQ & AUTH
-// Version: 4.1.0 (Ledger-Backed, Strict RBAC, One-Time D1 Auto-Migration & Seq)
+// Version: 4.1.1 (Full v4.1 Users/Baseline Auto-Migration & Strict Spec 3.2 RBAC)
 // =============================================================================
 
-export const APP_VERSION = "4.1.0";
+export const APP_VERSION = "4.1.1";
 export const MM_OFFSET = "+390 minutes";
 export const MMT_OFFSET_MS = 390 * 60 * 1000; // UTC+6:30 in milliseconds
 export const HIGH_VALUE_ADJUSTMENT_THRESHOLD_KYAT = 50000;
@@ -206,8 +206,9 @@ export const PERMISSIONS = {
     "transfer.cancel": ["admin", "finance", "branch_manager"],
     "transfer.view": ["admin", "finance", "branch_manager", "cashier"],
 
+    "waste.view": ["admin", "finance", "branch_manager"],
     "waste.create": ["admin", "finance", "branch_manager"],
-    "waste.delete": ["admin", "finance", "branch_manager"],
+    "waste.delete": ["admin", "finance"],
     "yarn.view": ["admin", "finance", "branch_manager"],
     "yarn.issue": ["admin", "finance", "branch_manager"],
 
@@ -221,7 +222,7 @@ export const PERMISSIONS = {
 
     "cashbook.view": ["admin", "finance", "branch_manager", "cashier"],
     "cashbook.write": ["admin", "finance", "branch_manager", "cashier"],
-    "cashbook.delete": ["admin", "finance", "branch_manager"],
+    "cashbook.delete": ["admin", "finance"],
     "customer.view": ["admin", "finance", "branch_manager", "cashier"],
     "customer.write": ["admin", "finance", "branch_manager", "cashier"],
     "customer.edit_credit_limit": ["admin", "finance"],
@@ -620,7 +621,7 @@ export async function recordLoginAttempt(request, dbOrIsSuccess = null, username
 }
 
 // =============================================================================
-// ONE-TIME V4.1 MIGRATION RUNNER (Ensures v4.1 Tables & Baseline Opening Exist)
+// ONE-TIME V4.1.1 MIGRATION RUNNER (Ensures v4.1 Tables, Users & Baseline Exist)
 // =============================================================================
 let schemaVerified = false;
 
@@ -639,9 +640,9 @@ async function ensureColumns(db, tableName, requiredColumns) {
 export async function ensureSchemaOnce(db) {
     if (schemaVerified || !db) return;
     try {
-        // Fast check: if schema_migrations already has '0002_v4_1', skip immediately!
+        // Fast check: if schema_migrations already has '0003_v4_1_full', skip immediately!
         const migCheck = await db.prepare(
-            "SELECT version FROM schema_migrations WHERE version = '0002_v4_1' LIMIT 1"
+            "SELECT version FROM schema_migrations WHERE version = '0003_v4_1_full' LIMIT 1"
         ).first().catch(() => null);
 
         if (migCheck) {
@@ -649,7 +650,7 @@ export async function ensureSchemaOnce(db) {
             return;
         }
 
-        // Apply v4.1 Tables & Indexes
+        // 1. Ensure v4.1 Tables & Indexes
         await db.batch([
             db.prepare(`
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -752,7 +753,65 @@ export async function ensureSchemaOnce(db) {
             db.prepare("CREATE INDEX IF NOT EXISTS idx_adj_branch_status ON stock_adjustments(branch_id, status, effective_date)")
         ]);
 
-        // Ensure State Machine & Issue columns on stock_transfers & yarn_issues
+        // 2. Upgrade users table if plain_password still exists or 'branch_manager' is missing in CHECK
+        const usersTableMeta = await db.prepare(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+        ).first().catch(() => null);
+        const usersSqlText = String(usersTableMeta?.sql || "");
+
+        if (usersSqlText && (usersSqlText.includes("plain_password") || !usersSqlText.includes("branch_manager"))) {
+            await db.batch([
+                db.prepare("PRAGMA defer_foreign_keys = ON"),
+                db.prepare("DROP TABLE IF EXISTS users_v41"),
+                db.prepare(`
+                    CREATE TABLE users_v41 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        branch_id INTEGER REFERENCES branches(id) ON DELETE SET NULL,
+                        username TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        token_version INTEGER NOT NULL DEFAULT 1,
+                        full_name TEXT NOT NULL,
+                        phone TEXT,
+                        role TEXT NOT NULL CHECK(role IN ('admin', 'finance', 'branch_manager', 'cashier')),
+                        is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT chk_branch_required_for_staff CHECK (
+                            role IN ('admin', 'finance') OR branch_id IS NOT NULL
+                        )
+                    )
+                `),
+                db.prepare(`
+                    INSERT INTO users_v41 (
+                        id, branch_id, username, password_hash, token_version, full_name, phone, role, is_active, created_at
+                    )
+                    SELECT 
+                        id,
+                        CASE 
+                            WHEN LOWER(role) IN ('admin', 'finance') THEN branch_id
+                            ELSE COALESCE(branch_id, 1)
+                        END,
+                        username,
+                        password_hash,
+                        COALESCE(token_version, 1),
+                        full_name,
+                        phone,
+                        CASE 
+                            WHEN LOWER(role) = 'manager' THEN 'branch_manager'
+                            WHEN LOWER(role) IN ('admin', 'finance', 'branch_manager', 'cashier') THEN LOWER(role)
+                            ELSE 'cashier'
+                        END,
+                        COALESCE(is_active, 1),
+                        COALESCE(created_at, CURRENT_TIMESTAMP)
+                    FROM users
+                `),
+                db.prepare("DROP TABLE users"),
+                db.prepare("ALTER TABLE users_v41 RENAME TO users")
+            ]).catch((e) => {
+                console.error("[Users Table Auto-Migration Error]:", e.message);
+            });
+        }
+
+        // 3. Ensure State Machine & Issue columns on stock_transfers & yarn_issues
         await ensureColumns(db, "stock_transfers", {
             product_id: "INTEGER",
             quantity: "REAL DEFAULT 0",
@@ -777,7 +836,7 @@ export async function ensureSchemaOnce(db) {
             status: "TEXT DEFAULT 'completed'"
         });
 
-        // Baseline existing branch_inventory into stock_movements (Spec 2.5)
+        // 4. Baseline existing branch_inventory into stock_movements (Spec 2.5)
         await db.prepare(`
             INSERT INTO stock_movements (
                 branch_id, product_id, movement_type, quantity, effective_date,
@@ -803,9 +862,28 @@ export async function ensureSchemaOnce(db) {
               )
         `).run().catch(() => {});
 
+        // 5. Mark migrated branches with existing movements as having an Approved Opening Baseline
+        await db.prepare(`
+            INSERT INTO opening_stock_counts (
+                branch_id, status, as_of_date, created_by, submitted_at, decided_by, decided_at, notes
+            )
+            SELECT 
+                b.id,
+                'approved',
+                date('now', '+390 minutes'),
+                COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1),
+                CURRENT_TIMESTAMP,
+                COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1),
+                CURRENT_TIMESTAMP,
+                'Legacy migration baseline'
+            FROM branches b
+            WHERE EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.branch_id = b.id)
+              AND NOT EXISTS (SELECT 1 FROM opening_stock_counts osc WHERE osc.branch_id = b.id AND osc.status = 'approved')
+        `).run().catch(() => {});
+
         await db.prepare(`
             INSERT OR REPLACE INTO schema_migrations (version, description, applied_at)
-            VALUES ('0002_v4_1', 'Auto-applied v4.1 stock_movements, opening_stock, adjustments & transfer state machine', CURRENT_TIMESTAMP)
+            VALUES ('0003_v4_1_full', 'Upgraded users table, stock_movements, opening_stock baseline & adjustments', CURRENT_TIMESTAMP)
         `).run().catch(() => {});
 
         schemaVerified = true;
@@ -980,7 +1058,6 @@ export async function getAuthUser(request, env) {
     if (!payload || !payload.uid) return null;
 
     if (env && env.DB) {
-        // Ensure v4.1 schema tables & columns are migrated once per isolate
         await ensureSchemaOnce(env.DB);
 
         const now = Date.now();

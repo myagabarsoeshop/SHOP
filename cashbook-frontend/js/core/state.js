@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/core/state.js
+// FILE: cashbook-frontend/js/core/state.js 
 // GLOBAL APPLICATION STATE, RBAC PERMISSION HELPERS & STRICT BRANCH SCOPING
 // Version: 4.1.0 (Fixes ALL->Branch 1 Bug, Enforces branch_manager & RBAC)
 // =============================================================================

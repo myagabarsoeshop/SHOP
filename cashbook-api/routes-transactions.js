@@ -1,7 +1,7 @@
 // =============================================================================
-// FILE 3 OF 5: cashbook-api/routes-transactions.js 
+// FILE 3 OF 5: cashbook-api/routes-transactions.js
 // PURCHASES (STOCK-IN + OWN PRODUCTION + SUPPLIER PAYABLE) & POS SALES
-// Version: 4.1.0 (Ledger-Backed Stock Movements, Strict RBAC & Race-Safe VR)
+// Version: 4.1.1 (Ledger-Backed Stock Movements, Strict RBAC & Atomic CHECK Rollback)
 // =============================================================================
 
 import {
@@ -285,7 +285,6 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                 );
             }
 
-            // Spec 2.1: Update branch_inventory AND insert PURCHASE_IN movement in the same batch
             batchStatements.push(
                 env.DB.prepare(`INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?)`)
                     .bind(newPurId, Number(targetProductId), item.quantity, item.unit_cost, item.subtotal),
@@ -433,7 +432,6 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
         const batch = [];
         const canUpdateMasterPrice = can(auth, "product.update");
 
-        // ၁။ Net Stock Delta အတိအကျ ပြန်ညှိခြင်း နှင့် Append-only stock_movements ထည့်ခြင်း (Spec 2.1)
         for (const [pid, delta] of netDeltaByProduct.entries()) {
             if (delta !== 0) {
                 batch.push(
@@ -562,7 +560,14 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             );
         }
 
-        await env.DB.batch(batch);
+        try {
+            await env.DB.batch(batch);
+        } catch (err) {
+            if (String(err.message).includes("CHECK constraint")) {
+                return errorResponse("လက်ရှိစတော့လက်ကျန် မလုံလောက်သဖြင့် အဝယ်စာရင်းအား လျှော့ချပြင်ဆင်၍ မရနိုင်ပါ", 400);
+            }
+            throw err;
+        }
 
         await logAudit(env.DB, {
             branchId,
@@ -622,11 +627,12 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
         const today = getMyanmarTodayDate();
         const batchRollback = [];
 
+        // Omit `AND quantity >= ?` so concurrent underflow triggers CHECK(quantity >= 0) and rolls back entire batch
         items.forEach(it => {
             const revQty = roundQty(it.quantity);
             batchRollback.push(
-                env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ? AND quantity >= ?")
-                    .bind(revQty, branchId, Number(it.product_id), revQty),
+                env.DB.prepare("UPDATE branch_inventory SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE branch_id = ? AND product_id = ?")
+                    .bind(revQty, branchId, Number(it.product_id)),
                 createStockMovementStmt(env.DB, {
                     branchId,
                     productId: Number(it.product_id),
@@ -660,7 +666,14 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
             `).bind(currentUserId, purId)
         );
 
-        await env.DB.batch(batchRollback);
+        try {
+            await env.DB.batch(batchRollback);
+        } catch (err) {
+            if (String(err.message).includes("CHECK constraint")) {
+                return errorResponse("အဝယ်ဘောင်ချာပါ ပစ္စည်းလက်ကျန် မလုံလောက်တော့သဖြင့် ဖျက်သိမ်း၍ မရနိုင်ပါ", 400);
+            }
+            throw err;
+        }
 
         await logAudit(env.DB, {
             branchId,
@@ -909,12 +922,12 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
                     INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, cost_price, subtotal)
                     VALUES (${saleIdSubquery}, ?, ?, ?, ?, ?)
                 `).bind(invoiceNo, item.productId, item.quantity, item.unitPrice, item.costPrice, item.subtotal),
+                // Omit `AND quantity >= ?` so concurrent overselling hits CHECK(quantity >= 0) and rolls back entire batch
                 env.DB.prepare(`
                     UPDATE branch_inventory
                     SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE branch_id = ? AND product_id = ? AND quantity >= ?
-                `).bind(item.quantity, Number(branchId), item.productId, item.quantity),
-                // Spec 2.1: Write SALE_OUT movement in the same atomic batch
+                    WHERE branch_id = ? AND product_id = ?
+                `).bind(item.quantity, Number(branchId), item.productId),
                 env.DB.prepare(`
                     INSERT INTO stock_movements (
                         branch_id, product_id, movement_type, quantity, effective_date,
@@ -968,7 +981,7 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
 
             return jsonResponse({ message: "အရောင်းဘောင်ချာ အောင်မြင်ပါသည်", invoiceNo, saleId, finalAmount }, 201);
         } catch (err) {
-            if (err.message.includes("CHECK constraint")) {
+            if (String(err.message).includes("CHECK constraint")) {
                 return errorResponse("တောင်းဆိုသော အရေအတွက်အတိုင်း စတော့လက်ကျန် မလုံလောက်ပါ။ ပစ္စည်းတစ်မျိုးမျိုးသည် ရောင်းထွက်သွားပြီ ဖြစ်နိုင်ပါသည်။", 400);
             }
             throw err;
@@ -1002,7 +1015,6 @@ export async function handleTransactionRoutes(request, env, url, path, method, a
         const todayDate = getMyanmarTodayDate();
         const batchRollback = [];
 
-        // ၁။ ရောင်းထုတ်ခဲ့သော ပစ္စည်းအရေအတွက်များကို ဆိုင်ခွဲစတော့ထဲသို့ ပြန်ပေါင်းထည့်ခြင်း + SALE_VOID_IN movement
         for (const item of (saleItems || [])) {
             const qty = roundQty(item.quantity);
             batchRollback.push(

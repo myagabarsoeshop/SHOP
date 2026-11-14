@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/cashbook.js
+// FILE: cashbook-frontend/js/modules/cashbook.js 
 // MULTI-STORE CASHBOOK MODULE
 // Version: 4.1.0 (ALL-View Read-Only Guard, Strict RBAC & XSS Hardened)
 // =============================================================================

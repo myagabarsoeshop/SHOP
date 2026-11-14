@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/customers.js
+// FILE: cashbook-frontend/js/modules/customers.js 
 // CUSTOMERS & SUPPLIERS RECEIVABLES / PAYABLES LEDGER MODULE
 // Version: 4.1.0 (Fixes Paginated Statement Bug, ALL-View Guard & RBAC Delete)
 // =============================================================================

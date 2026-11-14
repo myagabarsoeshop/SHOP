@@ -385,7 +385,14 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("မှန်ကန်သော ပစ္စည်းအချက်အလက် မတွေ့ရှိပါ", 400);
         }
 
-        await env.DB.batch(batch);
+        try {
+            await env.DB.batch(batch);
+        } catch (err) {
+            if (String(err.message).includes("UNIQUE constraint")) {
+                return errorResponse("CSV ဖိုင်ထဲတွင် SKU သို့မဟုတ် Barcode ထပ်နေသော ပစ္စည်း ပါဝင်နေပါသည်", 409);
+            }
+            throw err;
+        }
 
         await logAudit(env.DB, {
             branchId: userBranchId,

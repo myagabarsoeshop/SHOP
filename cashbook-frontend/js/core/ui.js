@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/core/ui.js 
+// FILE: cashbook-frontend/js/core/ui.js  
 // GLOBAL UI UTILITIES: TOASTS, CONFIRM DIALOG, STATUS BADGES & XSS SANITIZER
 // Version: 4.1.0 (Spec 5.6 Status Badges & Spec 9.7 XSS Escape Helpers)
 // =============================================================================

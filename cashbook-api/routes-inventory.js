@@ -162,7 +162,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const pattern = body.pattern && String(body.pattern).trim() !== "" ? String(body.pattern).trim() : null;
         const color = body.color && String(body.color).trim() !== "" ? String(body.color).trim() : null;
         const size = body.size && String(body.size).trim() !== "" ? String(body.size).trim() : "ထည်";
-        const productType = ["manufactured", "trading"].includes(String(body.product_type ?? body.productType || "").toLowerCase())
+        const productType = ["manufactured", "trading"].includes(String(body.product_type ?? body.productType ?? "").toLowerCase())
             ? String(body.product_type ?? body.productType).toLowerCase()
             : "manufactured";
 

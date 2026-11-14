@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/stock_report.js 
+// FILE: cashbook-frontend/js/modules/stock_report.js  
 // 12-MONTH LEDGER-RECONSTRUCTED STOCK REPORT & ADJUSTMENT VALUATION MODULE
 // Version: 4.1.0 (Spec Section 6.2 Adjustment Value & Section 7 Movement Report)
 // =============================================================================

@@ -1,7 +1,7 @@
 // =============================================================================
-// FILE 1 OF 5: cashbook-api/utils.js 
+// FILE 1 OF 5: cashbook-api/utils.js
 // SHARED HELPERS, KYAT/QTY MATH, RBAC MATRIX, BRANCH SCOPING, INVOICE SEQ & AUTH
-// Version: 4.1.0 (Ledger-Backed, Strict RBAC, Zero Runtime DDL, Race-Safe Seq)
+// Version: 4.1.0 (Ledger-Backed, Strict RBAC, One-Time D1 Auto-Migration & Seq)
 // =============================================================================
 
 export const APP_VERSION = "4.1.0";
@@ -100,35 +100,23 @@ export function errorResponse(message, status = 400) {
 // MYANMAR TIMEZONE (UTC+6:30) & INDEX-FRIENDLY UTC BOUNDARY HELPERS (Spec 9.9)
 // =============================================================================
 
-/**
- * မြန်မာစံတော်ချိန် (UTC+6:30) ဖြင့် ယနေ့ YYYY-MM-DD ရယူခြင်း
- */
 export function getMyanmarTodayDate() {
     const now = new Date(Date.now() + MMT_OFFSET_MS);
     return now.toISOString().split("T")[0];
 }
 
-/**
- * မြန်မာစံတော်ချိန် (UTC+6:30) ဖြင့် ယမန်နေ့ YYYY-MM-DD ရယူခြင်း (00:00 MMT Cron အတွက်)
- */
 export function getMyanmarYesterdayDate() {
     const yesterday = new Date(Date.now() + MMT_OFFSET_MS - (24 * 60 * 60 * 1000));
     return yesterday.toISOString().split("T")[0];
 }
 
-/**
- * မြန်မာရက်စွဲ (YYYY-MM-DD) မှ YYMMDD date_key ထုတ်ယူခြင်း
- */
 export function getMyanmarDateKey(mmtDateStr = null) {
     const d = mmtDateStr && /^\d{4}-\d{2}-\d{2}$/.test(String(mmtDateStr).trim())
         ? String(mmtDateStr).trim()
         : getMyanmarTodayDate();
-    return d.slice(2).replace(/-/g, ""); // e.g. "2026-11-12" -> "261112"
+    return d.slice(2).replace(/-/g, "");
 }
 
-/**
- * မြန်မာရက်စွဲ (YYYY-MM-DD) တစ်ခုအတွက် SQLite B-Tree Index မိစေမည့် UTC အစနှင့်အဆုံး အချိန်ရယူခြင်း
- */
 export function getMyanmarDayUtcBounds(mmtDateStr) {
     const cleanDate = /^\d{4}-\d{2}-\d{2}$/.test(String(mmtDateStr || "").trim())
         ? String(mmtDateStr).trim()
@@ -144,9 +132,6 @@ export function getMyanmarDayUtcBounds(mmtDateStr) {
     };
 }
 
-/**
- * မြန်မာနှစ်တစ်နှစ်လုံးအတွက် SQLite B-Tree Index မိစေမည့် UTC အစနှင့်အဆုံး အချိန်ရယူခြင်း
- */
 export function getMyanmarYearUtcBounds(year) {
     const y = /^\d{4}$/.test(String(year || "").trim())
         ? String(year).trim()
@@ -157,9 +142,6 @@ export function getMyanmarYearUtcBounds(year) {
     return { startUtc, endUtc, startDate: `${y}-01-01`, endDate: `${y}-12-31` };
 }
 
-/**
- * URL မှ Year ကို ဖမ်းယူရန် သို့မဟုတ် လက်ရှိမြန်မာနှစ်ကို Default ယူရန်
- */
 export function getQueryYear(url, defaultYear = null) {
     const fallback = String(defaultYear || getMyanmarTodayDate().slice(0, 4));
     if (!url || !url.searchParams) return fallback;
@@ -199,21 +181,18 @@ export function normalizeRole(rawRole) {
 }
 
 export const PERMISSIONS = {
-    // Products Master
     "product.create": ["admin", "finance"],
     "product.update": ["admin", "finance"],
     "product.delete": ["admin", "finance"],
     "product.bulk_import": ["admin", "finance"],
     "product.view_cost": ["admin", "finance", "branch_manager"],
 
-    // Opening Stock Workflow
     "opening.create": ["admin", "finance", "branch_manager"],
     "opening.submit": ["admin", "finance", "branch_manager"],
     "opening.approve": ["admin", "finance"],
     "opening.reject": ["admin", "finance"],
     "opening.view": ["admin", "finance", "branch_manager"],
 
-    // Physical Stock Count & Adjustments
     "adjustment.create": ["admin", "finance", "branch_manager"],
     "adjustment.submit": ["admin", "finance", "branch_manager"],
     "adjustment.approve": ["admin", "finance"],
@@ -221,20 +200,17 @@ export const PERMISSIONS = {
     "adjustment.reject": ["admin", "finance"],
     "adjustment.view": ["admin", "finance", "branch_manager"],
 
-    // Branch Transfers (State Machine)
     "transfer.create": ["admin", "finance", "branch_manager"],
     "transfer.dispatch": ["admin", "finance", "branch_manager"],
     "transfer.receive": ["admin", "finance", "branch_manager", "cashier"],
     "transfer.cancel": ["admin", "finance", "branch_manager"],
     "transfer.view": ["admin", "finance", "branch_manager", "cashier"],
 
-    // Waste & Yarn
     "waste.create": ["admin", "finance", "branch_manager"],
     "waste.delete": ["admin", "finance", "branch_manager"],
     "yarn.view": ["admin", "finance", "branch_manager"],
     "yarn.issue": ["admin", "finance", "branch_manager"],
 
-    // Purchases & POS Sales
     "purchase.view": ["admin", "finance", "branch_manager"],
     "purchase.create": ["admin", "finance", "branch_manager"],
     "purchase.update": ["admin", "finance", "branch_manager"],
@@ -243,7 +219,6 @@ export const PERMISSIONS = {
     "pos.void": ["admin", "finance", "branch_manager"],
     "pos.override_price": ["admin", "finance"],
 
-    // Finance, Cashbook & Customers
     "cashbook.view": ["admin", "finance", "branch_manager", "cashier"],
     "cashbook.write": ["admin", "finance", "branch_manager", "cashier"],
     "cashbook.delete": ["admin", "finance", "branch_manager"],
@@ -252,7 +227,6 @@ export const PERMISSIONS = {
     "customer.edit_credit_limit": ["admin", "finance"],
     "customer.delete": ["admin", "finance"],
 
-    // Reports, Users & System Administration
     "report.monthly_stock": ["admin", "finance", "branch_manager"],
     "dashboard.admin_metrics": ["admin", "finance"],
     "user.manage": ["admin"],
@@ -260,9 +234,6 @@ export const PERMISSIONS = {
     "record.delete": ["admin", "finance"]
 };
 
-/**
- * Permission string ဖြင့် လုပ်ဆောင်ခွင့် ရှိ/မရှိ စစ်ဆေးခြင်း (Spec 3.3)
- */
 export function can(auth, permission) {
     if (!auth || !auth.role) return false;
     const role = normalizeRole(auth.role);
@@ -271,9 +242,6 @@ export function can(auth, permission) {
     return allowedRoles.includes(role);
 }
 
-/**
- * Permission မရှိပါက 403 HttpError ချက်ချင်း ပစ်ပေးမည့် Helper
- */
 export function requirePermission(auth, permission, customMessage = null) {
     if (!can(auth, permission)) {
         throw new HttpError(
@@ -284,9 +252,6 @@ export function requirePermission(auth, permission, customMessage = null) {
     return true;
 }
 
-/**
- * သတ်မှတ်ထားသော Role များသာ ဝင်ရောက်ခွင့်ပြုရန် စစ်ဆေးခြင်း
- */
 export function requireRole(auth, allowedRoles = ["admin"]) {
     const role = normalizeRole(auth?.role);
     const normalizedAllowed = allowedRoles.map(r => normalizeRole(r));
@@ -297,13 +262,6 @@ export function requireRole(auth, allowedRoles = ["admin"]) {
 // MULTI-BRANCH SCOPING & ISOLATION (Spec Section 4.1 & 4.2)
 // =============================================================================
 
-/**
- * ဆိုင်ခွဲ Scope စစ်ဆေးသတ်မှတ်ခြင်း
- * - cashier နှင့် branch_manager သည် မိမိဆိုင်ခွဲ (auth.branch_id) တစ်ခုတည်းသာ ရမည်။
- *   အကယ်၍ isWrite ဖြစ်ပြီး အခြားဆိုင်ခွဲ branch_id ကို တမင်ပို့လာပါက 403 ပြန်မည်။
- * - admin နှင့် finance သာ branch parameter ရွေးနိုင်သည်။
- * - ALL view သည် Read-only ဖြစ်သည်။ isWrite = true တွင် ALL ပို့ပါက (သို့မဟုတ် branch_id မပါပါက) 400 ပြန်မည်။
- */
 export function resolveBranchId(auth, requestedBranchId = null, options = {}) {
     const {
         allowAllForAdmin = false,
@@ -316,7 +274,6 @@ export function resolveBranchId(auth, requestedBranchId = null, options = {}) {
     const reqStr = requestedBranchId != null ? String(requestedBranchId).trim() : "";
     const isAllRequested = reqStr === "" || reqStr.toUpperCase() === "ALL";
 
-    // 1. Branch Manager & Cashier: strictly locked to their own assigned branch
     if (role === "cashier" || role === "branch_manager") {
         if (!userBranchId || userBranchId <= 0) {
             throw new HttpError(403, "သင့်အကောင့်တွင် သတ်မှတ်ထားသော ဆိုင်ခွဲ (branch_id) မရှိပါ");
@@ -330,7 +287,6 @@ export function resolveBranchId(auth, requestedBranchId = null, options = {}) {
         return userBranchId;
     }
 
-    // 2. Admin & Finance: Write operations MUST specify a concrete branch (Never allow 'ALL' or silent fallback to 1)
     if (isWrite) {
         if (isAllRequested) {
             throw new HttpError(
@@ -345,7 +301,6 @@ export function resolveBranchId(auth, requestedBranchId = null, options = {}) {
         return parsedWriteBranch;
     }
 
-    // 3. Admin & Finance: Read operations
     if (isAllRequested) {
         if (allowAllForAdmin) return "ALL";
         if (userBranchId > 0) return userBranchId;
@@ -376,18 +331,11 @@ async function getBranchCode(db, branchId) {
             return code;
         }
     } catch {
-        // Fallback if query fails
+        // Fallback
     }
     return `B${bId}`;
 }
 
-/**
- * Race-safe ဘောင်ချာနံပါတ် ထုတ်ပေးခြင်း
- * Format: {PREFIX}-{BRANCH_CODE}-{YYMMDD}-{SEQ} (ဥပမာ - INV-MAIN-261112-001)
- * Supports both:
- *   await generateUniqueInvoice(env.DB, "INV", branchId)
- *   await generateUniqueInvoice("INV", branchId)
- */
 export async function generateUniqueInvoice(dbOrPrefix, prefixOrBranchId, maybeBranchId = null) {
     let db = null;
     let prefix = "INV";
@@ -413,7 +361,6 @@ export async function generateUniqueInvoice(dbOrPrefix, prefixOrBranchId, maybeB
 
     const branchCode = await getBranchCode(db, validBranchId);
 
-    // Check table collision target based on prefix
     const conflictCheckSqlByPrefix = {
         INV: "SELECT 1 FROM sales WHERE invoice_no = ? LIMIT 1",
         PUR: "SELECT 1 FROM purchases WHERE purchase_no = ? LIMIT 1",
@@ -471,10 +418,6 @@ export const VALID_MOVEMENT_TYPES = new Set([
     "ADJUSTMENT_OUT"
 ]);
 
-/**
- * env.DB.batch() အတွင်း ထည့်သွင်းရန် stock_movements INSERT statement တည်ဆောက်ပေးခြင်း
- * - ဝင်ရင် quantity (+), ထွက်ရင် quantity (-) အလိုအလျောက် စစ်ဆေးသတ်မှတ်ပေးသည်။
- */
 export function createStockMovementStmt(db, {
     branchId,
     productId,
@@ -522,7 +465,7 @@ export function createStockMovementStmt(db, {
 }
 
 // =============================================================================
-// AUDIT TRAIL & D1 USAGE MONITORING HELPERS (Spec Section 8.4 & 8.5)
+// AUDIT TRAIL & D1 USAGE MONITORING HELPERS
 // =============================================================================
 
 export async function logAudit(db, { branchId, userId, action, tableName, recordId, details }) {
@@ -544,9 +487,6 @@ export async function logAudit(db, { branchId, userId, action, tableName, record
     }
 }
 
-/**
- * D1 Query / Batch ရလဒ်များမှ rows_read နှင့် rows_written စုစုပေါင်းကို တွက်ချက်ခြင်း (Spec 8.4)
- */
 export function summarizeD1Meta(resultOrArray) {
     const items = Array.isArray(resultOrArray) ? resultOrArray : [resultOrArray];
     let rowsRead = 0;
@@ -597,7 +537,7 @@ export async function checkLoginRateLimit(request, db = null, username = "") {
                 }
             }
         } catch {
-            // Fallback to in-memory check below
+            // Fallback
         }
     }
 
@@ -656,7 +596,7 @@ export async function recordLoginAttempt(request, dbOrIsSuccess = null, username
                 }
             }
         } catch {
-            // Continue to in-memory update
+            // Continue
         }
     }
 
@@ -679,12 +619,199 @@ export async function recordLoginAttempt(request, dbOrIsSuccess = null, username
     }
 }
 
-/**
- * Runtime CREATE TABLE များကို ဖယ်ရှားထားပါသည် (Spec Section 2.6)
- * Migration စနစ်ဖြင့်သာ Database Schema ကို စီမံပါသည်။
- */
-export async function ensureSchemaOnce() {
-    return;
+// =============================================================================
+// ONE-TIME V4.1 MIGRATION RUNNER (Ensures v4.1 Tables & Baseline Opening Exist)
+// =============================================================================
+let schemaVerified = false;
+
+async function ensureColumns(db, tableName, requiredColumns) {
+    const info = await db.prepare(`PRAGMA table_info(${tableName})`).all().catch(() => ({ results: [] }));
+    const existing = (info.results || []).map(r => String(r.name).toLowerCase());
+    if (existing.length === 0) return;
+
+    for (const [colName, colDef] of Object.entries(requiredColumns)) {
+        if (!existing.includes(colName.toLowerCase())) {
+            await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${colName} ${colDef}`).run().catch(() => {});
+        }
+    }
+}
+
+export async function ensureSchemaOnce(db) {
+    if (schemaVerified || !db) return;
+    try {
+        // Fast check: if schema_migrations already has '0002_v4_1', skip immediately!
+        const migCheck = await db.prepare(
+            "SELECT version FROM schema_migrations WHERE version = '0002_v4_1' LIMIT 1"
+        ).first().catch(() => null);
+
+        if (migCheck) {
+            schemaVerified = true;
+            return;
+        }
+
+        // Apply v4.1 Tables & Indexes
+        await db.batch([
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS invoice_sequences (
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+                    prefix TEXT NOT NULL,
+                    date_key TEXT NOT NULL,
+                    last_seq INTEGER NOT NULL DEFAULT 0 CHECK(last_seq >= 0),
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (branch_id, prefix, date_key)
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS stock_movements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                    movement_type TEXT NOT NULL CHECK (movement_type IN (
+                        'OPENING','PURCHASE_IN','PURCHASE_VOID_OUT',
+                        'SALE_OUT','SALE_VOID_IN',
+                        'TRANSFER_OUT','TRANSFER_IN',
+                        'WASTE_OUT','YARN_ISSUE_OUT','YARN_RETURN_IN',
+                        'ADJUSTMENT_IN','ADJUSTMENT_OUT'
+                    )),
+                    quantity REAL NOT NULL,
+                    effective_date DATE NOT NULL,
+                    source_table TEXT,
+                    source_id INTEGER,
+                    reason TEXT,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    approved_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS opening_stock_counts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','approved','rejected')),
+                    as_of_date DATE NOT NULL,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    submitted_at DATETIME,
+                    decided_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+                    decided_at DATETIME,
+                    reject_reason TEXT,
+                    notes TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS opening_stock_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    count_id INTEGER NOT NULL REFERENCES opening_stock_counts(id) ON DELETE CASCADE,
+                    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                    quantity REAL NOT NULL CHECK (quantity >= 0),
+                    UNIQUE (count_id, product_id)
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS stock_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reference_no TEXT NOT NULL UNIQUE,
+                    branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','submitted','approved','rejected')),
+                    effective_date DATE NOT NULL,
+                    total_variance_value INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                    submitted_at DATETIME,
+                    decided_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+                    decided_at DATETIME,
+                    reject_reason TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            `),
+            db.prepare(`
+                CREATE TABLE IF NOT EXISTS stock_adjustment_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    adjustment_id INTEGER NOT NULL REFERENCES stock_adjustments(id) ON DELETE CASCADE,
+                    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+                    system_qty REAL NOT NULL DEFAULT 0,
+                    counted_qty REAL NOT NULL CHECK (counted_qty >= 0),
+                    diff_qty REAL NOT NULL DEFAULT 0,
+                    unit_cost INTEGER NOT NULL DEFAULT 0 CHECK (unit_cost >= 0),
+                    reason TEXT NOT NULL,
+                    UNIQUE (adjustment_id, product_id)
+                )
+            `),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_sm_branch_product_date ON stock_movements(branch_id, product_id, effective_date)"),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_sm_source ON stock_movements(source_table, source_id)"),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_sm_effective_date ON stock_movements(effective_date)"),
+            db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_one_approved_opening ON opening_stock_counts(branch_id) WHERE status = 'approved'"),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_opening_branch_status ON opening_stock_counts(branch_id, status)"),
+            db.prepare("CREATE INDEX IF NOT EXISTS idx_adj_branch_status ON stock_adjustments(branch_id, status, effective_date)")
+        ]);
+
+        // Ensure State Machine & Issue columns on stock_transfers & yarn_issues
+        await ensureColumns(db, "stock_transfers", {
+            product_id: "INTEGER",
+            quantity: "REAL DEFAULT 0",
+            status: "TEXT DEFAULT 'pending'",
+            notes: "TEXT",
+            created_by: "INTEGER",
+            dispatched_by: "INTEGER",
+            dispatched_at: "DATETIME",
+            received_by: "INTEGER",
+            received_at: "DATETIME",
+            cancelled_by: "INTEGER",
+            cancelled_at: "DATETIME",
+            cancel_reason: "TEXT"
+        });
+
+        await ensureColumns(db, "yarn_issues", {
+            reference_no: "TEXT",
+            branch_id: "INTEGER DEFAULT 1",
+            product_id: "INTEGER",
+            issue_type: "TEXT DEFAULT 'ISSUE'",
+            notes: "TEXT",
+            status: "TEXT DEFAULT 'completed'"
+        });
+
+        // Baseline existing branch_inventory into stock_movements (Spec 2.5)
+        await db.prepare(`
+            INSERT INTO stock_movements (
+                branch_id, product_id, movement_type, quantity, effective_date,
+                source_table, source_id, reason, created_by, approved_by, created_at
+            )
+            SELECT 
+                bi.branch_id,
+                bi.product_id,
+                'OPENING',
+                ROUND(bi.quantity, 3),
+                date('now', '+390 minutes'),
+                'branch_inventory',
+                bi.id,
+                'Legacy migration',
+                COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1),
+                COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1),
+                CURRENT_TIMESTAMP
+            FROM branch_inventory bi
+            WHERE bi.quantity > 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM stock_movements sm 
+                  WHERE sm.branch_id = bi.branch_id AND sm.product_id = bi.product_id
+              )
+        `).run().catch(() => {});
+
+        await db.prepare(`
+            INSERT OR REPLACE INTO schema_migrations (version, description, applied_at)
+            VALUES ('0002_v4_1', 'Auto-applied v4.1 stock_movements, opening_stock, adjustments & transfer state machine', CURRENT_TIMESTAMP)
+        `).run().catch(() => {});
+
+        schemaVerified = true;
+    } catch (err) {
+        console.error("[v4.1 Auto-Migration Error]:", err.message);
+    }
 }
 
 // =============================================================================
@@ -853,6 +980,9 @@ export async function getAuthUser(request, env) {
     if (!payload || !payload.uid) return null;
 
     if (env && env.DB) {
+        // Ensure v4.1 schema tables & columns are migrated once per isolate
+        await ensureSchemaOnce(env.DB);
+
         const now = Date.now();
         const cached = tokenVersionCache.get(Number(payload.uid));
         let dbUser = null;

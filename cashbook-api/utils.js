@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE 1 OF 5: cashbook-api/utils.js
+// FILE 1 OF 5: cashbook-api/utils.js 
 // SHARED HELPERS, KYAT/QTY MATH, RBAC MATRIX, BRANCH SCOPING, INVOICE SEQ & AUTH
 // Version: 4.1.0 (Ledger-Backed, Strict RBAC, Zero Runtime DDL, Race-Safe Seq)
 // =============================================================================

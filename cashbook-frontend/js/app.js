@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/app.js
+// FILE: cashbook-frontend/js/app.js 
 // MAIN FRONTEND ROUTER, ROLE NAVIGATION GUARD, BRANCH SCOPING & GLOBAL KPI
 // Version: 4.1.0 (RBAC Permission Matrix, ALL-Branch Read-Only Lock & MMT Clock)
 // =============================================================================

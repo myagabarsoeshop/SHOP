@@ -1,4 +1,4 @@
-# မြကမ္ဘာစိုး ပိုးထည်တိုက် — Multi-Store Garment POS, Inventory & Cashbook ERP (v4.1.0)
+# မြကမ္ဘာစိုး ပိုးထည်တိုက် — Multi-Store Garment POS, Inventory & Cashbook ERP (v4.1.0) 
 
 Cloudflare Workers (Serverless Backend) နှင့် Cloudflare D1 (SQLite Edge Database) ပေါ်တွင် အခြေခံတည်ဆောက်ထားသော ဆိုင်ခွဲပေါင်းစုံသုံး ပိုးထည်နှင့် အထည်ဆိုင် စီမံခန့်ခွဲရေးစနစ် (All-in-One Garment ERP) ဖြစ်ပါသည်။
 

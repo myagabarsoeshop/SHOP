@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE 5 OF 5: cashbook-api/worker.js  
+// FILE 5 OF 5: cashbook-api/worker.js
 // MAIN WORKER ENTRYPOINT, AUTH, LEDGER STOCK REPORT, DASHBOARD & CRON JOBS
 // Version: 4.1.0 (Ledger-Backed Stock Report, Nightly Reconciliation & RBAC)
 // =============================================================================
@@ -136,7 +136,6 @@ export default {
             }
 
             const currentUserId = Number(auth.uid);
-            const currentUserRole = auth.role;
             const userBranchId = Number(auth.branch_id || 1);
 
             // 2.1. Password Change (Self) - Increments token_version & never stores plaintext
@@ -200,7 +199,8 @@ export default {
                 const fullName = String(body.full_name ?? body.fullName ?? "").trim();
                 const password = String(body.password || "").trim();
                 const role = normalizeRole(body.role || "cashier");
-                const branchId = body.branch_id ?? body.branchId ? Number(body.branch_id ?? body.branchId) : null;
+                const rawBranchVal = body.branch_id ?? body.branchId;
+                const branchId = rawBranchVal ? Number(rawBranchVal) : null;
                 const phone = body.phone ? String(body.phone).trim() : null;
 
                 if (!username || !fullName || password.length < 6) {
@@ -346,21 +346,20 @@ export default {
                 const yearEnd = `${year}-12-31`;
 
                 // Single SQL Query using CTE over stock_movements indexed by (branch_id, product_id, effective_date)
-                const branchWhere = isSpecificBranch ? "WHERE sm.branch_id = ? AND sm.effective_date <= ?" : "WHERE sm.effective_date <= ?";
-                const sqlBindings = isSpecificBranch
-                    ? [branchIdNum, yearEnd, yearStart, yearStart, yearStart, yearStart, yearStart, yearStart, yearStart]
-                    : [yearEnd, yearStart, yearStart, yearStart, yearStart, yearStart, yearStart, yearStart];
+                const branchWhere = isSpecificBranch
+                    ? `WHERE sm.branch_id = ? AND sm.effective_date <= '${yearEnd}'`
+                    : `WHERE sm.effective_date <= '${yearEnd}'`;
 
                 const singleReportSql = `
                     WITH agg_movements AS (
                         SELECT 
                             sm.product_id,
-                            SUM(CASE WHEN sm.effective_date < ? THEN sm.quantity ELSE 0 END) AS year_opening,
-                            SUM(CASE WHEN sm.effective_date >= ? AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) AS year_total_in,
-                            SUM(CASE WHEN sm.effective_date >= ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) AS year_total_out,
-                            SUM(CASE WHEN sm.effective_date >= ? AND sm.movement_type = 'OPENING' THEN sm.quantity ELSE 0 END) AS year_opening_added,
-                            SUM(CASE WHEN sm.effective_date >= ? AND sm.movement_type = 'ADJUSTMENT_IN' THEN sm.quantity ELSE 0 END) AS year_adj_in,
-                            SUM(CASE WHEN sm.effective_date >= ? AND sm.movement_type = 'ADJUSTMENT_OUT' THEN ABS(sm.quantity) ELSE 0 END) AS year_adj_out,
+                            SUM(CASE WHEN sm.effective_date < '${yearStart}' THEN sm.quantity ELSE 0 END) AS year_opening,
+                            SUM(CASE WHEN sm.effective_date >= '${yearStart}' AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) AS year_total_in,
+                            SUM(CASE WHEN sm.effective_date >= '${yearStart}' AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) AS year_total_out,
+                            SUM(CASE WHEN sm.effective_date >= '${yearStart}' AND sm.movement_type = 'OPENING' THEN sm.quantity ELSE 0 END) AS year_opening_added,
+                            SUM(CASE WHEN sm.effective_date >= '${yearStart}' AND sm.movement_type = 'ADJUSTMENT_IN' THEN sm.quantity ELSE 0 END) AS year_adj_in,
+                            SUM(CASE WHEN sm.effective_date >= '${yearStart}' AND sm.movement_type = 'ADJUSTMENT_OUT' THEN ABS(sm.quantity) ELSE 0 END) AS year_adj_out,
                             SUM(CASE WHEN sm.effective_date <= '${year}-01-31' THEN sm.quantity ELSE 0 END) AS m1,
                             SUM(CASE WHEN sm.effective_date <= '${year}-02-29' THEN sm.quantity ELSE 0 END) AS m2,
                             SUM(CASE WHEN sm.effective_date <= '${year}-03-31' THEN sm.quantity ELSE 0 END) AS m3,
@@ -403,7 +402,11 @@ export default {
                     ORDER BY p.category ASC, p.item_name ASC
                 `;
 
-                const { results } = await env.DB.prepare(singleReportSql).bind(...sqlBindings).all();
+                const stmt = isSpecificBranch
+                    ? env.DB.prepare(singleReportSql).bind(branchIdNum)
+                    : env.DB.prepare(singleReportSql);
+
+                const { results } = await stmt.all();
 
                 const report = (results || []).map(row => {
                     const unitCost = canViewCost ? roundKyat(row.cost_price || 0) : 0;
@@ -450,7 +453,6 @@ export default {
 
             // =================================================================
             // 3.1. STOCK RECONCILIATION CHECK API (Spec Section 2.3)
-            // Compares SUM(stock_movements.quantity) vs branch_inventory.quantity
             // =================================================================
             if (path === "/api/system/reconcile-stock" && method === "GET") {
                 requirePermission(auth, "opening.approve", "Stock Reconciliation စစ်ဆေးခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်");
@@ -676,7 +678,6 @@ export default {
                         GROUP BY bi.branch_id
                     `),
 
-                    // Spec 5.6: Approval Queue Counts for Admin/Finance Dashboard
                     env.DB.prepare(`
                         SELECT 
                             (SELECT COUNT(id) FROM opening_stock_counts WHERE status = 'submitted') AS pending_openings,
@@ -1017,13 +1018,11 @@ export default {
 
     // =========================================================================
     // AUTOMATED DAILY CASHBOOK CLOSING & NIGHTLY STOCK RECONCILIATION CRON
-    // Runs at 17:30 UTC (00:00 MMT)
     // =========================================================================
     async scheduled(event, env, ctx) {
         try {
             const closingDate = getMyanmarYesterdayDate();
 
-            // 1. Nightly Stock Reconciliation Check (Spec Section 2.3)
             const { results: mismatches } = await env.DB.prepare(`
                 SELECT 
                     b.id AS branch_id, b.name AS branch_name,
@@ -1051,7 +1050,6 @@ export default {
                 console.warn("[Nightly Stock Reconciliation Mismatch]:", JSON.stringify(mismatches));
             }
 
-            // 2. Incremental Daily Cashbook Closing
             const { results: branches } = await env.DB.prepare(
                 "SELECT id FROM branches WHERE is_active = 1"
             ).all();
@@ -1128,7 +1126,6 @@ export default {
                 await env.DB.batch(batch);
             }
 
-            // 3. Optional Daily Email Summary (+ Reconciliation Alert if any mismatch)
             if (env.RESEND_API_KEY && env.ADMIN_EMAIL) {
                 const { startUtc: dayStartUtc, endUtc: dayEndUtc } = getMyanmarDayUtcBounds(closingDate);
                 const [prodRes, salesRes] = await env.DB.batch([

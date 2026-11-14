@@ -1,5 +1,5 @@
 -- =============================================================================
--- MIGRATION SCRIPT: 03_migration_v4.sql
+-- MIGRATION SCRIPT: 03_migration_v4.sql 
 -- Target: Upgrade existing D1 Database to v4.1.0 (Ledger & RBAC Architecture)
 -- Usage: npx wrangler d1 execute <DB_NAME> --file=./cashbook-api/schema/03_migration_v4.sql
 -- =============================================================================

@@ -1,5 +1,5 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/purchases.js
+// FILE: cashbook-frontend/js/modules/purchases.js 
 // PURCHASES (STOCK-IN + OWN PRODUCTION) MODULE
 // Version: 4.1.0 (Fixes Paginated Data Bug, ALL-View Guard & RBAC Catalog Lock)
 // =============================================================================

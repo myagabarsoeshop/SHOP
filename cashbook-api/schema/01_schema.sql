@@ -1,6 +1,6 @@
 -- =============================================================================
 -- DATABASE SCHEMA: MULTI-STORE GARMENT POS, INVENTORY & CASHBOOK SYSTEM
--- Target Database: Cloudflare D1 (SQLite)
+-- Target Database: Cloudflare D1 (SQLite) 
 -- Version: 4.1.0 (Ledger-Backed Stock Movements, RBAC & Race-Condition Proof)
 -- =============================================================================
 

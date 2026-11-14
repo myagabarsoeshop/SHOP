@@ -1,7 +1,7 @@
 // =============================================================================
 // FILE 2 OF 5: cashbook-api/routes-inventory.js
 // PRODUCTS, BRANCHES, TRANSFERS (STATE MACHINE), WASTE, YARN, OPENING & ADJUSTMENTS
-// Version: 4.1.0 (Ledger-Backed Stock Movements, Strict RBAC & Atomic D1 Batch)
+// Version: 4.1.1 (Yarn Fields Fix, Waste RBAC & Strict Atomic CHECK Rollback)
 // =============================================================================
 
 import {
@@ -52,7 +52,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     // 1. BRANCHES API (Spec Section 1.3)
     // =========================================================================
     if (path === "/api/branches" && method === "GET") {
-        // Cashier sees only their own branch (Spec 1.3)
         if (currentUserRole === "cashier") {
             const { results } = await env.DB.prepare(`
                 SELECT id, code, name, type, phone, address, is_active
@@ -148,7 +147,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("ပစ္စည်းအမျိုးအစား (category) နှင့် ပစ္စည်းအမည် (item_name) မဖြစ်မနေ လိုအပ်ပါသည်", 400);
         }
 
-        // Spec 5.4: Do not accept initialStock / quantity in product creation
         const rawInitStock = body.initial_stock ?? body.initialStock ?? body.quantity;
         if (rawInitStock !== undefined && rawInitStock !== null && Number(rawInitStock) > 0) {
             return errorResponse(
@@ -162,9 +160,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const pattern = body.pattern && String(body.pattern).trim() !== "" ? String(body.pattern).trim() : null;
         const color = body.color && String(body.color).trim() !== "" ? String(body.color).trim() : null;
         const size = body.size && String(body.size).trim() !== "" ? String(body.size).trim() : "ထည်";
-        const productType = ["manufactured", "trading"].includes(String(body.product_type ?? body.productType ?? "").toLowerCase())
-            ? String(body.product_type ?? body.productType).toLowerCase()
-            : "manufactured";
+        const rawProdType = String(body.product_type ?? body.productType ?? "").toLowerCase();
+        const productType = ["manufactured", "trading"].includes(rawProdType) ? rawProdType : "manufactured";
 
         const costPrice = roundKyat(body.cost_price ?? body.costPrice ?? 0);
         const retailPrice = roundKyat(body.retail_price ?? body.retailPrice ?? 0);
@@ -175,7 +172,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("ဈေးနှုန်းနှင့် သတိပေးအရေအတွက်များသည် သုညအောက် မငယ်ရပါ", 400);
         }
 
-        // Check unique SKU / Barcode (Spec 1.3: 409 on duplicate)
         if (sku || barcode) {
             const dup = await env.DB.prepare(`
                 SELECT id, sku, barcode FROM products
@@ -223,7 +219,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         const body = await request.json().catch(() => ({}));
 
-        // Spec 1.3, 6.1 & 10: Reject quantity / initialStock in Product PUT
         if (body.quantity !== undefined || body.initial_stock !== undefined || body.initialStock !== undefined) {
             return errorResponse(
                 "ပစ္စည်းအချက်အလက် ပြင်ဆင်ရာတွင် လက်ကျန်စတော့ (quantity) ကို တိုက်ရိုက်ပြင်ဆင်ခွင့် မရှိပါ။ Stock Adjustment စနစ်ကို အသုံးပြုပါ။",
@@ -317,7 +312,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const existing = await env.DB.prepare("SELECT id, item_name, sku FROM products WHERE id = ?").bind(productId).first();
         if (!existing) return errorResponse("ပစ္စည်း ရှာမတွေ့ပါ", 404);
 
-        // Spec 1.3: Always soft delete (is_active = 0)
         await env.DB.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(productId).run();
 
         await logAudit(env.DB, {
@@ -410,9 +404,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
     // =========================================================================
     // 3. BRANCH TRANSFERS — STATE MACHINE (Spec Section 1.3 & 4.3)
-    // pending ──► dispatched (TRANSFER_OUT) ──► received (TRANSFER_IN) ──► completed
-    //   │             │
-    //   └──► cancelled ◄┘ (If dispatched, reversal TRANSFER_IN to from_branch)
     // =========================================================================
     if (path === "/api/transfers" && method === "GET") {
         requirePermission(auth, "transfer.view");
@@ -427,7 +418,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const bindings = [startUtc, endUtc];
 
         if (resolvedBranch !== "ALL") {
-            // Spec 4.3: Both sending and receiving branch managers/staff see the transfer
             whereClauses.push("(t.from_branch_id = ? OR t.to_branch_id = ?)");
             bindings.push(Number(resolvedBranch), Number(resolvedBranch));
         }
@@ -442,7 +432,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 t.id, t.transfer_no, t.from_branch_id, t.to_branch_id,
                 fb.name AS from_branch_name, fb.code AS from_branch_code,
                 tb.name AS to_branch_name, tb.code AS to_branch_code,
-                t.product_id, p.sku, p.category, p.item_name, p.color, p.size,
+                t.product_id, p.sku, p.barcode, p.category, p.item_name, p.color, p.size,
                 t.quantity, t.status, t.notes,
                 t.created_by, cu.full_name AS created_by_name,
                 t.dispatched_by, t.dispatched_at,
@@ -532,9 +522,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         }, 201);
     }
 
-    // Unified Transfer State Transitions: PUT /api/transfers/:id or POST /api/transfers/:id/(dispatch|receive|complete|cancel)
     if (path.startsWith("/api/transfers/") && (method === "PUT" || method === "POST" || method === "DELETE")) {
-        const parts = path.split("/").filter(Boolean); // ["api", "transfers", ":id", optionalAction]
+        const parts = path.split("/").filter(Boolean);
         const transferId = Number(parts[2]);
         const subAction = parts[3] ? parts[3].toLowerCase() : null;
 
@@ -551,7 +540,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         const today = getMyanmarTodayDate();
 
-        // Transition 1: pending -> dispatched (Deducts from_branch stock + writes TRANSFER_OUT)
         if (requestedAction === "dispatch" || requestedAction === "dispatched") {
             requirePermission(auth, "transfer.dispatch", "ပစ္စည်းပို့ဆောင်အတည်ပြုခွင့် (Dispatch) မရှိပါ");
 
@@ -570,42 +558,49 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 return errorResponse(`ထွက်ဆိုင်တွင် လက်ကျန်စတော့ (${stockCheck?.qty || 0}) မလုံလောက်ပါ`, 400);
             }
 
-            const batchRes = await env.DB.batch([
-                env.DB.prepare(`
-                    UPDATE stock_transfers
-                    SET status = 'dispatched', dispatched_by = ?, dispatched_at = CURRENT_TIMESTAMP
-                    WHERE id = ? AND status = 'pending'
-                `).bind(currentUserId, transferId),
-                env.DB.prepare(`
-                    UPDATE branch_inventory
-                    SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE branch_id = ? AND product_id = ? AND quantity >= ?
-                `).bind(roundQty(trf.quantity), Number(trf.from_branch_id), Number(trf.product_id), roundQty(trf.quantity)),
-                createStockMovementStmt(env.DB, {
-                    branchId: Number(trf.from_branch_id),
-                    productId: Number(trf.product_id),
-                    movementType: "TRANSFER_OUT",
-                    quantity: roundQty(trf.quantity),
-                    effectiveDate: today,
-                    sourceTable: "stock_transfers",
-                    sourceId: transferId,
-                    reason: `Transfer ${trf.transfer_no} dispatched to branch #${trf.to_branch_id}`,
-                    createdBy: currentUserId
-                })
-            ]);
+            try {
+                // Omit `AND quantity >= ?` from WHERE so concurrent underflow hits CHECK(quantity >= 0) and rolls back the entire batch atomically
+                const batchRes = await env.DB.batch([
+                    env.DB.prepare(`
+                        UPDATE stock_transfers
+                        SET status = 'dispatched', dispatched_by = ?, dispatched_at = CURRENT_TIMESTAMP
+                        WHERE id = ? AND status = 'pending'
+                    `).bind(currentUserId, transferId),
+                    env.DB.prepare(`
+                        UPDATE branch_inventory
+                        SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE branch_id = ? AND product_id = ?
+                    `).bind(roundQty(trf.quantity), Number(trf.from_branch_id), Number(trf.product_id)),
+                    createStockMovementStmt(env.DB, {
+                        branchId: Number(trf.from_branch_id),
+                        productId: Number(trf.product_id),
+                        movementType: "TRANSFER_OUT",
+                        quantity: roundQty(trf.quantity),
+                        effectiveDate: today,
+                        sourceTable: "stock_transfers",
+                        sourceId: transferId,
+                        reason: `Transfer ${trf.transfer_no} dispatched to branch #${trf.to_branch_id}`,
+                        createdBy: currentUserId
+                    })
+                ]);
 
-            if (!batchRes[0]?.meta?.changes) {
-                return errorResponse("ဤလွှဲပြောင်းမှတ်တမ်းသည် အခြေအနေ ပြောင်းလဲသွားပြီ ဖြစ်ပါသည်", 409);
+                if (!batchRes[0]?.meta?.changes) {
+                    return errorResponse("ဤလွှဲပြောင်းမှတ်တမ်းသည် အခြေအနေ ပြောင်းလဲသွားပြီ ဖြစ်ပါသည်", 409);
+                }
+
+                return jsonResponse({
+                    id: transferId,
+                    status: "dispatched",
+                    message: "ပစ္စည်းပို့ဆောင်မှု (Dispatched) မှတ်တမ်းတင်ပြီး ထွက်ဆိုင်စတော့မှ နုတ်ယူပြီးပါပြီ"
+                });
+            } catch (err) {
+                if (String(err.message).includes("CHECK constraint")) {
+                    return errorResponse("ထွက်ဆိုင်တွင် လက်ကျန်စတော့ မလုံလောက်တော့ပါ", 400);
+                }
+                throw err;
             }
-
-            return jsonResponse({
-                id: transferId,
-                status: "dispatched",
-                message: "ပစ္စည်းပို့ဆောင်မှု (Dispatched) မှတ်တမ်းတင်ပြီး ထွက်ဆိုင်စတော့မှ နုတ်ယူပြီးပါပြီ"
-            });
         }
 
-        // Transition 2: dispatched -> received (Adds to_branch stock + writes TRANSFER_IN)
         if (requestedAction === "receive" || requestedAction === "received") {
             requirePermission(auth, "transfer.receive", "လွှဲပြောင်းပစ္စည်း လက်ခံခွင့် မရှိပါ");
 
@@ -653,7 +648,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             });
         }
 
-        // Transition 3: received -> completed
         if (requestedAction === "complete" || requestedAction === "completed") {
             requirePermission(auth, "transfer.receive");
             if (trf.status !== "received") {
@@ -664,7 +658,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return jsonResponse({ id: transferId, status: "completed", message: "လွှဲပြောင်းမှု လုပ်ငန်းစဉ် ပြီးဆုံးပါပြီ" });
         }
 
-        // Transition 4: pending / dispatched -> cancelled (Spec 4.3: Reverses stock if dispatched)
         if (requestedAction === "cancel" || requestedAction === "cancelled") {
             requirePermission(auth, "transfer.cancel", "လွှဲပြောင်းမှု ပယ်ဖျက်ခွင့် မရှိပါ");
 
@@ -687,7 +680,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 return jsonResponse({ id: transferId, status: "cancelled", message: "Pending လွှဲပြောင်းမှုကို ပယ်ဖျက်ပြီးပါပြီ" });
             }
 
-            // If status was 'dispatched', restore stock to from_branch_id with TRANSFER_IN reversal
             const batchRes = await env.DB.batch([
                 env.DB.prepare(`
                     UPDATE stock_transfers
@@ -729,9 +721,11 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     // =========================================================================
-    // 4. WASTE LOGS API (Spec Section 1.3 & 2.1)
+    // 4. WASTE LOGS API (Spec Section 1.3, 2.1 & 3.2)
     // =========================================================================
     if (path === "/api/waste" && method === "GET") {
+        requirePermission(auth, "waste.view", "အလေအလွင့်စာရင်း ကြည့်ရှုခွင့် မရှိပါ");
+
         const requestedBranch = url.searchParams.get("branch_id");
         const resolvedBranch = resolveBranchId(auth, requestedBranch, { allowAllForAdmin: true });
         const year = getQueryYear(url);
@@ -740,7 +734,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         let sql = `
             SELECT 
                 w.id, w.reference_no, w.branch_id, b.name AS branch_name,
-                w.product_id, p.sku, p.category, p.item_name, p.color, p.size,
+                w.product_id, p.sku, p.barcode, p.category, p.item_name, p.color, p.size,
                 w.quantity, w.unit_cost, (w.quantity * w.unit_cost) AS total_loss,
                 w.reason, w.status, w.recorded_by, u.full_name AS recorded_by_name, w.created_at
             FROM waste_logs w
@@ -759,7 +753,14 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         sql += " ORDER BY w.id DESC LIMIT 1000";
 
         const { results } = await env.DB.prepare(sql).bind(...bindings).all();
-        return jsonResponse(results || []);
+        const rows = (results || []).map(row => {
+            if (!canViewCost) {
+                const { unit_cost, total_loss, ...rest } = row;
+                return rest;
+            }
+            return row;
+        });
+        return jsonResponse(rows);
     }
 
     if (path === "/api/waste" && method === "POST") {
@@ -803,8 +804,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 env.DB.prepare(`
                     UPDATE branch_inventory
                     SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE branch_id = ? AND product_id = ? AND quantity >= ?
-                `).bind(quantity, branchId, productId, quantity),
+                    WHERE branch_id = ? AND product_id = ?
+                `).bind(quantity, branchId, productId),
                 createStockMovementStmt(env.DB, {
                     branchId,
                     productId,
@@ -819,6 +820,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             ]);
         } catch (err) {
             await env.DB.prepare("DELETE FROM waste_logs WHERE id = ?").bind(wasteId).run().catch(() => {});
+            if (String(err.message).includes("CHECK constraint")) {
+                return errorResponse("စတော့လက်ကျန် မလုံလောက်တော့ပါ", 400);
+            }
             throw err;
         }
 
@@ -830,7 +834,7 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
     }
 
     if (path.startsWith("/api/waste/") && method === "DELETE") {
-        requirePermission(auth, "waste.delete", "အလေအလွင့်မှတ်တမ်း ပယ်ဖျက်ခွင့် မရှိပါ");
+        requirePermission(auth, "waste.delete", "အလေအလွင့်မှတ်တမ်း ပယ်ဖျက်ခွင့်ကို Admin နှင့် Finance သာ ခွင့်ပြုပါသည်");
 
         const wasteId = Number(path.split("/").pop());
         if (!wasteId) return errorResponse("ID မမှန်ကန်ပါ", 400);
@@ -838,10 +842,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
         const waste = await env.DB.prepare("SELECT * FROM waste_logs WHERE id = ?").bind(wasteId).first();
         if (!waste || waste.status === "cancelled") {
             return errorResponse("မှတ်တမ်း ရှာမတွေ့ပါ သို့မဟုတ် ပယ်ဖျက်ထားပြီး ဖြစ်ပါသည်", 404);
-        }
-
-        if (currentUserRole === "branch_manager" && Number(waste.branch_id) !== userBranchId) {
-            return errorResponse("အခြားဆိုင်ခွဲ၏ မှတ်တမ်းအား ပယ်ဖျက်ခွင့် မရှိပါ", 403);
         }
 
         await env.DB.batch([
@@ -881,16 +881,18 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
 
         const yarnSql = branchNum
             ? `
-                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.color, p.size,
-                       p.cost_price, p.alert_quantity, COALESCE(bi.quantity, 0) AS quantity
+                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.color, p.size,
+                       p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
+                       COALESCE(bi.quantity, 0) AS quantity
                 FROM products p
                 LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
                 WHERE p.is_active = 1 AND (p.category = 'ချည်' OR p.category LIKE 'ချည်%')
                 ORDER BY p.item_name ASC
             `
             : `
-                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.color, p.size,
-                       p.cost_price, p.alert_quantity, COALESCE(SUM(bi.quantity), 0) AS quantity
+                SELECT p.id, p.sku, p.barcode, p.category, p.item_name, p.pattern, p.color, p.size,
+                       p.cost_price, p.retail_price, p.wholesale_price, p.alert_quantity,
+                       COALESCE(SUM(bi.quantity), 0) AS quantity
                 FROM products p
                 LEFT JOIN branch_inventory bi ON p.id = bi.product_id
                 WHERE p.is_active = 1 AND (p.category = 'ချည်' OR p.category LIKE 'ချည်%')
@@ -968,8 +970,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                 ? env.DB.prepare(`
                     UPDATE branch_inventory
                     SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE branch_id = ? AND product_id = ? AND quantity >= ?
-                `).bind(quantity, branchId, yarnId, quantity)
+                    WHERE branch_id = ? AND product_id = ?
+                `).bind(quantity, branchId, yarnId)
                 : env.DB.prepare(`
                     INSERT INTO branch_inventory (branch_id, product_id, quantity)
                     VALUES (?, ?, ?)
@@ -994,6 +996,9 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             ]);
         } catch (err) {
             await env.DB.prepare("DELETE FROM yarn_issues WHERE id = ?").bind(issueId).run().catch(() => {});
+            if (String(err.message).includes("CHECK constraint")) {
+                return errorResponse("ချည်လက်ကျန်စတော့ မလုံလောက်တော့ပါ", 400);
+            }
             throw err;
         }
 
@@ -1091,7 +1096,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             : getMyanmarTodayDate();
         const notes = body.notes ? String(body.notes).trim() : null;
 
-        // Spec 5.4: Only one approved opening stock allowed per branch, and cannot create opening if movements already exist
         const [approvedCheck, existingMovementsCheck] = await env.DB.batch([
             env.DB.prepare("SELECT id FROM opening_stock_counts WHERE branch_id = ? AND status = 'approved' LIMIT 1").bind(branchId),
             env.DB.prepare("SELECT id FROM stock_movements WHERE branch_id = ? LIMIT 1").bind(branchId)
@@ -1240,7 +1244,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             ? String(body.as_of_date).trim()
             : header.as_of_date;
 
-        // Spec 5.4: Check if another approved opening or any stock movement already exists for this branch
         const [dupOpening, existingMovements, itemsRes] = await env.DB.batch([
             env.DB.prepare("SELECT id FROM opening_stock_counts WHERE branch_id = ? AND status = 'approved' LIMIT 1").bind(branchId),
             env.DB.prepare("SELECT id FROM stock_movements WHERE branch_id = ? LIMIT 1").bind(branchId),
@@ -1436,7 +1439,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("စစ်ဆေးထားသော ပစ္စည်းစာရင်း (items) ထည့်သွင်းပေးပါ", 400);
         }
 
-        // Load current system stock & cost_price for the branch
         const { results: sysRows } = await env.DB.prepare(`
             SELECT p.id, p.item_name, p.cost_price, COALESCE(bi.quantity, 0) AS system_qty
             FROM products p
@@ -1464,7 +1466,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             const diffQty = roundQty(countedQty - systemQty);
             const reason = String(it.reason || "").trim();
 
-            // Spec 6.2 & 10: Every item with a discrepancy MUST have a reason
             if (diffQty !== 0 && !reason) {
                 return errorResponse(`"${prod.item_name}" တွင် ကွဲလွဲမှု (${diffQty}) ရှိနေပါသဖြင့် အကြောင်းရင်း (reason) မဖြစ်မနေ ထည့်သွင်းပေးပါ`, 400);
             }
@@ -1552,7 +1553,6 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse(`Submitted တင်ထားသော စာရွက်ကိုသာ Approve လုပ်နိုင်ပါသည် (လက်ရှိ: ${header.status})`, 400);
         }
 
-        // Spec 6.3: High-value variance threshold check (> 50,000 Ks requires admin)
         if (Number(header.total_variance_value) > HIGH_VALUE_ADJUSTMENT_THRESHOLD_KYAT) {
             requirePermission(
                 auth,
@@ -1616,8 +1616,8 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
                     env.DB.prepare(`
                         UPDATE branch_inventory
                         SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE branch_id = ? AND product_id = ? AND quantity >= ?
-                    `).bind(absOut, branchId, pid, absOut),
+                        WHERE branch_id = ? AND product_id = ?
+                    `).bind(absOut, branchId, pid),
                     createStockMovementStmt(env.DB, {
                         branchId,
                         productId: pid,
@@ -1634,9 +1634,16 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             }
         }
 
-        const batchResults = await env.DB.batch(batch);
-        if (!batchResults[0]?.meta?.changes) {
-            return errorResponse("Adjustment အခြေအနေ ပြောင်းလဲသွားပြီ ဖြစ်ပါသည်", 409);
+        try {
+            const batchResults = await env.DB.batch(batch);
+            if (!batchResults[0]?.meta?.changes) {
+                return errorResponse("Adjustment အခြေအနေ ပြောင်းလဲသွားပြီ ဖြစ်ပါသည်", 409);
+            }
+        } catch (err) {
+            if (String(err.message).includes("CHECK constraint")) {
+                return errorResponse("လက်ရှိစတော့လက်ကျန်သည် နှုတ်မည့်ပမာဏအတွက် မလုံလောက်တော့ပါ", 400);
+            }
+            throw err;
         }
 
         await logAudit(env.DB, {
@@ -1666,13 +1673,13 @@ export async function handleInventoryRoutes(request, env, url, path, method, aut
             return errorResponse("ငြင်းပယ်ရသည့် အကြောင်းပြချက် (reason) မဖြစ်မနေ ရေးသားပေးပါ", 400);
         }
 
-        const res = await env.DB.prepare(`
+        const adjRes = await env.DB.prepare(`
             UPDATE stock_adjustments
             SET status = 'rejected', decided_by = ?, decided_at = CURRENT_TIMESTAMP, reject_reason = ?
             WHERE id = ? AND status = 'submitted'
         `).bind(currentUserId, reason, adjId).run();
 
-        if (!res.meta.changes) {
+        if (!adjRes.meta.changes) {
             return errorResponse("Submitted အခြေအနေရှိသော Adjustment စာရွက်ကိုသာ Reject လုပ်နိုင်ပါသည်", 400);
         }
 

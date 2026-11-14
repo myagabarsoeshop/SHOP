@@ -1,6 +1,6 @@
 # ==============================================================================
 # MYA GABAR SOE SILK HOUSE (မြကမ္ဘာစိုး ပိုးထည်တိုက်) — WORKER CONFIGURATION
-# Worker Name: shop 
+# Worker Name: shop
 # Version: 4.1.0
 # File: wrangler.toml
 # ==============================================================================
@@ -23,8 +23,6 @@ database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
 migrations_dir = "cashbook-api/schema"
 
 # 💡 3. PRODUCTION ENVIRONMENT VARIABLES
-# မှတ်ချက်: JWT_SECRET နှင့် RESEND_API_KEY တို့ကို ဤဖိုင်တွင် မထည့်ရပါ။
-# Terminal မှ `npx wrangler secret put JWT_SECRET` ဖြင့်သာ ထည့်သွင်းပါ။
 [vars]
 ENVIRONMENT = "production"
 APP_VERSION = "4.1.0"
@@ -32,22 +30,5 @@ ALLOWED_ORIGIN = "https://shop.myagabarsoeshop.workers.dev"
 ADMIN_EMAIL = "myagabarsoeshop@gmail.com"
 
 # 💡 4. AUTOMATED CRON TRIGGERS
-# မြန်မာစံတော်ချိန် ည ၁၂ နာရီတိတိ (UTC 17:30) တွင် နေ့စဉ်စာရင်းပိတ်ခြင်းနှင့်
-# Nightly Stock Movement Reconciliation အလိုအလျောက် လုပ်ဆောင်ရန်
 [triggers]
 crons = ["30 17 * * *"]
-
-# 💡 5. STAGING ENVIRONMENT (Spec 9.5 - Staging Origin နှင့် DB ခွဲထားရန်)
-[env.staging]
-name = "shop-staging"
-[env.staging.vars]
-ENVIRONMENT = "staging"
-APP_VERSION = "4.1.0"
-ALLOWED_ORIGIN = "https://shop-staging.myagabarsoeshop.workers.dev"
-ADMIN_EMAIL = "myagabarsoeshop@gmail.com"
-
-[[env.staging.d1_databases]]
-binding = "DB"
-database_name = "shop-db"
-database_id = "c80bef7e-d6ce-4846-8a8e-f5b6902e563e"
-migrations_dir = "cashbook-api/schema"

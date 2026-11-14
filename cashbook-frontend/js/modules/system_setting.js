@@ -1,7 +1,7 @@
 // =============================================================================
-// FILE: cashbook-frontend/js/modules/system_setting.js  
+// FILE: cashbook-frontend/js/modules/system_setting.js
 // SYSTEM SETTINGS, USER RBAC MANAGEMENT, RECONCILIATION & D1 BACKUP MODULE
-// Version: 4.1.0 (Admin-Only User Role/Branch Manager, Reconciliation & D1 Spec)
+// Version: 4.1.1 (Adds Create User UI & Detailed Reconciliation Mismatch Display)
 // =============================================================================
 
 import { api } from "../core/api.js";
@@ -68,64 +68,94 @@ async function loadBranchesForAdmin() {
     }
 }
 
-/**
- * Spec 2.3 & 3.1: Admin အတွက် Role (`branch_manager`) ပြောင်းလဲခြင်း၊ ဝန်ထမ်းအသစ်ဖွင့်ခြင်းနှင့်
- * Stock Ledger Reconciliation စစ်ဆေးခြင်း Panel ထည့်သွင်းပေးခြင်း
- */
 function injectAdminRoleAndReconcileControls(adminUserBox) {
     if (document.getElementById("admin-role-reconcile-panel")) return;
 
     const panel = document.createElement("div");
     panel.id = "admin-role-reconcile-panel";
-    panel.className = "mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4";
+    panel.className = "mt-5 pt-5 border-t border-slate-200 dark:border-slate-800 space-y-4";
 
     const branchOptionsHtml = branchesList.map(b =>
         `<option value="${ui.escapeHtml(b.id)}">${ui.escapeHtml(b.name)} (${ui.escapeHtml(b.code)})</option>`
     ).join("");
 
     panel.innerHTML = `
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <!-- 1. Change Selected User Role & Branch -->
-            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-user-shield text-blue-500"></i>
-                    <span>ရွေးချယ်ထားသော ဝန်ထမ်း၏ Role နှင့် ဆိုင်ခွဲ ပြောင်းလဲရန်</span>
-                </div>
-                <div class="grid grid-cols-2 gap-2.5">
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-500 mb-1">Role (ခွင့်ပြုချက်အုပ်စု)</label>
-                        <select id="admin-edit-user-role" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
-                            <option value="branch_manager">branch_manager (ဆိုင်ခွဲတာဝန်ခံ)</option>
-                            <option value="cashier">cashier (အရောင်းကောင်တာ)</option>
-                            <option value="finance">finance (ငွေစာရင်း/Approve)</option>
-                            <option value="admin">admin (စနစ်ပိုင်ရှင်)</option>
-                        </select>
+            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-3">
+                <div class="space-y-3">
+                    <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-user-shield text-blue-500"></i>
+                        <span>ရွေးချယ်ထားသော ဝန်ထမ်း Role/ဆိုင်ခွဲ ပြောင်းရန်</span>
                     </div>
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-500 mb-1">သတ်မှတ်ဆိုင်ခွဲ (Branch)</label>
-                        <select id="admin-edit-user-branch" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
-                            ${branchOptionsHtml}
-                        </select>
+                    <div class="space-y-2.5">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">Role (ခွင့်ပြုချက်အုပ်စု)</label>
+                            <select id="admin-edit-user-role" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                                <option value="branch_manager">branch_manager (ဆိုင်ခွဲတာဝန်ခံ)</option>
+                                <option value="cashier">cashier (အရောင်းကောင်တာ)</option>
+                                <option value="finance">finance (ငွေစာရင်း/Approve)</option>
+                                <option value="admin">admin (စနစ်ပိုင်ရှင်)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-500 mb-1">သတ်မှတ်ဆိုင်ခွဲ (Branch)</label>
+                            <select id="admin-edit-user-branch" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                                ${branchOptionsHtml}
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <button type="button" id="btn-save-user-role-branch" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
+                <button type="button" id="btn-save-user-role-branch" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
                     <i class="fa-solid fa-floppy-disk mr-1"></i>Role နှင့် ဆိုင်ခွဲ ပြောင်းလဲသိမ်းဆည်းမည်
                 </button>
             </div>
 
-            <!-- 2. Stock Ledger Reconciliation Check (Spec 2.3) -->
+            <!-- 2. Create New Staff User -->
+            <form id="admin-create-user-form" class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-3">
+                <div class="space-y-2.5">
+                    <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-user-plus text-emerald-500"></i>
+                        <span>ဝန်ထမ်းအကောင့်အသစ် ဖွင့်လှစ်ရန်</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="new-user-fullname" required placeholder="အမည်အပြည့်အစုံ *"
+                            class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                        <input type="text" id="new-user-username" required placeholder="Username *"
+                            class="w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="new-user-role" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                            <option value="cashier">cashier</option>
+                            <option value="branch_manager">branch_manager</option>
+                            <option value="finance">finance</option>
+                            <option value="admin">admin</option>
+                        </select>
+                        <select id="new-user-branch" class="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                            ${branchOptionsHtml}
+                        </select>
+                    </div>
+                    <input type="password" id="new-user-password" required minlength="6" placeholder="စကားဝှက် (အနည်းဆုံး ၆ လုံး) *"
+                        class="w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white">
+                </div>
+                <button type="submit" id="btn-create-new-user" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
+                    <i class="fa-solid fa-user-check mr-1"></i>ဝန်ထမ်းအကောင့် ဖွင့်မည်
+                </button>
+            </form>
+
+            <!-- 3. Stock Ledger Reconciliation Check (Spec 2.3) -->
             <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 flex flex-col justify-between space-y-3">
                 <div>
                     <div class="text-xs font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                        <i class="fa-solid fa-scale-balanced text-emerald-500"></i>
-                        <span>Stock Movement Ledger နှင့် ဆိုင်ခွဲလက်ကျန် တိုက်ဆိုင်စစ်ဆေးမှု</span>
+                        <i class="fa-solid fa-scale-balanced text-amber-500"></i>
+                        <span>Stock Ledger Reconciliation</span>
                     </div>
-                    <p class="text-[11px] text-slate-500 mt-1">
+                    <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">
                         <code>SUM(stock_movements.quantity)</code> နှင့် <code>branch_inventory.quantity</code> ကွဲလွဲမှု ရှိ/မရှိ စစ်ဆေးပါသည်။
                     </p>
-                    <div id="reconcile-result-box" class="mt-2 text-xs font-bold text-slate-500"></div>
+                    <div id="reconcile-result-box" class="mt-2.5 text-xs font-bold text-slate-500 max-h-28 overflow-y-auto"></div>
                 </div>
-                <button type="button" id="btn-run-reconcile-check" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
+                <button type="button" id="btn-run-reconcile-check" class="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer transition">
                     <i class="fa-solid fa-magnifying-glass-chart mr-1"></i>Reconciliation ယခုစစ်ဆေးမည်
                 </button>
             </div>
@@ -135,7 +165,40 @@ function injectAdminRoleAndReconcileControls(adminUserBox) {
     adminUserBox.appendChild(panel);
 
     document.getElementById("btn-save-user-role-branch")?.addEventListener("click", submitUpdateUserRoleAndBranch);
+    document.getElementById("admin-create-user-form")?.addEventListener("submit", submitCreateNewUser);
     document.getElementById("btn-run-reconcile-check")?.addEventListener("click", runStockReconciliationCheck);
+}
+
+async function submitCreateNewUser(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn-create-new-user");
+    const fullName = document.getElementById("new-user-fullname")?.value.trim();
+    const username = document.getElementById("new-user-username")?.value.trim();
+    const role = document.getElementById("new-user-role")?.value || "cashier";
+    const branchId = Number(document.getElementById("new-user-branch")?.value || 1);
+    const password = document.getElementById("new-user-password")?.value.trim() || "";
+
+    if (!fullName || !username || password.length < 6) {
+        return ui.toast.warning("အမည်၊ Username နှင့် စကားဝှက် (အနည်းဆုံး ၆ လုံး) ဖြည့်သွင်းပေးပါ");
+    }
+
+    if (btn) btn.disabled = true;
+    try {
+        const res = await api.post("/system/users", {
+            full_name: fullName,
+            username,
+            role,
+            branch_id: branchId,
+            password
+        });
+        ui.toast.success(res?.data?.message || "ဝန်ထမ်းအကောင့်အသစ် ဖွင့်လှစ်ပြီးပါပြီ");
+        document.getElementById("admin-create-user-form")?.reset();
+        await loadSystemUsersForAdmin();
+    } catch (err) {
+        ui.toast.error(err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function submitUpdateUserRoleAndBranch() {
@@ -174,17 +237,25 @@ async function runStockReconciliationCheck() {
         const res = await api.get("/system/reconcile-stock");
         const data = res?.data || {};
         const count = Number(data.mismatch_count || 0);
+        const list = Array.isArray(data.discrepancies) ? data.discrepancies : [];
 
         if (count === 0) {
             if (resBox) {
-                resBox.className = "mt-2 text-xs font-extrabold text-emerald-600 dark:text-emerald-400";
+                resBox.className = "mt-2.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400";
                 resBox.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i>အားလုံး ၁၀၀% ကိုက်ညီပါသည် (ကွဲလွဲမှု 0 ခု)`;
             }
             ui.toast.success("Stock Movement Ledger နှင့် ဆိုင်ခွဲလက်ကျန် အားလုံး ကိုက်ညီပါသည်");
         } else {
             if (resBox) {
-                resBox.className = "mt-2 text-xs font-extrabold text-rose-600 dark:text-rose-400";
-                resBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i>ကွဲလွဲမှု (${count}) ခု တွေ့ရှိရပါသည်!`;
+                resBox.className = "mt-2.5 text-[11px] font-bold text-rose-600 dark:text-rose-400 space-y-1 max-h-32 overflow-y-auto";
+                resBox.innerHTML = `
+                    <div class="font-black"><i class="fa-solid fa-triangle-exclamation mr-1"></i>ကွဲလွဲမှု (${count}) ခု တွေ့ရှိရပါသည်:</div>
+                    ${list.slice(0, 10).map(d => `
+                        <div class="p-1.5 rounded bg-rose-500/10 border border-rose-500/20">
+                            ${ui.escapeHtml(d.branch_name)} • ${ui.escapeHtml(d.item_name)}: Cached=${d.cached_quantity}, Ledger=${d.ledger_quantity}
+                        </div>
+                    `).join("")}
+                `;
             }
             ui.toast.warning(`ကွဲလွဲမှု (${count}) ခု တွေ့ရှိရပါသည်`);
         }
@@ -356,7 +427,6 @@ function fetchQuotaMetrics(showToast = false) {
     if (wVal) wVal.textContent = `${(writes / 1000).toFixed(1)}k / 100k`;
     if (wBar) wBar.style.width = `${Math.max(2, Math.min(100, (writes / 100000) * 100))}%`;
 
-    // Spec Section 8: Per-DB limit on Free Tier is 500 MB (Account total 5 GB)
     if (sVal) sVal.textContent = `${storage} MB / 500 MB (Per DB)`;
     if (sBar) sBar.style.width = `${Math.max(1, Math.min(100, (storage / 500) * 100))}%`;
 
@@ -377,7 +447,8 @@ async function sendExcelReportEmail() {
     const emailInput = document.getElementById("setting-recipient-email");
     const btn = document.getElementById("btn-send-auto-email");
 
-    const year = yearSelect ? yearSelect.value : new Date().getFullYear();
+    const fallbackYear = new Date(Date.now() + 390 * 60 * 1000).getUTCFullYear();
+    const year = yearSelect ? yearSelect.value : fallbackYear;
     const email = emailInput ? emailInput.value.trim() : "";
 
     if (!email) {
@@ -414,7 +485,8 @@ async function downloadJsonBackup() {
 
     const yearSelect = document.getElementById("setting-report-year");
     const btn = document.getElementById("btn-download-json-backup");
-    const year = yearSelect ? yearSelect.value : new Date().getFullYear();
+    const fallbackYear = new Date(Date.now() + 390 * 60 * 1000).getUTCFullYear();
+    const year = yearSelect ? yearSelect.value : fallbackYear;
 
     if (btn) {
         btn.disabled = true;
